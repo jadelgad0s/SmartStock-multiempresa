@@ -22,11 +22,12 @@ from rest_framework.views import APIView
 from apps.core.empresa import transaccion_operativa, usar_empresa
 from apps.core.responses import error_response, success_response
 from apps.usuarios.models import Usuario
-from apps.usuarios.navegacion import cuenta_habilitada, puede_acceder_admin
+from apps.usuarios.navegacion import cuenta_habilitada
 from apps.usuarios.serializers import CustomTokenObtainPairSerializer
 from apps.usuarios.views_auth import abrir_sesion_web, auditar_login
 from .acceso import direccion_empresa
 from .models import Empresa, TicketAcceso
+from .permisos import es_personal_smartstock
 
 
 logger = logging.getLogger(__name__)
@@ -48,8 +49,8 @@ def empresas_disponibles():
 
 @never_cache
 def login_central(request):
-    if puede_acceder_admin(request.user):
-        return redirect('sistema_admin:index')
+    if es_personal_smartstock(request.user):
+        return redirect('sistema_inicio')
     respuesta = render(request, 'login.html', {'dominio_empresas': settings.DOMINIO_EMPRESAS})
     # El POST entre direcciones conserva el origen que valida el pase de acceso.
     respuesta['Referrer-Policy'] = 'strict-origin'
@@ -57,7 +58,8 @@ def login_central(request):
 
 
 def coincide(usuario, clave):
-    return usuario.check_password(clave) and cuenta_habilitada(usuario) and not usuario.esta_bloqueado()
+    habilitado = es_personal_smartstock(usuario) if usuario._state.db == 'central' else cuenta_habilitada(usuario)
+    return usuario.check_password(clave) and habilitado and not usuario.esta_bloqueado()
 
 
 def huella_acceso(usuario, empresa):
@@ -81,7 +83,7 @@ class LoginCentralView(APIView):
 
         try:
             tecnicos = Usuario.objects.using('central').filter(
-                email__iexact=correo, is_superuser=True, is_staff=True,
+                email__iexact=correo, is_staff=True,
             )
             for usuario in tecnicos:
                 if coincide(usuario, clave):

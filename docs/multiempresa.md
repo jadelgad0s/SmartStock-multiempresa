@@ -63,9 +63,15 @@ python manage.py runserver 127.0.0.1:8000 --settings=esquema_multiempresa.web
 
 El primer comando registra las asociaciones que falten. Se puede repetir y conserva el estado de las empresas registradas. Los dos comandos `seed_empresa` preparan los permisos y roles en la base correspondiente. Cuando se crea una cuenta de administrador de negocio, el comando muestra su correo y una contraseña aleatoria propia de esa empresa. Guarda cada contraseña por separado. Si la cuenta ya existía, conserva sus credenciales. La opción `--sin-admin` permite preparar solo los roles y permisos.
 
-El comando `createsuperuser` prepara la cuenta técnica en la central y solicita un correo propio del equipo SmartStock, nombre, apellido y contraseña. Ejecútalo una vez por cada cuenta técnica que necesites.
+El comando `createsuperuser` prepara el superusuario en la central y solicita un correo propio del equipo SmartStock, nombre, apellido y contraseña. Desde **Cuentas técnicas** se pueden crear las cuentas del personal de soporte.
 
-Abre [el inicio de sesión local](http://127.0.0.1:8000/) e ingresa tu correo y contraseña. Una cuenta de empresa accede a su propia dirección automáticamente y llega a la vista de su rol. El superusuario creado en la central accede a `/sistema/`, donde administra el directorio de empresas y las cuentas técnicas. Para registrar una empresa adicional, su base y conexión deben estar preparadas en el servidor.
+Abre [el inicio de sesión local](http://127.0.0.1:8000/) e ingresa tu correo y contraseña. Una cuenta de empresa accede a su propia dirección automáticamente y llega a la vista de su rol. El personal de SmartStock accede al panel `/sistema/`, con el diseño, menú lateral, tema y carga de los módulos de la aplicación.
+
+El panel incluye Dashboard, Empresas, Usuarios de empresas, Cuentas técnicas y Auditoría. Al seleccionar una empresa se consultan su resumen de inventario, catálogo, bodegas, movimientos, transferencias, mermas, alertas SMS y reportes. Los reportes usan los cálculos del Kardex y las existencias de la empresa y permiten descargar CSV e imprimir o guardar PDF. Los formularios de usuarios guardan en la base de la empresa elegida y registran al técnico que realizó el cambio en la descripción de auditoría.
+
+Las cuentas centrales con `is_staff=True` representan al personal técnico. El superusuario tiene además `is_superuser=True`. Ambos pueden usar los módulos del panel. **Configuración** abre Django Admin en `/sistema/configuracion/` y exige superusuario tanto en el menú como en cualquier URL interna. La gestión de cuentas del panel permite que un superusuario asigne ese perfil. Las cuentas técnicas pueden administrar otras cuentas técnicas y sus propios datos.
+
+Para registrar una empresa adicional, su base y conexión deben estar preparadas en el servidor. Las empresas inactivas siguen disponibles en el panel de soporte y su acceso operativo queda bloqueado.
 
 Las cuentas de prueba pueden conservar `admin@smartstock.cl` en ambas empresas con contraseñas diferentes. Si el mismo correo y contraseña dan acceso a varias empresas, el formulario muestra esos destinos después de autenticarse. La opción **¿Olvidaste tu contraseña?** envía los enlaces de recuperación correspondientes al correo ingresado.
 
@@ -83,12 +89,12 @@ La suite automatizada crea sus propias tres bases desechables. Comprueba el inic
 
 ```bat
 set "SS_TEST_POSTGRES="
-python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login --settings=esquema_multiempresa.testing --verbosity 2
+python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login esquema_multiempresa.pruebas_sistema --settings=esquema_multiempresa.testing --verbosity 2
 ```
 
 Para ejecutar la misma suite con PostgreSQL local o en CI, configura las variables `SS_TEST_DB_USER`, `SS_TEST_DB_PASSWORD`, `SS_TEST_DB_HOST` y `SS_TEST_DB_PORT` con un usuario de pruebas que pueda crear bases y establece `SS_TEST_POSTGRES=true`. El perfil de pruebas usa nombres de base reservados para QA.
 
-La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome, comprueba sus saldos, cierra una sesión mientras la otra sigue activa y verifica el destino del superusuario central. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
+La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome y comprueba sus saldos y sesiones independientes. En el panel central crea una cuenta técnica, verifica su menú y la restricción de Configuración, registra un usuario en La Fragua y prueba el menú móvil. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
 
 ```bat
 set "SS_TEST_POSTGRES="

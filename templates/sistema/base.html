@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ titulo }} - SmartStock{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=carga-1">
+<link rel="stylesheet" href="{% static 'css/sistema.css' %}?v=1">
+{% endblock %}
+{% block content %}
+<div class="d-flex ss-app-layout ss-sistema" data-ss-autorizado>
+  <aside id="ss-navigation" class="bg-sidebar d-flex flex-column p-3 ss-sidebar" aria-label="Menú de SmartStock">
+    <button type="button" class="ss-sidebar-close" aria-label="Cerrar menú"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    <a href="{% url 'sistema_inicio' %}" class="ss-sistema-marca d-flex align-items-center text-decoration-none">
+      <span class="bg-primary-soft rounded p-2 me-2"><img src="{% static 'branding/smartstock-mark.png' %}" alt="" width="28" height="28"></span>
+      <span class="fs-5 fw-bold">SmartStock</span>
+    </a>
+    <nav class="ss-sidebar-links" aria-label="Módulos del sistema">
+      {% for seccion in secciones_menu %}
+      <p class="text-sidebar-muted">{{ seccion.nombre }}</p>
+      <ul class="nav nav-pills flex-column">
+        {% for enlace in seccion.enlaces %}
+        <li><a href="{{ enlace.url }}" class="nav-link sidebar-item{% if enlace.activo %} active{% endif %}"{% if enlace.activo %} aria-current="page"{% endif %}><i class="fa-solid fa-{{ enlace.icono }} sidebar-icon" aria-hidden="true"></i>{{ enlace.nombre }}</a></li>
+        {% endfor %}
+      </ul>
+      {% endfor %}
+    </nav>
+    <div class="ss-sidebar-profile ss-sistema-perfil mt-auto">
+      <span class="ss-dash-avatar rounded-circle" aria-hidden="true">{{ request.user.nombres|first|upper }}{{ request.user.apellidos|first|upper }}</span>
+      <div><strong>{{ request.user.nombre_completo|default:request.user.email }}</strong><span>{% if es_superusuario %}Superusuario{% else %}Técnico de SmartStock{% endif %}</span></div>
+    </div>
+  </aside>
+  <div class="ss-main flex-grow-1 d-flex flex-column">
+    <header class="navbar bg-topbar px-4 py-3">
+      <div class="container-fluid p-0">
+        <button type="button" class="btn btn-link ss-menu-toggle" aria-label="Abrir menú" aria-controls="ss-navigation" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+        <span class="ss-sistema-identidad">Administración de SmartStock</span>
+        <div class="d-flex align-items-center gap-3">
+          <button type="button" class="btn btn-sm btn-outline-secondary ss-theme-toggle" aria-label="Activar modo oscuro" aria-pressed="false"><i class="fa-solid fa-moon" aria-hidden="true"></i><span class="ss-theme-label ms-2">Oscuro</span></button>
+          <button type="submit" form="ss-cerrar-sesion" class="btn btn-sm btn-outline-secondary">Cerrar sesión</button>
+        </div>
+      </div>
+    </header>
+    <main class="container-fluid p-4 ss-dashboard ss-sistema-contenido">
+      <div class="ss-dash-heading">
+        <div><h1>{{ titulo }}</h1>{% if empresa_seleccionada %}<p class="ss-sistema-empresa">{{ empresa_seleccionada.nombre }}{% if not empresa_seleccionada.activa %} · Empresa inactiva{% endif %}</p>{% endif %}</div>
+        {% block acciones %}{% endblock %}
+      </div>
+      {% for mensaje in messages %}<div class="alert alert-success" role="status">{{ mensaje }}</div>{% endfor %}
+      {% if error_consulta %}<div class="alert alert-danger" role="alert">{{ error_consulta }}</div>{% endif %}
+      {% block panel_content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% endblock %}
+{% block scripts_comunes %}
+<script src="{% static 'js/theme.js' %}?v=1" defer></script>
+<script src="{% static 'js/responsive.js' %}?v=2" defer></script>
+<script src="{% static 'js/carga.js' %}" defer></script>
+<script src="{% static 'js/sistema.js' %}?v=1" defer></script>
+{% endblock %}

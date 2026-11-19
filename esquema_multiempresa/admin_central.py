@@ -1,24 +1,44 @@
 import re
+from functools import wraps
 
 from django import forms
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 
 from apps.usuarios.admin_site import SmartStockAdminSite
 from apps.usuarios.models import Usuario
 from .models import Empresa
+from .permisos import es_superusuario_smartstock
 
 
 class AdministracionSistema(SmartStockAdminSite):
     site_header = 'Administración de SmartStock'
     site_title = 'SmartStock'
-    index_title = 'Empresas y cuentas técnicas'
-    site_url = None
+    index_title = 'Configuración de SmartStock'
+    site_url = '/sistema/'
+
+    def has_permission(self, request):
+        return es_superusuario_smartstock(request.user)
+
+    def admin_view(self, view, cacheable=False):
+        vista = super().admin_view(view, cacheable=cacheable)
+
+        @wraps(view)
+        def protegida(request, *args, **kwargs):
+            if request.user.is_authenticated and not self.has_permission(request):
+                raise PermissionDenied
+            return vista(request, *args, **kwargs)
+        return protegida
 
     def login(self, request, extra_context=None):
+        if self.has_permission(request):
+            return redirect('sistema_admin:index')
+        if request.user.is_authenticated:
+            raise PermissionDenied
         return redirect('login_page')
 
 
@@ -55,13 +75,13 @@ class EmpresaAdmin(admin.ModelAdmin):
 class NuevaCuentaTecnica(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = Usuario
-        fields = ('email', 'nombres', 'apellidos')
+        fields = ('email', 'nombres', 'apellidos', 'is_superuser')
 
 
 class EditarCuentaTecnica(UserChangeForm):
     class Meta(UserChangeForm.Meta):
         model = Usuario
-        fields = ('email', 'password', 'nombres', 'apellidos', 'activo')
+        fields = ('email', 'password', 'nombres', 'apellidos', 'activo', 'is_superuser')
 
 
 @admin.register(Usuario, site=sitio_sistema)
@@ -75,14 +95,14 @@ class CuentaTecnicaAdmin(UserAdmin):
     filter_horizontal = ()
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Cuenta técnica', {'fields': ('nombres', 'apellidos', 'activo')}),
+        ('Cuenta técnica', {'fields': ('nombres', 'apellidos', 'activo', 'is_superuser')}),
     )
-    add_fieldsets = ((None, {'fields': ('email', 'nombres', 'apellidos', 'password1', 'password2')}),)
+    add_fieldsets = ((None, {'fields': ('email', 'nombres', 'apellidos', 'password1', 'password2', 'is_superuser')}),)
 
     def get_queryset(self, request):
-        return super().get_queryset(request).filter(is_superuser=True, is_staff=True)
+        return super().get_queryset(request).filter(is_staff=True)
 
     def save_model(self, request, obj, form, change):
-        obj.is_superuser = obj.is_staff = True
+        obj.is_staff = True
         obj.rol = None
         super().save_model(request, obj, form, change)

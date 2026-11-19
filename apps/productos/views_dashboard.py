@@ -115,10 +115,7 @@ def movimientos_por_dia(movimientos, fechas):
     ).annotate(dia=TruncDate('movimiento__fecha_creacion', tzinfo=ZONA))
 
 
-@never_cache
-@api_view(['GET'])
-@permission_classes([EsAdministrador])
-def resumen_dashboard(request):
+def datos_resumen_dashboard(request):
     datos, bodegas, bodega = contexto_dashboard(request)
     ahora = timezone.now()
     dias = int(datos['dias'])
@@ -149,7 +146,7 @@ def resumen_dashboard(request):
         alertas = [datos_alerta(p, bodega) for p in consulta_alertas(bodega, {})[:5]]
     entradas = [por_fecha.get(fecha, {}).get('entradas') or 0 for fecha in fechas]
     salidas = [por_fecha.get(fecha, {}).get('salidas') or 0 for fecha in fechas]
-    return success_response(data={
+    return {
         'bodega': bodega, 'bodegas': bodegas, 'dias': dias,
         'actualizado': timezone.localtime(ahora, ZONA).isoformat(), 'zona_horaria': str(ZONA),
         'desde': inicio.isoformat(), 'hasta': hoy.isoformat(),
@@ -160,7 +157,14 @@ def resumen_dashboard(request):
         'chart_fechas': [fecha.isoformat() for fecha in fechas],
         'chart_entradas': entradas, 'chart_salidas': salidas,
         'permisos': permisos_dashboard(request.user),
-    })
+    }
+
+
+@never_cache
+@api_view(['GET'])
+@permission_classes([EsAdministrador])
+def resumen_dashboard(request):
+    return success_response(data=datos_resumen_dashboard(request))
 
 
 @never_cache

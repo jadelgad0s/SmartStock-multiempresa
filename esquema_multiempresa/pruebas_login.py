@@ -84,7 +84,7 @@ class LoginUnificadoTests(TestCase):
         self.assertEqual(respuesta.data['data'], {'sistema': True, 'inicio': '/sistema/'})
         panel = self.portal.get('/sistema/')
         self.assertContains(panel, 'Administración de SmartStock')
-        self.assertContains(self.portal.get('/sistema/empresas/empresa/'), 'Ferretería La Fragua')
+        self.assertContains(self.portal.get('/sistema/empresas/'), 'Ferretería La Fragua')
         self.assertEqual(self.portal.get('/api/v1/productos/').status_code, 404)
         ajeno = APIClient(HTTP_HOST='la-fragua.localhost:8000')
         ajeno.cookies['sessionid'] = self.portal.cookies['sessionid'].value
@@ -170,10 +170,11 @@ class LoginUnificadoTests(TestCase):
     def test_el_panel_crea_cuentas_tecnicas_y_conserva_la_sesion_de_la_otra_empresa(self):
         fragua, _ = self.recibir(self.ingresar().data['data']['destinos'][0])
         self.ingresar('Tecnico-clave-de-fixture', 'tecnico@example.invalid')
-        self.portal.get('/sistema/usuarios/usuario/add/')
-        respuesta = self.portal.post('/sistema/usuarios/usuario/add/', {
+        self.portal.get('/sistema/configuracion/usuarios/usuario/add/')
+        respuesta = self.portal.post('/sistema/configuracion/usuarios/usuario/add/', {
             'email': 'soporte@example.invalid', 'nombres': 'Soporte', 'apellidos': 'SmartStock',
             'password1': 'Clave-de-soporte-fixture-128', 'password2': 'Clave-de-soporte-fixture-128',
+            'is_superuser': 'on',
         }, HTTP_X_CSRFTOKEN=self.portal.cookies['csrftoken'].value)
         self.assertEqual(respuesta.status_code, 302)
         nuevo = Usuario.objects.using('central').get(email='soporte@example.invalid')

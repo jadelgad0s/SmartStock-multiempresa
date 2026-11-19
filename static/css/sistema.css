@@ -1,0 +1,63 @@
+.ss-sistema { min-height: 100vh; }
+.ss-sistema > .ss-sidebar { width: 250px; height: 100dvh; position: sticky; top: 0; flex-shrink: 0; }
+.ss-sistema-marca { margin: .3rem .5rem 1.25rem; color: var(--slate-800); }
+.ss-sistema .ss-sidebar-links { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 1rem; }
+.ss-sistema .text-sidebar-muted { font-size: .72rem; margin-top: 1.25rem; }
+.ss-sistema .sidebar-item { font-size: .875rem; padding: .6rem .8rem; }
+.ss-sistema-perfil { display: flex; align-items: center; gap: .6rem; padding: .75rem .4rem .2rem; border-top: 1px solid var(--slate-200); }
+.ss-sistema-perfil > div { min-width: 0; }
+.ss-sistema-perfil strong, .ss-sistema-perfil span:not(.ss-dash-avatar) { display: block; font-size: .75rem; overflow-wrap: anywhere; }
+.ss-sistema-perfil span:not(.ss-dash-avatar) { color: var(--slate-600); }
+.ss-sistema > .ss-main { background: #f8fafc; }
+.ss-sistema-identidad { font-size: .95rem; font-weight: 600; color: var(--slate-800); }
+.ss-sistema-contenido h1 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; }
+.ss-sistema-contenido h2 { margin: 0; font-size: .95rem; font-weight: 600; }
+.ss-sistema-empresa { margin: .4rem 0 0; font-size: .875rem; color: var(--slate-600); }
+.ss-sistema-titulo-tabla { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 1.7rem 0 .8rem; }
+.ss-sistema-titulo-tabla a { font-size: .85rem; color: var(--teal-600); }
+.ss-sistema-secundario { display: block; margin-top: .25rem; color: var(--slate-600); overflow-wrap: anywhere; }
+.ss-sistema .table-custom td { padding: 1rem; }
+.ss-sistema-acciones { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.ss-sistema .btn { min-height: 40px; }
+.ss-sistema-selector { display: flex; flex-direction: row; gap: .8rem; align-items: end; padding: 1rem; margin-bottom: 1.25rem; }
+.ss-sistema-selector > div { width: min(100%, 390px); }
+.ss-sistema label { font-size: .8rem; font-weight: 500; display: block; margin-bottom: .4rem; }
+.ss-sistema-selector .form-select { min-height: 44px; }
+.ss-sistema-busqueda { max-width: 580px; margin-bottom: 1.25rem; }
+.ss-sistema-busqueda input { min-width: 0; }
+.ss-sistema-paginacion { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .8rem; border-top: 1px solid var(--slate-200); padding: 1rem; }
+.ss-sistema-formulario { max-width: 980px; padding: 1.5rem; }
+.ss-sistema-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
+.ss-sistema-check { display: flex; align-items: center; gap: .65rem; padding-top: 1.5rem; }
+.ss-sistema-check label { margin: 0; }
+.ss-sistema-check .form-check-input { margin: 0; flex-shrink: 0; }
+.ss-sistema .errorlist { list-style: none; padding: 0; margin: .4rem 0 0; }
+.ss-sistema-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end; padding: 1rem; margin-bottom: 1.25rem; }
+.ss-sistema-filtros .ss-sistema-acciones { grid-column: 1 / -1; }
+.ss-sistema-graficos { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.25rem; }
+.ss-sistema-grafico { height: 300px; position: relative; }
+.ss-sistema-grafico-estado { height: 210px; }
+.ss-sistema-leyenda { list-style: none; padding: 0; margin: 1.25rem 0 0; font-size: .85rem; }
+.ss-sistema-leyenda li { display: flex; justify-content: space-between; margin-top: .6rem; }
+.ss-sistema-periodo { width: min(100%, 220px); margin-left: auto; }
+.ss-sistema-resumen-reporte { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; }
+.ss-sistema-resumen-reporte p { display: flex; flex-direction: column; margin: 0; padding: .8rem 1rem; background: var(--teal-50); border-radius: .5rem; min-width: 150px; }
+.ss-sistema-resumen-reporte span { font-size: .8rem; color: var(--slate-600); }
+.ss-sistema-resumen-reporte strong { font-size: 1.25rem; }
+@media (max-width: 991.98px) {
+  .ss-sistema > .ss-sidebar { width: min(290px, 85vw); }
+  .ss-sistema-identidad { flex: 1; font-size: .8rem; }
+  .ss-sistema .bg-topbar .container-fluid > .d-flex { gap: .4rem !important; }
+  .ss-sistema .ss-theme-label { display: none; }
+  .ss-sistema-graficos { grid-template-columns: 1fr; }
+}
+@media (max-width: 575.98px) {
+  .ss-sistema-contenido h1 { font-size: 1.3rem; }
+  .ss-sistema .ss-dash-heading { flex-wrap: wrap; align-items: start; }
+  .ss-sistema-campos { grid-template-columns: 1fr; }
+  .ss-sistema-selector { flex-wrap: wrap; }
+  .ss-sistema-selector > div { width: 100%; }
+  .ss-sistema-formulario { padding: 1rem; }
+  .ss-sistema-check { padding-top: 0; }
+  .ss-sistema-periodo { margin-left: 0; }
+}

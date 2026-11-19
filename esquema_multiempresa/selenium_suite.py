@@ -9,6 +9,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select
 
 from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
@@ -76,3 +77,40 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         navegador.find_element(By.ID, 'login-submit').click()
         espera.until(EC.url_contains('/sistema/'))
         self.assertIn('Administración de SmartStock', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, 'a[href="/sistema/configuracion/"]'))
+        navegador.find_element(By.LINK_TEXT, 'Cuentas técnicas').click()
+        navegador.find_element(By.LINK_TEXT, 'Añadir cuenta técnica').click()
+        for campo, valor in (('nombres', 'Soporte'), ('apellidos', 'QA'), ('email', 'soporte-qa@example.invalid'),
+                             ('password1', 'Cuenta-soporte-fixture-2626!'), ('password2', 'Cuenta-soporte-fixture-2626!')):
+            navegador.find_element(By.ID, 'id_' + campo).send_keys(valor)
+        Select(navegador.find_element(By.ID, 'id_perfil')).select_by_value('tecnico')
+        navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/cuentas/')
+        self.assertIn('soporte-qa@example.invalid', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.find_element(By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]').click()
+        espera.until(EC.visibility_of_element_located((By.ID, 'email')))
+        navegador.find_element(By.ID, 'email').send_keys('soporte-qa@example.invalid')
+        navegador.find_element(By.ID, 'password').send_keys('Cuenta-soporte-fixture-2626!')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/sistema/'))
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, 'a[href="/sistema/configuracion/"]'))
+        estado_configuracion = navegador.execute_async_script(
+            "const listo = arguments[arguments.length - 1]; fetch('/sistema/configuracion/').then(r => listo(r.status));")
+        self.assertEqual(estado_configuracion, 403)
+        navegador.get(self.live_server_url + '/sistema/usuarios/?empresa=la-fragua')
+        navegador.find_element(By.LINK_TEXT, 'Añadir usuario').click()
+        for campo, valor in (('nombres', 'Operador'), ('apellidos', 'QA'), ('email', 'operador-qa@example.invalid'),
+                             ('password1', 'Cuenta-operador-fixture-2626!'), ('password2', 'Cuenta-operador-fixture-2626!')):
+            navegador.find_element(By.ID, 'id_' + campo).send_keys(valor)
+        Select(navegador.find_element(By.ID, 'id_rol')).select_by_visible_text('Operador')
+        navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/usuarios/')
+        self.assertTrue(Usuario.objects.using('ferreteria').filter(email='operador-qa@example.invalid').exists())
+        self.assertFalse(Usuario.objects.using('repuestos').filter(email='operador-qa@example.invalid').exists())
+        navegador.get(self.live_server_url + '/sistema/inventario/?empresa=la-fragua')
+        self.assertEqual(navegador.find_element(By.ID, 'sistema-kpi-stock').text, '15')
+        navegador.set_window_size(390, 844)
+        navegador.get(self.live_server_url + '/sistema/')
+        navegador.find_element(By.CSS_SELECTOR, '.ss-menu-toggle').click()
+        espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))

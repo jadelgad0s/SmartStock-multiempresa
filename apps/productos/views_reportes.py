@@ -102,19 +102,18 @@ def celda_csv(valor):
     return "'" + texto if texto.lstrip().startswith(('=', '+', '-', '@')) or texto.startswith(('\t', '\r', '\n')) else texto
 
 
-@never_cache
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, PuedeExportarReportes])
-def exportar_reporte(request):
+def archivo_reporte(parametros, correo, empresa_nombre=''):
     archivo = SpooledTemporaryFile(max_size=2 * 1024 * 1024, mode='w+b')
     try:
         with lectura_consistente():
-            plan = PlanReporte(request.query_params)
+            plan = PlanReporte(parametros)
             meta = plan.metadatos()
             texto = io.TextIOWrapper(archivo, encoding='utf-8-sig', newline='')
             escritor = csv.writer(texto, delimiter=';')
+            if empresa_nombre:
+                escritor.writerow(['Empresa', celda_csv(empresa_nombre)])
             for fila in [('Reporte', meta['titulo']), ('Generado', meta['generado']), ('Zona horaria', str(ZONA)),
-                         ('Generado por', request.user.email), ('Total de registros', plan.qs.count()),
+                         ('Generado por', correo), ('Total de registros', plan.qs.count()),
                          *meta['filtros'], *[(r['etiqueta'], r['valor']) for r in meta['resumen']],
                          *[('Nota', n) for n in meta['notas']]]:
                 escritor.writerow([celda_csv(v) for v in fila])
@@ -131,17 +130,31 @@ def exportar_reporte(request):
         raise
 
 
-@never_cache
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, PuedeExportarReportes])
-def imprimir_reporte(request):
+def documento_reporte(parametros, correo, empresa_nombre=''):
     with lectura_consistente():
-        plan = PlanReporte(request.query_params)
+        plan = PlanReporte(parametros)
         total = plan.qs.count()
         if total > 10000:
             raise serializers.ValidationError('El documento supera 10.000 registros. Acota los filtros o descarga el CSV completo.')
         registros = ([fila[c['campo']] for c in plan.columnas] for fila in plan.filas(plan.iterar()))
+        meta = plan.metadatos()
+        if empresa_nombre:
+            meta['filtros'].insert(0, ('Empresa', empresa_nombre))
         html = render_to_string('inventario_reporte.html', {
-            'meta': plan.metadatos(), 'total': total, 'registros': registros, 'generado_por': request.user.email,
+            'meta': meta, 'total': total, 'registros': registros, 'generado_por': correo,
         })
         return HttpResponse(html, content_type='text/html; charset=utf-8')
+
+
+@never_cache
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated, PuedeExportarReportes])
+def exportar_reporte(request):
+    return archivo_reporte(request.query_params, request.user.email)
+
+
+@never_cache
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated, PuedeExportarReportes])
+def imprimir_reporte(request):
+    return documento_reporte(request.query_params, request.user.email)

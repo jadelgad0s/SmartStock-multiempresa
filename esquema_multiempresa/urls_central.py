@@ -1,5 +1,5 @@
 from django.urls import path
-from django.views.generic import RedirectView, TemplateView
+from django.views.generic import TemplateView
 
 from apps.usuarios.views_auth import logout_web
 from apps.usuarios.views_recuperacion import (
@@ -8,6 +8,11 @@ from apps.usuarios.views_recuperacion import (
 from .admin_central import sitio_sistema
 from .login import LoginCentralView, login_central
 from .recuperacion_central import SolicitarRecuperacionCentralView
+from .consultas_sistema import consulta_sistema, inventario_sistema
+from .sistema import (
+    abrir_configuracion, auditoria_sistema, cuentas_sistema, editar_cuenta_tecnica,
+    editar_empresa, editar_usuario_empresa, empresas_sistema, inicio_sistema, usuarios_sistema,
+)
 
 
 urlpatterns = [
@@ -19,6 +24,25 @@ urlpatterns = [
     path('recuperacion-enviada/', RecuperacionEnviadaView.as_view(), name='recuperacion_enviada'),
     path('restablecer-clave/<uidb64>/<token>/', EstablecerNuevaClaveView.as_view(), name='establecer_nueva_clave'),
     path('clave-actualizada/', ClaveActualizadaView.as_view(), name='clave_actualizada'),
-    path('sistema/', sitio_sistema.urls),
-    path('admin/', RedirectView.as_view(url='/sistema/', permanent=False)),
+    path('sistema/', inicio_sistema, name='sistema_inicio'),
+    path('sistema/empresas/', empresas_sistema, name='sistema_empresas'),
+    path('sistema/empresas/nueva/', editar_empresa, name='sistema_nueva_empresa'),
+    path('sistema/empresas/<slug:codigo>/editar/', editar_empresa, name='sistema_editar_empresa'),
+    path('sistema/usuarios/', usuarios_sistema, name='sistema_usuarios'),
+    path('sistema/empresas/<slug:codigo>/usuarios/nuevo/', editar_usuario_empresa, name='sistema_nuevo_usuario_empresa'),
+    path('sistema/empresas/<slug:codigo>/usuarios/<int:usuario_id>/', editar_usuario_empresa, name='sistema_editar_usuario_empresa'),
+    path('sistema/cuentas/', cuentas_sistema, name='sistema_cuentas'),
+    path('sistema/cuentas/nueva/', editar_cuenta_tecnica, name='sistema_nueva_cuenta'),
+    path('sistema/cuentas/<int:usuario_id>/', editar_cuenta_tecnica, name='sistema_editar_cuenta'),
+    path('sistema/auditoria/', auditoria_sistema, name='sistema_auditoria'),
+    path('sistema/inventario/', inventario_sistema, name='sistema_inventario'),
+    path('sistema/catalogo/', consulta_sistema, {'modulo': 'catalogo'}, name='sistema_catalogo'),
+    path('sistema/bodegas/', consulta_sistema, {'modulo': 'bodegas'}, name='sistema_bodegas'),
+    path('sistema/movimientos/', consulta_sistema, {'modulo': 'movimientos'}, name='sistema_movimientos'),
+    path('sistema/transferencias/', consulta_sistema, {'modulo': 'transferencias'}, name='sistema_transferencias'),
+    path('sistema/mermas/', consulta_sistema, {'modulo': 'mermas'}, name='sistema_mermas'),
+    path('sistema/reportes/', consulta_sistema, {'modulo': 'reportes'}, name='sistema_reportes'),
+    path('sistema/alertas-sms/', consulta_sistema, {'modulo': 'sms'}, name='sistema_sms'),
+    path('sistema/configuracion/', sitio_sistema.urls),
+    path('admin/', abrir_configuracion),
 ]

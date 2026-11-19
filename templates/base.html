@@ -64,7 +64,7 @@
     <script>
       // Aplicar la preferencia antes del primer pintado de los módulos.
       try {
-        if (/^\/(dashboard|inicio-bodega|productos|bodegas|ubicaciones|alertas-sms|movimientos|transferencias|mermas|auditoria|usuarios|reportes)\/?$/.test(window.location.pathname)
+        if ((/^\/(dashboard|inicio-bodega|productos|bodegas|ubicaciones|alertas-sms|movimientos|transferencias|mermas|auditoria|usuarios|reportes)\/?$/.test(window.location.pathname) || window.location.pathname.startsWith('/sistema/'))
             && localStorage.getItem('smartstock-theme') === 'dark') {
           document.documentElement.setAttribute('data-bs-theme', 'dark');
         }
@@ -94,6 +94,7 @@
         <span class="ss-carga-spinner" aria-hidden="true"></span>
         <p id="ss-carga-texto" aria-live="polite"></p>
     </dialog>
+    {% block scripts_comunes %}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{% static 'js/theme.js' %}?v=1" defer></script>
@@ -103,6 +104,7 @@
     <script src="{% static 'js/sms_base.js' %}?v=roles-1" defer></script>
     <script src="{% static 'js/carga.js' %}" defer></script>
     <script src="{% static 'js/navegacion.js' %}?v=3" defer></script>
+    {% endblock %}
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>
