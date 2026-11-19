@@ -86,4 +86,3 @@ class CuentaTecnicaAdmin(UserAdmin):
         obj.is_superuser = obj.is_staff = True
         obj.rol = None
         super().save_model(request, obj, form, change)
-
