@@ -49,4 +49,4 @@ jobs:
         run: python -c "import django; django.setup(); from django.db import connection; connection.ensure_connection(); assert connection.vendor == 'postgresql'"
       - run: python manage.py test --verbosity 2 --noinput
       - name: Probar acceso y operaciones entre dos empresas
-        run: python manage.py test esquema_multiempresa.pruebas_web --settings=esquema_multiempresa.testing --verbosity 2 --noinput
+        run: python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login --settings=esquema_multiempresa.testing --verbosity 2 --noinput

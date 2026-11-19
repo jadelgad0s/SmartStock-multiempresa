@@ -26,6 +26,18 @@ from .serializers import (
 )
 
 
+def abrir_sesion_web(request, usuario):
+    django_login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
+    request.session.set_expiry(api_settings.REFRESH_TOKEN_LIFETIME)
+
+
+def auditar_login(usuario):
+    registrar_auditoria(
+        accion='LOGIN', modelo='Usuario', objeto_id=usuario.pk,
+        descripcion=f'Inicio de sesión: {usuario.email}', usuario_override=usuario,
+    )
+
+
 class LoginView(TokenObtainPairView):
     """
     Endpoint de inicio de sesión.
@@ -65,17 +77,9 @@ class LoginView(TokenObtainPairView):
         usuario_login = serializer.user
 
         if self.abrir_sesion_web:
-            django_login(request._request, usuario_login, backend='django.contrib.auth.backends.ModelBackend')
-            request.session.set_expiry(api_settings.REFRESH_TOKEN_LIFETIME)
+            abrir_sesion_web(request._request, usuario_login)
 
-        # Registrar auditoría del login exitoso
-        registrar_auditoria(
-            accion='LOGIN',
-            modelo='Usuario',
-            objeto_id=data['usuario']['id'],
-            descripcion=f'Inicio de sesión: {data["usuario"]["email"]}',
-            usuario_override=usuario_login
-        )
+        auditar_login(usuario_login)
 
         return success_response(
             data=data,

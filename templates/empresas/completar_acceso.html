@@ -1,0 +1,17 @@
+{% extends 'usuarios/base_acceso.html' %}
+{% load static %}
+{% block title %}Acceder - SmartStock{% endblock %}
+{% block acceso_content %}
+{% if error_acceso %}
+<h1 id="titulo-acceso">Vuelve a iniciar sesión</h1>
+<p class="ss-auth-intro">{{ error_acceso }}</p>
+<a class="btn btn-primary" href="{{ entrada_central }}">Iniciar sesión</a>
+{% else %}
+<h1 id="titulo-acceso">Abriendo {{ request.empresa.nombre }}</h1>
+<p class="ss-auth-intro" role="status">Estamos preparando tu sesión.</p>
+<div id="alert-box" class="alert alert-danger ss-auth-error" role="alert" tabindex="-1" hidden></div>
+{{ datos_sesion|json_script:'datos-sesion' }}
+<noscript>Activa JavaScript en tu navegador para acceder a SmartStock.</noscript>
+{% endif %}
+{% endblock %}
+{% block acceso_scripts %}<script src="{% static 'js/login.js' %}?v=multiempresa-3" defer></script>{% endblock %}

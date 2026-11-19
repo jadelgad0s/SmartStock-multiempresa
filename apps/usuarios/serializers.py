@@ -243,8 +243,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         usuario.resetear_intentos()
         self.user = usuario
 
-        # Generar tokens
-        refresh = self.get_token(usuario)
+        return self.datos_sesion(usuario)
+
+    @classmethod
+    def datos_sesion(cls, usuario):
+        refresh = cls.get_token(usuario)
 
         data = {
             'access': str(refresh.access_token),

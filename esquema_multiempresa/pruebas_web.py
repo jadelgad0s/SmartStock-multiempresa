@@ -63,25 +63,27 @@ class AccesoPorEmpresaTests(TestCase):
         self.assertFalse(Empresa.objects.get(pk=self.motor.pk).activa)
         with self.assertRaises(CommandError):
             call_command('seed_empresa', self.motor.codigo, stdout=StringIO())
-        self.assertEqual(set(connections['central'].introspection.table_names()), {'empresas', 'django_migrations'})
+        tablas_centrales = set(connections['central'].introspection.table_names())
+        self.assertTrue({'empresas', 'tickets_acceso', 'usuarios', 'django_session'} <= tablas_centrales)
+        self.assertFalse({'productos', 'bodegas', 'stock_bodega'} & tablas_centrales)
         tablas_a = set(connections['ferreteria'].introspection.table_names())
         self.assertNotIn('empresas', tablas_a)
+        self.assertNotIn('tickets_acceso', tablas_a)
         self.assertTrue({'usuarios', 'productos', 'stock_bodega', 'django_session'} <= tablas_a)
         self.assertEqual(tablas_a, set(connections['repuestos'].introspection.table_names()))
 
-    def test_portal_conserva_el_puerto_y_solo_admite_empresas_activas_configuradas(self):
+    def test_portal_muestra_login_y_solo_admite_empresas_activas_configuradas(self):
         portal = APIClient(HTTP_HOST='127.0.0.1:8000')
-        self.assertContains(portal.get('/'), 'Código de empresa')
-        self.assertEqual(portal.get('/', {'empresa': ' LA-FRAGUA '})['Location'],
-                         'http://la-fragua.localhost:8000/')
+        self.assertContains(portal.get('/'), 'Correo electrónico')
+        self.assertNotContains(portal.get('/'), 'Código de empresa')
+        self.assertEqual(portal.get('/', {'empresa': 'la-fragua'}).status_code, 200)
         self.assertEqual(portal.get('/api/v1/productos/').status_code, 404)
         Empresa.objects.create(codigo='ajena', nombre='Sin base de negocio', alias_bd='central')
         for codigo in ('ajena', 'desconocida'):
             with self.subTest(codigo=codigo):
-                self.assertEqual(portal.get('/', {'empresa': codigo}).status_code, 404)
                 self.assertEqual(portal.get('/', HTTP_HOST=codigo + '.localhost').status_code, 404)
         Empresa.objects.filter(pk=self.fragua.pk).update(activa=False)
-        self.assertEqual(portal.get('/', {'empresa': self.fragua.codigo}).status_code, 404)
+        self.assertEqual(portal.get('/', HTTP_HOST='la-fragua.localhost').status_code, 404)
 
     def test_un_usuario_exclusivo_ingresa_solo_en_su_empresa(self):
         with usar_empresa(self.fragua):

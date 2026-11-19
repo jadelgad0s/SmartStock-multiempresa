@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
+from apps.usuarios.models import Usuario
 from esquema_multiempresa.models import Empresa
 
 
@@ -47,15 +48,13 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
                 navegador.switch_to.new_window('tab')
             pestanas.append(navegador.current_window_handle)
             navegador.get(self.live_server_url)
-            navegador.find_element(By.ID, 'empresa').send_keys(codigo)
-            navegador.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
             espera.until(EC.visibility_of_element_located((By.ID, 'email')))
-            self.assertEqual(urlsplit(navegador.current_url).hostname, codigo + '.localhost')
-            self.assertIn(empresa.nombre, navegador.title)
             navegador.find_element(By.ID, 'email').send_keys('admin@smartstock.cl')
             navegador.find_element(By.ID, 'password').send_keys(clave)
             navegador.find_element(By.ID, 'login-submit').click()
             espera.until(EC.url_contains('/dashboard/'))
+            self.assertEqual(urlsplit(navegador.current_url).hostname, codigo + '.localhost')
+            self.assertIn(empresa.nombre, navegador.title)
             espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == str(cantidad))
 
         navegador.switch_to.window(pestanas[0])
@@ -65,3 +64,15 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         navegador.refresh()
         espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == '4')
         self.assertIn('Repuestos Punto Motor', navegador.title)
+
+        Usuario.objects.db_manager('central').create_superuser(
+            email='tecnico@example.invalid', password='Tecnico-clave-de-fixture',
+            nombres='Equipo', apellidos='SmartStock',
+        )
+        navegador.switch_to.new_window('tab')
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys('tecnico@example.invalid')
+        navegador.find_element(By.ID, 'password').send_keys('Tecnico-clave-de-fixture')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/sistema/'))
+        self.assertIn('Administración de SmartStock', navegador.find_element(By.TAG_NAME, 'body').text)

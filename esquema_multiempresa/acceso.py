@@ -1,11 +1,9 @@
-"""Resuelve el subdominio antes de que Django abra la sesión del usuario."""
+"""Selecciona el acceso central o la empresa antes de abrir la sesión."""
 import re
 
 from django.conf import settings
-from django.http import Http404, HttpResponseNotAllowed, HttpResponseRedirect
+from django.http import Http404
 from django.http.request import split_domain_port
-from django.shortcuts import render
-from django.views.decorators.cache import never_cache
 
 from apps.core.empresa import usar_empresa
 from .models import Empresa
@@ -17,21 +15,12 @@ def empresa_activa(codigo):
     return Empresa.objects.filter(codigo=codigo, activa=True, alias_bd__in=settings.BASES_EMPRESA).first()
 
 
-@never_cache
-def entrada(request, puerto):
-    if request.path_info != '/':
-        raise Http404
-    if request.method not in ('GET', 'HEAD'):
-        return HttpResponseNotAllowed(['GET', 'HEAD'])
-    codigo = request.GET.get('empresa', '').strip().lower()
-    if codigo:
-        empresa = empresa_activa(codigo)
-        if empresa is not None:
-            host = f'{empresa.codigo}.{settings.DOMINIO_EMPRESAS}'
-            if puerto:
-                host = f'{host}:{puerto}'
-            return HttpResponseRedirect(f'{request.scheme}://{host}/')
-    return render(request, 'empresas/entrada.html', {'codigo': codigo}, status=404 if codigo else 200)
+def direccion_empresa(request, empresa):
+    _, puerto = split_domain_port(request.get_host())
+    host = f'{empresa.codigo}.{settings.DOMINIO_EMPRESAS}'
+    if puerto:
+        host = f'{host}:{puerto}'
+    return f'{request.scheme}://{host}'
 
 
 class EmpresaMiddleware:
@@ -39,10 +28,13 @@ class EmpresaMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        host, puerto = split_domain_port(request.get_host())
+        host, _ = split_domain_port(request.get_host())
         dominio = settings.DOMINIO_EMPRESAS
         if host in (dominio, '127.0.0.1', '[::1]'):
-            return entrada(request, puerto)
+            request.empresa = None
+            request.urlconf = 'esquema_multiempresa.urls_central'
+            with usar_empresa(None):
+                return self.get_response(request)
         sufijo = '.' + dominio
         empresa = empresa_activa(host[:-len(sufijo)]) if host.endswith(sufijo) else None
         if empresa is None:
