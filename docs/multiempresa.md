@@ -10,14 +10,32 @@ Este perfil levanta una instancia local de Django y consulta el directorio de em
 
 ## Preparación en Windows
 
-Abre la carpeta que contiene `manage.py` en CMD y activa el entorno virtual. Para una copia recién clonada puedes crearlo con `py -m venv venv`.
+Abre CMD en la carpeta del nuevo clon, junto a `manage.py`. Si tienes activo el entorno del proyecto anterior, ejecuta `deactivate`. El proyecto usa Python 3.13.7. Comprueba la versión y prepara un entorno propio del clon.
 
 ```bat
-call venv\Scripts\activate.bat
+py -3.13 --version
+if not exist ".venv\Scripts\python.exe" py -3.13 -m venv .venv
+call .venv\Scripts\activate.bat
+python -c "import sys; print(sys.executable)"
 python -m pip install -r requirements-web.txt
 ```
 
-La configuración de desarrollo lee `SECRET_KEY` de tu entorno o del archivo privado `.env`. Usa una clave de desarrollo. Junto a `manage.py`, el archivo privado `.env.multiempresa.local` debe contener `SS_PRUEBAS_CENTRAL_URL` con la URL directa de `smartstock_central` en la rama de pruebas, incluidos los parámetros SSL de Neon. Ambos archivos están excluidos de Git.
+La ruta de Python debe terminar en `SmartStock-multiempresa\.venv\Scripts\python.exe`.
+
+Django lee su clave local de `.env`. Desde la carpeta de `manage.py`, el siguiente comando agrega una clave aleatoria si falta la línea `SECRET_KEY=` con un valor. Conserva el resto del archivo y guarda la clave directamente en disco.
+
+```bat
+findstr /R /C:"^SECRET_KEY=." ".env" >nul 2>nul || python -c "import secrets; print('\nSECRET_KEY=' + secrets.token_urlsafe(64))" >> ".env"
+```
+
+El segundo archivo privado, `.env.multiempresa.local`, contiene `SS_PRUEBAS_CENTRAL_URL` con la URL directa de `smartstock_central` en la rama `pruebas-multiempresa`, incluidos los parámetros SSL. Si ya comprobaste esa conexión en la copia anterior, puedes copiar ese archivo. Este ejemplo supone que ambas carpetas de proyecto están en el mismo directorio.
+
+```bat
+if not exist ".env.multiempresa.local" copy "..\SmartStock\smartstock\.env.multiempresa.local" ".env.multiempresa.local"
+python manage.py check --settings=esquema_multiempresa.migracion
+```
+
+Ambos archivos están excluidos de Git. Cuando los ajustes cargan correctamente, Django muestra `System check identified no issues`.
 
 Comprueba el esquema de las tres bases.
 
