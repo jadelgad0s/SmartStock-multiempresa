@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let sesion;
     try { sesion = JSON.parse(localStorage.getItem('usuario') || '{}') || {}; } catch (_) { sesion = {}; }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const nodo = (tag, clase, texto) => {
         const n = document.createElement(tag); if (clase) n.className = clase;
         if (texto !== undefined) n.textContent = String(texto ?? ''); return n;
@@ -218,11 +219,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!bodegas.length) el('bodegaProductos').append(new Option('Sin bodegas activas', ''));
             el('bodegaProductos').value = bodegas.some(b => String(b.id) === previa) ? previa : predeterminada;
             el('bodegaProductos').disabled = !bodegas.length; if (!bodegas.length) el('stockProductos').value = '';
-            aplicarPermisos(d.permisos); opcionesListas = true; alcance(); cargarProductos();
+            aplicarPermisos(d.permisos); opcionesListas = true; alcance();
+            const listado = cargarProductos();
             if (productoInicial) {
                 abrirDetalle(productoInicial);
                 productoInicial = null;
             }
+            return listado;
         } catch (error) {
             opcionesListas = false; aplicarPermisos(); aviso('avisoCatalogo', error.message); el('reintentarOpcionesProductos').hidden = false;
             mensajeTabla('No se pudo preparar el catálogo. Reintenta la carga de opciones.'); tabla.setAttribute('aria-busy', 'false'); el('totalProductos').textContent = 'Error de carga';
@@ -472,7 +475,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!s.nuevo && !Object.keys(payload).length) { s.completo = true; bootstrap.Modal.getOrCreateInstance(s.modal).hide(); return; }
             s.pendiente = true; bloquear(s);
             try {
-                await api(s.nuevo ? '/api/v1/productos/' : '/api/v1/productos/' + s.producto.id + '/', {method: s.nuevo ? 'POST' : 'PATCH', body: JSON.stringify(payload)});
+                const ruta = '/api/v1/productos/' + (s.nuevo ? '' : s.producto.id + '/');
+                await conCarga('Guardando producto…', () =>
+                    api(ruta, {method: s.nuevo ? 'POST' : 'PATCH', body: JSON.stringify(payload)}));
                 s.completo = true; s.pendiente = false;
                 bootstrap.Modal.getOrCreateInstance(s.modal).hide(); window.dispatchEvent(new Event('smartstock:notifications-changed'));
                 if (s.nuevo) pagina = 1; cargarProductos();
@@ -492,6 +497,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     async function cargarDetalle() {
         const v = ++versionDetalle; el('datosDetalleProducto').hidden = true; el('reintentarDetalleProducto').hidden = true; aviso('estadoDetalleProducto', 'Cargando producto...');
+        const historial = el('verHistorialProducto');
+        historial.hidden = true;
+        historial.removeAttribute('href');
         try {
             const d = productoCompleto(await api('/api/v1/productos/' + encodeURIComponent(idDetalle) + '/'));
             if (v !== versionDetalle) return;
@@ -511,6 +519,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             if (!filas.length) { const tr = nodo('tr'), td = nodo('td', 'text-muted', 'Sin bodegas activas.'); td.colSpan = 4; tr.append(td); filas.push(tr); }
             el('detalleProductoStock').replaceChildren(...filas); el('datosDetalleProducto').hidden = false; aviso('estadoDetalleProducto', '');
+            const bodega = bodegas.find(b => String(b.id) === el('bodegaProductos').value);
+            if (permisos.ver_reportes === true && bodega) {
+                const filtros = new URLSearchParams({informe: 'kardex', producto: d.id, bodega: bodega.id});
+                historial.href = '/reportes/?' + filtros;
+                historial.title = 'Ver historial de ' + d.sku + ' en ' + bodega.nombre;
+                historial.setAttribute('aria-label', historial.title);
+                historial.hidden = false;
+            }
         } catch (error) { if (v === versionDetalle) { aviso('estadoDetalleProducto', error.message); el('reintentarDetalleProducto').hidden = false; } }
     }
     el('reintentarDetalleProducto').addEventListener('click', cargarDetalle);
@@ -583,7 +599,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         minimo.pendiente = true; bloquearMinimo(); const d = minimo.datos;
         try {
-            await api('/api/v1/productos/' + d.producto_id + '/stock-minimo/', {method: 'PATCH', body: JSON.stringify({bodega: d.bodega_id, cantidad_minima: n})});
+            await conCarga('Guardando stock mínimo…', () =>
+                api('/api/v1/productos/' + d.producto_id + '/stock-minimo/', {method: 'PATCH', body: JSON.stringify({bodega: d.bodega_id, cantidad_minima: n})}));
             minimo.pendiente = false; minimo.completo = true; bootstrap.Modal.getOrCreateInstance(el('modalStockMinimo')).hide();
             window.dispatchEvent(new Event('smartstock:notifications-changed')); cargarProductos();
         } catch (error) {
@@ -624,7 +641,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         accion.pendiente = true; bloquearAccion(); aviso('errorAccionProducto', '');
         const p = accion.producto, ruta = '/api/v1/productos/' + p.id + '/' + (accion.tipo === 'reactivar' ? 'activar/' : accion.tipo === 'eliminar_definitivamente' ? 'eliminar-definitivamente/' : '');
         try {
-            await api(ruta, {method: accion.tipo === 'reactivar' ? 'POST' : 'DELETE'});
+            await conCarga('Actualizando producto…', () => api(ruta, {method: accion.tipo === 'reactivar' ? 'POST' : 'DELETE'}));
             accion.pendiente = false; accion.completo = true; bootstrap.Modal.getOrCreateInstance(el('modalAccionProducto')).hide();
             window.dispatchEvent(new Event('smartstock:notifications-changed')); cargarProductos();
         } catch (error) { aviso('errorAccionProducto', error.message); if (error.incierto || error.status === 404) cargarProductos(); }
@@ -637,5 +654,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         else if (b.dataset.accion === 'detalle') abrirDetalle(b.dataset.id, b);
         else abrirAccion(b.dataset.accion, b.dataset.id, b);
     });
-    cargarOpciones();
+    conCarga('Cargando catálogo…', cargarOpciones);
 });

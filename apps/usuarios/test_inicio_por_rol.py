@@ -45,6 +45,35 @@ class InicioPorRolTests(TestCase):
         cliente.credentials(HTTP_AUTHORIZATION='Bearer ' + sesion['access'])
         return cliente, sesion
 
+    def test_seed_crea_un_administrador_de_negocio_con_clave_usable(self):
+        salida = StringIO()
+        call_command('seed', stdout=salida, no_color=True)
+        cuenta = Usuario.objects.get(email='admin@smartstock.cl')
+        self.assertEqual(cuenta.rol.codigo, 'administrador')
+        self.assertFalse(cuenta.is_staff)
+        self.assertFalse(cuenta.is_superuser)
+        linea_clave = next(linea for linea in salida.getvalue().splitlines() if linea.strip().startswith('Password:'))
+        clave = linea_clave.split(':', 1)[1].strip()
+        self.assertTrue(cuenta.check_password(clave))
+
+        segunda_salida = StringIO()
+        call_command('seed', stdout=segunda_salida)
+        cuenta.refresh_from_db()
+        self.assertTrue(cuenta.check_password(clave))
+        self.assertNotIn('Password:', segunda_salida.getvalue())
+
+    def test_seed_conserva_una_cuenta_tecnica_preexistente(self):
+        tecnico = Usuario.objects.create_superuser(email='admin@smartstock.cl', password=CLAVE)
+        salida = StringIO()
+        call_command('seed', stdout=salida)
+        tecnico.refresh_from_db()
+        self.assertTrue(tecnico.is_superuser)
+        self.assertTrue(tecnico.is_staff)
+        self.assertIsNone(tecnico.rol_id)
+        self.assertTrue(tecnico.check_password(CLAVE))
+        self.assertIn('privilegios técnicos', salida.getvalue())
+        self.assertNotIn('Password:', salida.getvalue())
+
     def test_urls_web_restringen_los_modulos_antes_de_renderizar(self):
         comunes = {'/productos/', '/bodegas/', '/ubicaciones/', '/movimientos/'}
         supervisor = {'/inicio-bodega/', '/transferencias/', '/mermas/', '/reportes/'}

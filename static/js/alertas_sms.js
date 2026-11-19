@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded',async ()=>{
     if (window.SmartStockNavegacion && !await window.SmartStockNavegacion.lista) return;
     if(!localStorage.getItem('access_token')){window.location.replace('/');return;}
     const api=window.SmartStockSMS,el=id=>document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const nodo=(tag,clase,texto)=>{const n=document.createElement(tag);if(clase)n.className=clase;if(texto!==undefined)n.textContent=String(texto??'');return n;};
     const aviso=(id,texto='')=>{el(id).textContent=texto;el(id).hidden=!texto;};
     const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -133,16 +134,19 @@ document.addEventListener('DOMContentLoaded',async ()=>{
         if(c.tipo==='lote'&&c.filtros.toString()!==parametros().toString()){c.modo='rechazado';aviso('errorModalSMS','Los filtros cambiaron. Prepara nuevamente los avisos que quieres revisar.');pintarModal(c);return;}
         const cancelando=c.modo==='cancelar',ids=c.envios.map(e=>e.id);guardando=true;aviso('errorModalSMS');el('estadoModalSMS').textContent=cancelando?'Cancelando aviso…':'Revisando los avisos seleccionados. Puede tardar unos segundos…';controles();
         try{
-            const j=await api.json(cancelando?'/api/v1/alertas-sms/historial/'+encodeURIComponent(ids[0])+'/cancelar/':'/api/v1/alertas-sms/procesar-pendientes/',{method:'POST',body:cancelando?{}:{ids}});
+            const ruta = cancelando ? '/api/v1/alertas-sms/historial/' + encodeURIComponent(ids[0]) + '/cancelar/' : '/api/v1/alertas-sms/procesar-pendientes/';
+            const j = await conCarga(cancelando ? 'Cancelando aviso…' : 'Revisando avisos SMS…', () =>
+                api.json(ruta, {method: 'POST', body: cancelando ? {} : {ids}}));
             if(c!==contexto)return;
             if(!cancelando&&(!Number.isInteger(j.data?.revisados)||!Array.isArray(j.data.resultados)||j.data.resultados.some(e=>!envioValido(e)))){const e=new Error('El resultado no se pudo confirmar. Actualiza el historial.');e.incierto=true;throw e;}
             c.modo='resultado';if(cancelando)c.envios=c.envios.map(e=>({...e,estado:'CANCELADO',estado_etiqueta:'Cancelado',procesable:false,cancelable:false,motivo:'',detalle:'Cancelado por un administrador desde Alertas SMS.'}));else c.envios=j.data.resultados;
-            el('estadoModalSMS').textContent=j.mensaje||'Revisión completada.';window.dispatchEvent(new Event('smartstock:notifications-changed'));pintarModal(c);
+            el('estadoModalSMS').textContent = cancelando ? '' : 'La entrega al celular se confirma con el estado Entregado.';
+            window.dispatchEvent(new Event('smartstock:notifications-changed')); pintarModal(c);
             await actualizar();
         }catch(e){if(c===contexto){c.modo=e.incierto?'incierto':'rechazado';aviso('errorModalSMS',e.message);el('estadoModalSMS').textContent=e.incierto?'Resultado pendiente de comprobar.':'';pintarModal(c);}}
         finally{guardando=false;if(c===contexto)pintarModal(c);controles();}
     });
     el('modalSMS').addEventListener('hide.bs.modal',e=>{if(guardando)e.preventDefault();else if(contexto){contexto.abierto=false;++contexto.version;}});
     el('modalSMS').addEventListener('hidden.bs.modal',()=>{contexto=null;});
-    iniciar();
+    conCarga('Cargando alertas SMS…', iniciar);
 });

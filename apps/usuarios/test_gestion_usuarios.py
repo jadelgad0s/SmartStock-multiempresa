@@ -80,16 +80,50 @@ class GestionUsuariosTests(TestCase):
         self.assertEqual(len(r.data['data']['password_requisitos']), 4)
 
     def test_detalle_identifica_cuentas_protegidas_sin_filtrar_password(self):
-        superusuario = Usuario.objects.create_superuser(email='super@example.com', nombres='Super', apellidos='Sin rol')
         self.rol_admin.nombre = 'Jefatura'
         self.rol_admin.save(update_fields=['nombre'])
-        for persona, protegido in ((self.admin, True), (superusuario, True), (self.operador, False)):
+        for persona, protegido in ((self.admin, True), (self.operador, False)):
             r = self.client.get(f'/api/v1/usuarios/{persona.pk}/')
             self.assertEqual(r.status_code, 200)
             self.assertEqual(r.data['cuenta_protegida'], protegido)
             self.assertNotIn('password', r.data)
         listado = self.client.get('/api/v1/usuarios/').data['results']
         self.assertEqual(next(p for p in listado if p['id'] == self.admin.pk)['cuenta_protegida'], True)
+
+    def test_listado_y_conteo_por_rol_solo_incluyen_cuentas_de_negocio(self):
+        tecnico = Usuario.objects.create_superuser(email='tecnico@example.com', rol=self.rol_admin)
+        Usuario.objects.create_superuser(email='soporte@example.com')
+        self.admin.is_staff = True
+        self.admin.save(update_fields=['is_staff'])
+        for actor in (self.admin, tecnico):
+            with self.subTest(actor=actor.email):
+                self.client.force_authenticate(user=actor)
+                listado = self.client.get('/api/v1/usuarios/').data
+                self.assertEqual(listado['count'], 2)
+                self.assertCountEqual([u['id'] for u in listado['results']], [self.admin.pk, self.operador.pk])
+                rol = self.client.get(f'/api/v1/usuarios/roles/{self.rol_admin.pk}/').data
+                self.assertEqual(rol['cantidad_usuarios'], 1)
+
+    def test_cuenta_tecnica_queda_fuera_de_las_acciones_de_gestion(self):
+        tecnico = Usuario.objects.create_superuser(email='tecnico@example.com', rol=self.rol_admin)
+        ruta = f'/api/v1/usuarios/{tecnico.pk}/'
+        for metodo, accion in (
+            ('GET', ''), ('PUT', ''), ('PATCH', ''), ('DELETE', ''),
+            ('POST', 'activar/'), ('DELETE', 'eliminar-definitivamente/'), ('POST', 'resetear-password/'),
+        ):
+            with self.subTest(metodo=metodo, accion=accion):
+                self.assertEqual(self.client.generic(metodo, ruta + accion).status_code, 404)
+        self.assertFalse(Auditoria.objects.filter(modelo='Usuario', objeto_id=str(tecnico.pk)).exists())
+
+    def test_administrador_puede_restablecer_la_clave_del_operador(self):
+        clave = 'OtraClaveDePrueba42!'
+        r = self.client.post(
+            f'/api/v1/usuarios/{self.operador.pk}/resetear-password/',
+            {'password_nueva': clave}, format='json',
+        )
+        self.assertEqual(r.status_code, 200, r.data)
+        self.operador.refresh_from_db()
+        self.assertTrue(self.operador.check_password(clave))
 
     def test_crear_usuario_con_confirmacion_real_registra_hash_y_auditoria(self):
         r = self.client.post('/api/v1/usuarios/', self.datos_nuevo(), format='json')

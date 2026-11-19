@@ -276,6 +276,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             'permisos': {
                 'crear': puede('crear_producto'), 'editar': puede('editar_producto'),
                 'configurar_minimo': puede('editar_producto'),
+                'ver_reportes': puede('ver_reportes'),
                 'desactivar': puede('eliminar_producto'), 'reactivar': puede('eliminar_producto'),
                 'eliminar_definitivamente': admin, 'auditoria': admin, 'usuarios': admin,
                 'configuracion': puede_acceder_admin(usuario),

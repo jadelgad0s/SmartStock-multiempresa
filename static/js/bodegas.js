@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.SmartStockNavegacion && !await window.SmartStockNavegacion.lista) return;
     if (!localStorage.getItem('access_token')) { window.location.replace('/'); return; }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const nodo = (tag, clase, texto) => { const n = document.createElement(tag); if (clase) n.className = clase; if (texto !== undefined) n.textContent = String(texto ?? ''); return n; };
     const aviso = (id, texto) => { el(id).textContent = texto || ''; el(id).hidden = !texto; };
     const aTexto = v => Array.isArray(v) ? v.map(aTexto).join(' ') : v && typeof v === 'object' ? Object.values(v).map(aTexto).join(' ') : String(v || '');
@@ -147,7 +148,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!data.nombre) errorCampo('nombre','Ingresa un nombre.');
         if (el('formEntidad').querySelector('.is-invalid')) { el('formEntidad').querySelector('.is-invalid').focus(); return; }
         form.pendiente = true; bloquearForm();
-        try { await api(url(form.id),{method:form.id ? 'PATCH':'POST',body:JSON.stringify(data)}); form.completo = true; form.pendiente = false; modal.hide(); window.dispatchEvent(new Event('smartstock:notifications-changed')); pagina = 1; if (await cargarOpciones()) cargarLista(); }
+        try {
+            await conCarga('Guardando bodega…', () => api(url(form.id), {method: form.id ? 'PATCH' : 'POST', body: JSON.stringify(data)}));
+            form.completo = true; form.pendiente = false; modal.hide();
+            window.dispatchEvent(new Event('smartstock:notifications-changed')); pagina = 1;
+            if (await cargarOpciones()) cargarLista();
+        }
         catch (error) { aviso('errorEntidad',error.message); ['nombre','direccion'].forEach(c => { if (error.datos?.[c]) errorCampo(c,aTexto(error.datos[c])); }); }
         finally { form.pendiente = false; bloquearForm(); }
     });
@@ -166,10 +172,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     el('formEstadoEntidad').addEventListener('submit', async e => {
         e.preventDefault(); if (!accion.abierto || accion.pendiente || accion.completo || accion.cargando || !accion.datos) return;
         accion.pendiente = true; bloquearAccion(); aviso('errorEstadoEntidad','');
-        try { await api(url(accion.id) + (accion.activar ? 'activar/' : ''),{method:accion.activar ? 'POST':'DELETE'}); accion.completo = true; accion.pendiente = false; modalAccion.hide(); window.dispatchEvent(new Event('smartstock:notifications-changed')); if (await cargarOpciones()) cargarLista(); }
+        try {
+            await conCarga('Actualizando bodega…', () =>
+                api(url(accion.id) + (accion.activar ? 'activar/' : ''), {method: accion.activar ? 'POST' : 'DELETE'}));
+            accion.completo = true; accion.pendiente = false; modalAccion.hide();
+            window.dispatchEvent(new Event('smartstock:notifications-changed'));
+            if (await cargarOpciones()) cargarLista();
+        }
         catch (error) { aviso('errorEstadoEntidad',error.message); }
         finally { accion.pendiente = false; bloquearAccion(); }
     });
     el('listaBodegas').addEventListener('click', e => { const b = e.target.closest('[data-accion]'); if (!b) return; if (b.dataset.accion === 'editar') abrirFormulario(b.dataset.id); else abrirAccion(b.dataset.id,b.dataset.accion === 'activar'); });
-    aplicarPermisos(); cargarOpciones().then(ok => { if (ok) cargarLista(); });
+    aplicarPermisos();
+    conCarga('Cargando bodegas…', async () => {
+        if (await cargarOpciones()) await cargarLista();
+    });
 });

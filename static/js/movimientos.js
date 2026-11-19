@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const headers = {Authorization: 'Bearer ' + token};
     const escritorio = () => window.matchMedia('(min-width: 992px)').matches;
     const modal = id => bootstrap.Modal.getOrCreateInstance(el(id));
@@ -68,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function mensajeTabla(texto) {
         const fila = nodo('tr');
         const celda = nodo('td', 'text-center text-muted py-4', texto);
-        celda.colSpan = 6;
+        celda.colSpan = 5;
         fila.appendChild(celda);
         tabla.replaceChildren(fila);
     }
@@ -86,12 +87,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         fecha.append(nodo('span', '', partes[0] || ''), nodo('span', 'ss-mov-date-time', partes[1] || ''));
         const tipo = nodo('td', 'ss-mov-type');
         const entrada = mov.tipo === 'ENTRADA';
-        tipo.appendChild(nodo('span', 'badge rounded-pill ' + (entrada ? 'badge-soft-success' : 'badge-soft-danger'), entrada ? 'Entrada' : 'Salida'));
+        const resumen = nodo('span', 'ss-mov-operation');
+        resumen.append(
+            nodo('span', 'badge rounded-pill ' + (entrada ? 'badge-soft-success' : 'badge-soft-danger'), entrada ? 'Entrada' : 'Salida'),
+            nodo('span', 'ss-mov-quantity', ' · ' + Number(mov.cantidad).toLocaleString('es-CL') + ' unid.'),
+        );
+        tipo.append(resumen);
         const producto = nodo('td', 'ss-mov-product');
         producto.append(nodo('strong', '', mov.producto), nodo('span', 'ss-mov-sku', 'SKU: ' + mov.sku));
         producto.append(nodo('span', 'ss-mov-sku', mov.bodega));
-        const cantidad = nodo('td', 'ss-mov-quantity ' + (entrada ? 'text-success' : 'text-danger'));
-        cantidad.append(nodo('span', '', (entrada ? '+' : '−') + mov.cantidad), nodo('span', 'ss-mov-units', ' unid.'));
         const operador = nodo('td', 'ss-mov-user', mov.usuario);
         const acciones = nodo('td', 'ss-mov-actions');
         const boton = nodo('button', 'btn btn-sm btn-outline-secondary', 'Ver detalle');
@@ -99,7 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         boton.dataset.detalle = String(mov.id);
         boton.setAttribute('aria-label', 'Ver detalle del movimiento ' + mov.movimiento_id + ' de ' + mov.producto);
         acciones.appendChild(boton);
-        fila.append(fecha, tipo, producto, cantidad, operador, acciones);
+        fila.append(fecha, tipo, producto, operador, acciones);
         return fila;
     }
     function renderizarPaginacion(totalPaginas) {
@@ -234,7 +238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const campos = {
                 detalleMovId: '#' + mov.movimiento_id, detalleMovProducto: mov.producto,
                 detalleMovSku: mov.sku, detalleMovTipo: mov.tipo === 'ENTRADA' ? 'Entrada' : 'Salida',
-                detalleMovCantidad: (mov.tipo === 'ENTRADA' ? '+' : '−') + mov.cantidad + ' unidades',
+                detalleMovCantidad: Number(mov.cantidad).toLocaleString('es-CL') + ' unid.',
                 detalleMovFecha: mov.fecha, detalleMovUsuario: mov.usuario, detalleMovBodega: mov.bodega,
                 detalleMovReferencia: mov.documento_referencia || 'Sin referencia u observación.',
             };
@@ -436,9 +440,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         bloquearFormulario(true);
         mostrarMensaje('movErrorRegistro', '');
         try {
-            const json = await leerRespuesta(await fetch('/api/v1/productos/registrar-movimiento/', {
+            const json = await conCarga('Registrando movimiento…', async () => leerRespuesta(await fetch('/api/v1/productos/registrar-movimiento/', {
                 method: 'POST', headers: {...headers, 'Content-Type': 'application/json'}, body: JSON.stringify(payload),
-            }));
+            })));
             productoActual.stock_disponible = json.data.stock_restante;
             registroConfirmado = true;
             guardando = false;
@@ -490,8 +494,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         cargarHistorial();
     });
     el('reintentarBodegasMovimiento').addEventListener('click', cargarBodegas);
-    cargarHistorial();
-    cargarBodegas();
+    conCarga('Cargando movimientos…', () => Promise.all([cargarHistorial(), cargarBodegas()]));
     devolverFocoEscaner();
 });
 

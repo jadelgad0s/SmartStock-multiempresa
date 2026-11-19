@@ -14,7 +14,7 @@ const transferencia = (extra={}) => ({id:1,fecha:'01/11/2026 10:30',estado:'COMP
 const lista = (count=1,page=1) => ({count,results:Array.from({length:Math.max(0,Math.min(25,count-(page-1)*25))},(_,i)=>transferencia({id:(page-1)*25+i+1}))});
 const catalogo = (count=1,page=1,extra={}) => ({count,results:Array.from({length:Math.max(0,Math.min(25,count-(page-1)*25))},(_,i)=>producto({id:(page-1)*25+i+1,...extra}))});
 async function pantalla(t,config={}) {
-    const dom = new JSDOM(html,{url:'http://localhost/transferencias/',runScripts:'outside-only',pretendToBeVisual:true});
+    const dom = new JSDOM(html,{url:'http://localhost/transferencias/'+(config.query || ''),runScripts:'outside-only',pretendToBeVisual:true});
     t.after(()=>dom.window.close()); const w=dom.window,requests=[],timers=new Map(),modales=new Map();let timer=0,avisos=0,lectura;
     w.localStorage.setItem('access_token','test');w.localStorage.setItem('refresh_token','refresh');
     w.localStorage.setItem('usuario',JSON.stringify({id:config.usuario||7,nombre_completo:'Persona Prueba',rol_nombre:'Encargado de bodega'}));
@@ -91,6 +91,16 @@ test('detalle muestra existencias históricas y admite registros antiguos con va
     c.ocultar('modalDetalleTransferencia');c.el('listaTransferencias').querySelector('button').click();
     await c.responder(3,{data:transferencia({estado:'PENDIENTE',stock:null,movimientos:null,detalles:[{sku:'A',producto:'Producto A',cantidad:4},{sku:'B',producto:'Producto B',cantidad:7}]})});
     assert.equal(c.el('detalleTransferenciaProductos').children.length,2);assert.equal(c.el('detalleTransferenciaEstado').textContent,'Pendiente');assert.match(c.el('detalleTransferenciaStock').textContent,/no tiene una instantánea/);
+});
+
+test('el enlace desde el Kardex abre el detalle por ID sin buscarlo en la primera página',async t=>{
+    const c=await pantalla(t,{query:'?transferencia=89'});
+    await c.cargar();
+    assert.equal(c.requests[2].url.pathname,'/api/v1/productos/transferencias/89/');
+    await c.responder(2,{data:transferencia({id:89})});
+    assert.equal(c.el('modalDetalleTransferencia').classList.contains('show'),true);
+    assert.equal(c.el('detalleTransferenciaId').textContent,'#89');
+    assert.match(c.el('detalleTransferenciaStock').textContent,/24 → 18.*6 → 12/);
 });
 
 test('cerrar un detalle descarta su respuesta tardía y devuelve el foco',async t=>{

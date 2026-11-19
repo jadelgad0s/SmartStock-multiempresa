@@ -1,0 +1,54 @@
+.ss-carga {
+    width: min(22rem, calc(100% - 2rem));
+    margin: auto;
+    padding: 1.6rem 2.5rem;
+    border: 0;
+    border-radius: .95rem;
+    background: #fff;
+    color: #1e293b;
+    box-shadow: 0 1.25rem 3.5rem rgba(15, 23, 42, .27);
+    text-align: center;
+}
+
+.ss-carga::backdrop {
+    background: rgba(15, 23, 42, .55);
+    backdrop-filter: blur(2px);
+}
+
+.ss-carga:focus { outline: none; }
+body:has(.ss-carga[open]) .modal-backdrop { opacity: 0; }
+
+.ss-carga-spinner {
+    display: block;
+    width: 3rem;
+    height: 3rem;
+    margin: 0 auto 1rem;
+    border: .25rem solid #0f766e;
+    border-inline-start-color: transparent;
+    border-radius: 50%;
+    animation: ss-carga-girar .85s linear infinite;
+}
+
+.ss-carga p {
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+[data-bs-theme="dark"] .ss-carga {
+    background: var(--ss-dark-panel);
+    color: var(--ss-dark-ink);
+}
+
+[data-bs-theme="dark"] .ss-carga-spinner {
+    border-color: #5eead4;
+    border-inline-start-color: transparent;
+}
+
+@keyframes ss-carga-girar {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ss-carga-spinner { animation: none; }
+}

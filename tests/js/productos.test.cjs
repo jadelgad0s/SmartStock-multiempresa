@@ -635,6 +635,19 @@ test('detalle muestra descripción completa, códigos y existencias con fechas d
     await c.responder(2, detalleProducto({descripcion: 'Respuesta atrasada'})); assert.notEqual(c.el('detalleProductoDescripcion').textContent, 'Respuesta atrasada');
 });
 
+test('el historial de la ficha usa la bodega del catálogo y requiere acceso a reportes', async t => {
+    for (const permiso of [true, false]) {
+        const c = await catalogo(t, '?bodega=2', {permisos: {ver_reportes: permiso}});
+        await c.responder(0);
+        c.el('listaProductos').querySelector('[data-accion="detalle"]').click();
+        await c.responder(1, detalleProducto());
+        const enlace = c.el('verHistorialProducto');
+        assert.equal(enlace.hidden, !permiso);
+        assert.equal(enlace.getAttribute('href'), permiso ? '/reportes/?informe=kardex&producto=1&bodega=2' : null);
+        if (permiso) assert.match(enlace.getAttribute('aria-label'), /CAT-1 en Anexo/);
+    }
+});
+
 test('acciones visibles respetan permisos de servidor y los productos inactivos también se editan', async t => {
     const c = await catalogo(t, '', {permisos: {editar: true}}); await c.responder(0, {count: 1, results: [{...producto(1), activo: false}]});
     assert.ok(c.el('listaProductos').querySelector('.btn-editar')); assert.equal(c.el('btnNuevoProducto').hidden, true);

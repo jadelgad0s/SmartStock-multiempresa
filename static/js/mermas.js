@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const administrador = rol === 'administrador' || usuario.is_superuser === true;
     if (!window.SmartStockNavegacion && !administrador && rol === 'operador') { window.location.href = '/movimientos/'; return; }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     if (!window.SmartStockNavegacion && !administrador) ['menu-auditoria', 'menu-usuarios', 'menu-config', 'menu-sistema-title'].forEach(id => {
         if (el(id)) el(id).hidden = true;
     });
@@ -262,7 +263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         el('mermaResumenConfirmacion').classList.toggle('alert-info', !producto || Boolean(suficiente));
         const completa = bodegasListas && el('mermaBodega').value && suficiente && el('mermaMotivo').value && el('mermaObservacion').value.trim();
         el('btnGuardarMerma').disabled = esperando || registrado || cargandoProductos || !completa;
-        el('btnGuardarMerma').textContent = esperando ? 'Registrando merma...' : registrado ? 'Merma registrada' : 'Confirmar merma';
+        el('btnGuardarMerma').textContent = esperando ? 'Registrando merma…' : 'Confirmar merma';
         return Boolean(completa);
     }
     function prepararProductos() {
@@ -380,9 +381,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         bloquearFormulario(true);
         aviso('errorNuevaMerma', '');
         try {
-            const json = await consultar('/api/v1/productos/mermas/', {
+            const json = await conCarga('Registrando merma…', () => consultar('/api/v1/productos/mermas/', {
                 method: 'POST', headers: {...headers, 'Content-Type': 'application/json'}, body: JSON.stringify(payload),
-            });
+            }));
             producto.stock_disponible = json.data.stock_restante;
             registrado = true;
             esperando = false;
@@ -414,18 +415,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const filtro = el('bodegaHistorialMermas'), anterior = bodegaInicial || filtro.value;
             filtro.replaceChildren(new Option('Todas', ''), ...d.bodegas_historial.map(b => new Option((b.etiqueta || b.nombre) + (b.activa === false ? ' (inactiva)' : ''), String(b.id))));
             filtro.value = d.bodegas_historial.some(b => String(b.id) === anterior) ? anterior : '';
-            if (bodegaInicial) {
-                bodegaInicial = null;
-                cargarHistorial();
-            }
             bodegasListas = bodegas.length > 0 && d.operar?.merma !== false;
             el('btnNuevaMerma').disabled = !bodegasListas;
             el('estadoBodegasMermas').textContent = !bodegas.length ? 'Crea o reactiva una bodega en Bodegas para registrar mermas.' : d.operar?.merma === false ? 'No tienes permiso para registrar mermas.' : '';
+            if (bodegaInicial) {
+                bodegaInicial = null;
+                return cargarHistorial();
+            }
         } catch (error) { el('estadoBodegasMermas').textContent = error.message; el('reintentarBodegasMermas').hidden = false; }
     }
     el('mermaBodega').addEventListener('change', () => { paginaProductos = 1; producto = null; cargarProductos(); });
     el('reintentarBodegasMermas').addEventListener('click', cargarBodegas);
-    if (!bodegaInicial) cargarHistorial();
-    cargarBodegas();
+    conCarga('Cargando mermas…', () => Promise.all([!bodegaInicial && cargarHistorial(), cargarBodegas()]));
 });
 

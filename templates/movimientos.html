@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}Movimientos de Bodega - SmartStock{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/movimientos.css' %}?v=2">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/movimientos.css' %}?v=3">{% endblock %}
 
 {% block content %}
 <div class="d-flex ss-app-layout" style="min-height: 100vh;">
@@ -160,15 +160,14 @@
                             <thead>
                                 <tr>
                                     <th style="width: 16%;">Fecha / hora</th>
-                                    <th style="width: 11%;">Tipo</th>
+                                    <th style="width: 21%;">Movimiento</th>
                                     <th style="width: 30%;">Producto</th>
-                                    <th style="width: 10%;" class="text-end">Cantidad</th>
                                     <th style="width: 20%;">Operador</th>
                                     <th style="width: 13%;"><span class="visually-hidden">Detalle</span></th>
                                 </tr>
                             </thead>
                             <tbody id="listaMovimientos" aria-busy="true">
-                                <tr><td colspan="6" class="text-center text-muted py-4">Cargando movimientos...</td></tr>
+                                <tr><td colspan="5" class="text-center text-muted py-4">Cargando movimientos...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -317,7 +316,7 @@
 
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
-<script src="{% static 'js/movimientos.js' %}?v=confirmacion-1" defer></script>
+<script src="{% static 'js/movimientos.js' %}?v=carga-1" defer></script>
 <script src="{% static 'js/escaneo_camara.js' %}?v=camara-5" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', async () => {

@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.SmartStockNavegacion && !await window.SmartStockNavegacion.lista) return;
     if (!localStorage.getItem('access_token')) { window.location.replace('/'); return; }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const nodo = (tag, clase, texto) => { const n = document.createElement(tag); if (clase) n.className = clase; if (texto !== undefined) n.textContent = String(texto ?? ''); return n; };
     const aviso = (id, texto) => { el(id).textContent = texto || ''; el(id).hidden = !texto; };
     const numero = n => Number(n).toLocaleString('es-CL');
@@ -58,7 +59,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         return json;
     }
 
-    const bodegaInicial = new URLSearchParams(location.search).get('bodega');
+    const inicial = new URLSearchParams(location.search);
+    const bodegaInicial = inicial.get('bodega');
+    const transferenciaInicial = inicial.get('transferencia') || '';
     let opciones = null, pagina = 1, total = 0, versionHistorial = 0, versionDetalle = 0;
     let timerHistorial, timerProductos, origenDetalle = null;
     const filtrosIds = ['origenTransferencias', 'destinoTransferencias', 'estadoTransferencias', 'desdeTransferencias', 'hastaTransferencias'];
@@ -121,11 +124,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     el('arribaTransferencias').addEventListener('click', () => { el('filtrosTransferencias').scrollIntoView({block:'start'}); el('buscarTransferencias').focus({preventScroll:true}); });
 
     const detalleModal = bootstrap.Modal.getOrCreateInstance(el('modalDetalleTransferencia'));
-    el('listaTransferencias').addEventListener('click', async e => {
-        const b = e.target.closest('[data-detalle]'); if (!b) return;
-        const version = ++versionDetalle; origenDetalle = b; el('datosDetalleTransferencia').hidden = true; el('estadoDetalleTransferencia').textContent = 'Cargando...'; detalleModal.show();
+    async function abrirDetalle(id, origen = null) {
+        const version = ++versionDetalle; origenDetalle = origen; el('datosDetalleTransferencia').hidden = true; el('estadoDetalleTransferencia').textContent = 'Cargando...'; detalleModal.show();
         try {
-            const j = await api(API + encodeURIComponent(b.dataset.detalle) + '/'); if (version !== versionDetalle) return;
+            const j = await api(API + encodeURIComponent(id) + '/'); if (version !== versionDetalle) return;
             const d = j.data, campos = {Id:'#' + d.id, Fecha:d.fecha, Estado:d.estado === 'COMPLETADA' ? 'Completada' : d.estado === 'PENDIENTE' ? 'Pendiente' : d.estado, Usuario:d.usuario, Origen:d.bodega_origen.nombre, Destino:d.bodega_destino.nombre};
             Object.entries(campos).forEach(([k,v]) => { el('detalleTransferencia' + k).textContent = v; });
             const filas = d.detalles.map(p => { const tr = nodo('tr'); tr.append(nodo('td','',p.sku), nodo('td','',p.producto), nodo('td','',numero(p.cantidad) + ' unid.')); return tr; });
@@ -136,8 +138,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             el('detalleTransferenciaMovimientos').textContent = d.movimientos ? 'Movimientos asociados: salida #' + d.movimientos.salida + ' y entrada #' + d.movimientos.entrada + '.' : '';
             el('estadoDetalleTransferencia').textContent = ''; el('datosDetalleTransferencia').hidden = false;
         } catch (error) { if (version === versionDetalle) el('estadoDetalleTransferencia').textContent = error.message; }
+    }
+    el('listaTransferencias').addEventListener('click', e => {
+        const b = e.target.closest('[data-detalle]');
+        if (b) abrirDetalle(b.dataset.detalle, b);
     });
-    el('modalDetalleTransferencia').addEventListener('hidden.bs.modal', () => { ++versionDetalle; if (origenDetalle?.isConnected) origenDetalle.focus(); });
+    el('modalDetalleTransferencia').addEventListener('hidden.bs.modal', () => {
+        ++versionDetalle;
+        (origenDetalle?.isConnected ? origenDetalle : el('buscarTransferencias')).focus();
+    });
 
     const f = {abierto:false, guardando:false, incierta:false, completa:false, cargando:false, resolviendo:false, camara:false, codigoCamara:null, version:0, producto:null, productos:new Map(), pagina:1, total:0, solicitud:null, payload:null};
     const modalEl = el('modalTransferencia'), modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -195,7 +204,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         el('resumenNuevaTransferencia').classList.toggle('alert-warning', Boolean(p && !valido) || f.incierta);
         el('resumenNuevaTransferencia').classList.toggle('alert-info', !f.incierta && (!p || valido));
         el('confirmarTransferencia').disabled = f.guardando || f.completa || f.camara || !f.abierto || (!f.incierta && (!opciones?.permisos.registrar || !valido || f.cargando || f.resolviendo));
-        el('confirmarTransferencia').textContent = f.guardando ? 'Confirmando...' : f.incierta ? 'Verificar transferencia' : f.completa ? 'Transferencia completada' : 'Confirmar transferencia';
+        el('confirmarTransferencia').textContent = f.guardando ? 'Confirmando…' : f.incierta ? 'Verificar transferencia' : 'Confirmar transferencia';
         return Boolean(valido);
     }
     function prepararProductos() {
@@ -274,7 +283,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const payload = f.incierta ? {...f.payload} : {bodega_origen_id:Number(el('transferenciaOrigen').value),bodega_destino_id:Number(el('transferenciaDestino').value),producto_id:f.producto.id,cantidad:Number(el('transferenciaCantidad').value),solicitud_id:f.solicitud};
         f.payload = payload; guardarPendiente({payload,producto:{...f.producto}}); f.guardando = true; actualizarFormulario(); aviso('errorNuevaTransferencia','');
         try {
-            const j = await api(API,{method:'POST',body:JSON.stringify(payload)});
+            const j = await conCarga(f.incierta ? 'Verificando transferencia…' : 'Confirmando transferencia…', () =>
+                api(API, {method: 'POST', body: JSON.stringify(payload)}));
             if (!j.data || !entero(j.data.id) || j.data.estado !== 'COMPLETADA') { const err = new Error('No se pudo verificar la confirmación. Inténtalo nuevamente.'); err.incierto = true; throw err; }
             f.completa = true; f.incierta = false; f.guardando = false; borrarPendiente(); modal.hide(); pagina = 1; cargarHistorial(); window.dispatchEvent(new Event('smartstock:notifications-changed'));
         } catch (error) {
@@ -299,5 +309,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         finally { el('actualizarBodegasTransferencias').disabled = false; actualizarAcceso(); contarFiltros(); }
     }
     el('actualizarBodegasTransferencias').addEventListener('click', cargarOpciones);
-    actualizarAcceso(); cargarHistorial(); cargarOpciones();
+    actualizarAcceso();
+    conCarga('Cargando transferencias…', () => Promise.all([cargarHistorial(), cargarOpciones()]));
+    if (/^[1-9][0-9]{0,18}$/.test(transferenciaInicial)) abrirDetalle(transferenciaInicial);
 });

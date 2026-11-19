@@ -42,7 +42,7 @@ class RolSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'es_sistema', 'fecha_creacion', 'fecha_modificacion')
 
     def get_cantidad_usuarios(self, obj):
-        return obj.usuarios.filter(activo=True).count()
+        return obj.usuarios.filter(activo=True, is_superuser=False).count()
 
 
 class UsuarioListSerializer(serializers.ModelSerializer):

@@ -1,4 +1,5 @@
 """Consultas de inventario de solo lectura; el Kardex incluye las bajas por merma."""
+import re
 from contextlib import contextmanager
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -9,10 +10,11 @@ from django.db.models.functions import Concat
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Bodega, DetalleMovimiento, Merma, Producto, StockBodega
+from .models import Bodega, DetalleMovimiento, DetalleTransferencia, Merma, Producto, StockBodega
 from .stock import AGOTADO, BAJO, anotar_stock, estado_stock
 
 ZONA = ZoneInfo('America/Santiago')
+ID_MAXIMO = 9223372036854775807
 TITULOS = {
     'existencias': 'Existencias actuales', 'critico': 'Stock crítico actual',
     'movimientos': 'Movimientos de inventario', 'mermas': 'Mermas y bajas',
@@ -39,8 +41,8 @@ def lectura_consistente():
 
 class FiltrosReporte(serializers.Serializer):
     informe = serializers.ChoiceField(choices=tuple(TITULOS), default='existencias')
-    bodega = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
-    producto = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
+    bodega = serializers.IntegerField(min_value=1, max_value=ID_MAXIMO, required=False)
+    producto = serializers.IntegerField(min_value=1, max_value=ID_MAXIMO, required=False)
     search = serializers.CharField(max_length=200, required=False, allow_blank=True)
     desde = serializers.DateField(required=False, input_formats=['%Y-%m-%d'])
     hasta = serializers.DateField(required=False, input_formats=['%Y-%m-%d'])
@@ -120,6 +122,34 @@ def asientos_mermas(qs):
 
 CAMPOS_ASIENTO = ('r_fecha', 'r_id', 'r_prioridad', 'r_registro', 'r_tipo', 'r_producto', 'r_sku',
                   'r_bodega', 'r_nombre', 'r_apellido', 'r_referencia', 'r_entrada', 'r_salida')
+
+
+def enlazar_transferencias_kardex(filas, producto_id, bodega_id):
+    """Confirma los traslados de la página mediante sus detalles registrados."""
+    candidatas = []
+    for fila in filas:
+        if not fila['tipo'].startswith('Transferencia: '):
+            continue
+        referencia = re.match(r'^Transferencia #([1-9][0-9]{0,18})(?::|$)', fila['referencia'])
+        if referencia and (transferencia_id := int(referencia[1])) <= ID_MAXIMO:
+            candidatas.append((fila, transferencia_id))
+
+    if not candidatas:
+        return
+
+    detalles = DetalleTransferencia.objects.filter(
+        transferencia_id__in={identificador for _, identificador in candidatas},
+        transferencia__estado='COMPLETADA',
+        producto_id=producto_id,
+    ).values_list('transferencia_id', 'transferencia__bodega_origen_id',
+                  'transferencia__bodega_destino_id', 'cantidad')
+    asientos = set()
+    for identificador, origen, destino, cantidad in detalles:
+        asientos.add((identificador, origen, 0, cantidad))
+        asientos.add((identificador, destino, cantidad, 0))
+    for fila, identificador in candidatas:
+        if (identificador, bodega_id, fila['entrada'], fila['salida']) in asientos:
+            fila['transferencia_id'] = identificador
 
 
 def columnas(*campos):

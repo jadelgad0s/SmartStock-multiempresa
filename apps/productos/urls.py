@@ -7,7 +7,7 @@ from rest_framework.routers import DefaultRouter
 # Importamos todas las vistas que hemos creado
 from .views import ProductoViewSet
 from .views_consulta_codigos import consultar_codigo
-from .views_dashboard import resumen_dashboard, alertas_dashboard, inicio_bodega
+from .views_dashboard import resumen_dashboard, alertas_dashboard, comparar_productos_dashboard, inicio_bodega
 from .views_movimientos import (
     registrar_movimiento, ultimos_movimientos, historial_movimientos,
     detalle_movimiento, resolver_producto_movimiento,
@@ -42,6 +42,7 @@ urlpatterns = [
     path('inicio-bodega/', inicio_bodega, name='inicio-bodega-datos'),
     path('dashboard-resumen/', resumen_dashboard, name='dashboard-resumen'),
     path('dashboard-alertas/', alertas_dashboard, name='dashboard-alertas'),
+    path('dashboard-comparacion/', comparar_productos_dashboard, name='dashboard-comparacion'),
     path('ultimos-movimientos/', ultimos_movimientos, name='ultimos-movimientos'),
     path('registrar-movimiento/', registrar_movimiento, name='registrar-movimiento'),
     path('resolver-movimiento/', resolver_producto_movimiento, name='resolver-movimiento'),

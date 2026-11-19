@@ -14,6 +14,14 @@ function datos(extra = {}) {
     return {bodega: {id: 1, nombre: 'Bodega Central'}, bodegas: [{id: 1, nombre: 'Bodega Central'}, {id: 2, nombre: 'Anexo'}], dias, desde: '2026-10-21', hasta: '2026-10-27', actualizado: '2026-10-28T02:30:00Z', kpi_stock: 15, kpi_entradas: 12, kpi_salidas: 2, kpi_alertas: 1, estado_inventario: {total: 3, suficiente: 1, bajo: 1, agotado: 1}, chart_labels: Array.from({length: dias}, (_, i) => String(i + 1)), chart_fechas: Array.from({length: dias}, (_, i) => '2026-10-' + String(i + 1).padStart(2, '0')), chart_entradas: Array.from({length: dias}, (_, i) => i === dias - 1 ? 12 : 0), chart_salidas: Array.from({length: dias}, (_, i) => i === dias - 1 ? 2 : 0), recientes: [movimiento()], alertas: [alerta(), alerta(2, {estado: 'bajo', stock: 2})], permisos: {registrar_movimiento: true, auditoria: true, usuarios: true, configuracion: false}, ...extra};
 }
 const pagina = (count = 55, n = 1) => ({count, results: Array.from({length: Math.max(0, Math.min(25, count - (n - 1) * 25))}, (_, i) => alerta((n - 1) * 25 + i + 1))});
+function datosComparacion(bodega = {id: 1, nombre: 'Bodega Central'}, dias = 30) {
+    const fechas = Array.from({length: dias}, (_, i) => '2026-10-' + String(i + 1).padStart(2, '0'));
+    const producto = (sku, nombre, total, stock) => ({
+        sku, nombre, activo: true, stock_actual: stock, total_salidas: total,
+        salidas: [...Array(dias - 1).fill(0), total],
+    });
+    return {bodega, dias, fechas, productos: [producto('SKU-A', 'Guantes', 12, 9), producto('SKU-B', 'Tornillos', 5, 21)]};
+}
 async function pantalla(t, options = {}) {
     const dom = new JSDOM(html, {url: 'http://localhost/dashboard/', runScripts: 'outside-only', pretendToBeVisual: true});
     t.after(() => dom.window.close());
@@ -34,6 +42,26 @@ async function pantalla(t, options = {}) {
             hide() { elemento.dispatchEvent(new w.Event('hide.bs.modal')); elemento.classList.remove('show'); elemento.dispatchEvent(new w.Event('hidden.bs.modal')); },
         }); return modelos.get(elemento);
     }}};
+    const desplegables = new Map();
+    w.bootstrap.Dropdown = {
+        getInstance(boton) { return desplegables.get(boton); },
+        getOrCreateInstance(boton) {
+            if (!desplegables.has(boton)) desplegables.set(boton, {
+                show() {
+                    if (boton.getAttribute('aria-expanded') === 'true') return;
+                    boton.setAttribute('aria-expanded', 'true');
+                    boton.dispatchEvent(new w.Event('shown.bs.dropdown'));
+                },
+                hide() {
+                    if (boton.getAttribute('aria-expanded') === 'false') return;
+                    boton.setAttribute('aria-expanded', 'false');
+                    boton.dispatchEvent(new w.Event('hidden.bs.dropdown'));
+                },
+                update() {},
+            });
+            return desplegables.get(boton);
+        },
+    };
     let timer = 0;
     w.setTimeout = (fn, delay) => { timers.set(++timer, {fn, delay}); return timer; }; w.clearTimeout = id => timers.delete(id);
     w.fetch = (url, opts) => new Promise((resolve, reject) => requests.push({url: new URL(url, w.location.href), options: opts, resolve, reject}));
@@ -43,9 +71,118 @@ async function pantalla(t, options = {}) {
     const iniciar = async (info = datos()) => responder(0, {success: true, data: info});
     const campo = (id, value, type = 'change') => { el(id).value = value; el(id).dispatchEvent(new w.Event(type)); };
     const abrirAlertas = () => el('dashboardVerAlertas').click();
+    const abrirProductos = sufijo => {
+        const menu = el('compararOpciones' + sufijo);
+        const boton = w.document.querySelector('[aria-controls="' + menu.id + '"]');
+        assert.equal(boton.disabled, false);
+        w.bootstrap.Dropdown.getOrCreateInstance(boton).show();
+        return menu;
+    };
     const debounce = async () => { [...timers.entries()].filter(([, v]) => v.delay === 300).forEach(([id, v]) => { timers.delete(id); v.fn(); }); await tick(); };
-    return {w, el, requests, modelos, charts, responder, iniciar, campo, abrirAlertas, debounce};
+    return {w, el, requests, modelos, charts, responder, iniciar, campo, abrirAlertas, abrirProductos, debounce};
 }
+
+test('la comparación de dos SKU dibuja salidas diarias y muestra los totales y el stock de la bodega elegida', async t => {
+    const c = await pantalla(t); await c.iniciar();
+    const consultar = () => c.el('formCompararProductos').dispatchEvent(new c.w.Event('submit', {cancelable: true}));
+    assert.equal(c.el('compararBodega').value, '1');
+    assert.equal(c.el('compararDias').value, '30');
+    c.campo('compararSkuA', 'guan', 'input'); await c.debounce();
+    assert.equal(c.requests[1].url.pathname, '/api/v1/productos/');
+    assert.equal(c.requests[1].url.searchParams.get('search'), 'guan');
+    await c.responder(1, {results: [{sku: 'SKU-A', nombre: 'Guantes', activo: true}]});
+    c.el('compararOpcionesA').querySelector('.dropdown-item').click();
+    assert.equal(c.el('compararSkuA').value, 'Guantes · SKU-A');
+    c.campo('compararSkuB', 'SKU-A');
+    consultar();
+    assert.equal(c.requests.length, 2);
+    assert.match(c.el('compararError').textContent, /dos SKU distintos/);
+    c.campo('compararSkuB', 'sku-b');
+    c.campo('compararBodega', '2');
+    consultar(); consultar();
+    assert.equal(c.requests.length, 3);
+    assert.equal(c.requests[2].url.pathname, '/api/v1/productos/dashboard-comparacion/');
+    assert.deepEqual(Object.fromEntries(c.requests[2].url.searchParams), {sku_a: 'SKU-A', sku_b: 'SKU-B', bodega: '2', dias: '30'});
+    const datos = datosComparacion({id: 2, nombre: 'Anexo'});
+    await c.responder(2, {data: datos});
+    const grafico = c.charts.at(-1);
+    assert.deepEqual(Array.from(grafico.data.datasets, s => s.label), ['SKU-A', 'SKU-B']);
+    assert.equal(grafico.data.datasets[0].data.at(-1), 12);
+    assert.equal(grafico.data.datasets[1].data.at(-1), 5);
+    assert.deepEqual(Array.from(c.el('compararTotales').querySelectorAll('dd'), dd => dd.textContent), ['12 unid.', '9 unid.', '5 unid.', '21 unid.']);
+    assert.equal(c.el('compararFilas').children.length, 30);
+    assert.match(c.el('compararPeriodo').textContent, /Anexo.*01\/10\/2026 al 30\/10\/2026/);
+});
+
+test('ambos selectores permiten recorrer el catálogo y comparar los productos sin escribir', async t => {
+    const c = await pantalla(t); await c.iniciar();
+    const menuA = c.abrirProductos('A');
+    assert.equal(c.requests[1].url.searchParams.get('page'), '1');
+    assert.equal(c.requests[1].url.searchParams.has('search'), false);
+    const resultados = Array.from({length: 25}, (_, i) => ({sku: 'ART-' + i, nombre: 'Artículo ' + i, activo: true}));
+    await c.responder(1, {results: resultados, previous: null, next: 'next'});
+    assert.equal(menuA.querySelectorAll('.dropdown-item').length, 25);
+    assert.equal(menuA.querySelector('[data-anterior]').disabled, true);
+    menuA.querySelector('[data-siguiente]').click();
+    assert.equal(c.requests[2].url.searchParams.get('page'), '2');
+    const guantes = {sku: 'SKU-A', nombre: 'Guantes', activo: false};
+    await c.responder(2, {results: [guantes], previous: 'previous', next: null});
+    assert.match(menuA.querySelector('.dropdown-item').textContent, /Guantes.*SKU-A.*Inactivo/);
+    assert.equal(menuA.querySelector('[data-siguiente]').disabled, true);
+    menuA.querySelector('[data-anterior]').click();
+    assert.equal(c.requests[3].url.searchParams.get('page'), '1');
+    await c.responder(3, {results: resultados, next: 'next'});
+    menuA.querySelector('[data-siguiente]').click();
+    await c.responder(4, {results: [guantes], previous: 'previous'});
+    menuA.querySelector('.dropdown-item').click();
+    assert.equal(c.el('compararSkuA').value, 'Guantes · SKU-A');
+
+    const menuB = c.abrirProductos('B');
+    assert.equal(c.requests[5].url.searchParams.get('page'), '1');
+    assert.equal(c.requests[5].url.searchParams.has('search'), false);
+    await c.responder(5, {results: [{sku: 'SKU-B', nombre: 'Tornillos', activo: true}]});
+    menuB.querySelector('.dropdown-item').click();
+    assert.equal(c.el('compararSkuB').value, 'Tornillos · SKU-B');
+    c.el('compararEnviar').click();
+    assert.deepEqual(Object.fromEntries(c.requests[6].url.searchParams), {sku_a: 'SKU-A', sku_b: 'SKU-B', bodega: '1', dias: '30'});
+    await c.responder(6, {data: datosComparacion()});
+    assert.equal(c.el('compararResultados').hidden, false);
+});
+
+test('el desplegable descarta el catálogo atrasado y puede reintentar la búsqueda actual', async t => {
+    const c = await pantalla(t); await c.iniciar();
+    const menu = c.abrirProductos('B');
+    c.campo('compararSkuB', 'torni', 'input');
+    await c.responder(1, {results: [{sku: 'QA-A', nombre: 'Resultado anterior', activo: true}]});
+    assert.equal(menu.querySelector('.dropdown-item'), null);
+    await c.debounce();
+    assert.equal(c.requests[2].url.searchParams.get('search'), 'torni');
+    await c.responder(2, {mensaje: 'Catálogo no disponible'}, 503);
+    assert.match(menu.querySelector('[data-estado]').textContent, /Catálogo no disponible/);
+    menu.querySelector('[data-reintentar]').click();
+    assert.equal(c.requests[3].url.searchParams.get('search'), 'torni');
+    await c.responder(3, {results: [{sku: 'SKU-B', nombre: 'Tornillos', activo: true}]});
+    menu.querySelector('.dropdown-item').click();
+    assert.equal(c.el('compararSkuB').value, 'Tornillos · SKU-B');
+    c.abrirProductos('B');
+    assert.equal(c.requests[4].url.searchParams.has('search'), false);
+});
+
+test('el comparador descarta respuestas de filtros anteriores y ofrece datos diarios si falla el gráfico', async t => {
+    const c = await pantalla(t, {chart: false}); await c.iniciar();
+    const consultar = () => c.el('formCompararProductos').dispatchEvent(new c.w.Event('submit', {cancelable: true}));
+    c.campo('compararSkuA', 'SKU-A'); c.campo('compararSkuB', 'SKU-B');
+    consultar();
+    c.campo('compararDias', '7');
+    await c.responder(1, {data: datosComparacion()});
+    assert.equal(c.el('compararResultados').hidden, true);
+    consultar();
+    await c.responder(2, {data: datosComparacion(undefined, 7)});
+    assert.equal(c.el('compararResultados').hidden, false);
+    assert.equal(c.el('compararContenedorGrafico').hidden, true);
+    assert.equal(c.el('compararDatos').open, true);
+    assert.equal(c.el('compararFilas').children.length, 7);
+});
 
 test('resumen expresa unidades y el gráfico circular cuenta productos sin mezclar cantidades', async t => {
     const c = await pantalla(t); await c.iniciar();
@@ -132,7 +269,7 @@ test('error inicial y respuesta inválida muestran reintento sin representar cer
 test('sin biblioteca de gráficos conserva indicadores, tabla y estado por categoría', async t => {
     const c = await pantalla(t, {chart: false}); await c.iniciar();
     assert.equal(c.el('kpi-stock').textContent, '15'); assert.equal(c.el('dashboardBajo').textContent, '1');
-    assert.equal(c.el('dashboardChartError').hidden, false); assert.equal(c.w.document.querySelector('.ss-dash-chart-data').open, true);
+    assert.equal(c.el('dashboardChartError').hidden, false); assert.equal(c.el('dashboardDatosGrafico').closest('details').open, true);
     assert.equal(c.el('tabla-recientes').querySelectorAll('.ss-dash-movement').length, 1);
 });
 

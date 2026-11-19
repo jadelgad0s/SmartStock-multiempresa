@@ -11,8 +11,8 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const bodegas=[{id:1,nombre:'Bodega Central',activa:true},{id:2,nombre:'Bodega Antigua',activa:false}];
 const pagina=(count=55,extra={})=>({count,results:[{sku:'REP-1',producto:'Martillo',stock:13}],meta:{informe:'existencias',titulo:'Existencias actuales',columnas:[{campo:'sku',etiqueta:'SKU'},{campo:'producto',etiqueta:'Producto'},{campo:'stock',etiqueta:'Unidades',numero:true}],resumen:[{etiqueta:'Unidades',valor:78}],notas:['Estado actual.'],filtros:[['Bodega','Bodega Central']],generado:'2026-11-01T20:00:00-03:00',orden:'Producto A–Z',permisos:{ver:true,exportar:true}},...extra});
 
-async function pantalla(t,{soloBase=false}={}){
- const dom=new JSDOM(soloBase?'<li id="menu-reportes" hidden></li>':html,{url:'http://localhost/reportes/',runScripts:'outside-only',pretendToBeVisual:true});
+async function pantalla(t,{soloBase=false,query=''}={}){
+ const dom=new JSDOM(soloBase?'<li id="menu-reportes" hidden></li>':html,{url:'http://localhost/reportes/'+query,runScripts:'outside-only',pretendToBeVisual:true});
  t.after(()=>dom.window.close());
  const w=dom.window,requests=[],timers=new Map();let numero=0;
  w.localStorage.setItem('access_token','inicial');w.localStorage.setItem('refresh_token','renovar');w.localStorage.setItem('smartstock-theme','dark');
@@ -78,6 +78,40 @@ test('Kardex pide producto y bodega, sin descargar el catálogo entero',async t=
  c.campo('productoReporte','8');assert.equal(c.requests.at(-1).url.searchParams.get('producto'),'8');assert.equal(c.requests.at(-1).url.searchParams.has('search'),false);
 });
 
+test('el enlace al Kardex consulta la bodega y el SKU preseleccionados y enlaza el traslado',async t=>{
+ const c=await pantalla(t,{query:'?informe=kardex&bodega=2&producto=50'});
+ await c.responder(0,{data:{ver:true,exportar:false}});
+ await c.responder(1,{data:{bodegas,permisos:{ver:true,exportar:false}}});
+ assert.equal(c.requests[2].url.pathname,'/api/v1/reportes/productos/');
+ assert.equal(c.requests[2].url.searchParams.get('seleccion'),'50');
+ await c.responder(2,{count:50,results:[{id:1,sku:'REP-1',nombre:'Llave',activo:true}],
+  seleccion:{id:50,sku:'REP-50',nombre:'Martillo',activo:false}});
+ assert.match(c.el('productoReporte').selectedOptions[0].textContent,/REP-50.*inactivo/);
+ assert.deepEqual(Object.fromEntries(c.requests[3].url.searchParams),{informe:'kardex',bodega:'2',producto:'50',page:'1'});
+
+ const datos=pagina(2,{
+  results:[{referencia:'Transferencia #89: desde Bodega Central',transferencia_id:89},{referencia:'Entrada con guía'}],
+ });
+ datos.meta.informe='kardex';
+ datos.meta.columnas=[{campo:'referencia',etiqueta:'Referencia / observación'}];
+ await c.responder(3,datos);
+ const enlaces=c.el('filasReporte').querySelectorAll('a');
+ assert.equal(enlaces.length,1);
+ assert.equal(enlaces[0].getAttribute('href'),'/transferencias/?transferencia=89');
+ c.campo('bodegaReporte','1');
+ assert.deepEqual(Object.fromEntries(c.requests[4].url.searchParams),{informe:'kardex',bodega:'1',producto:'50',page:'1'});
+});
+
+test('si la bodega del enlace se eliminó, espera que se elija otra',async t=>{
+ const c=await pantalla(t,{query:'?informe=kardex&bodega=999&producto=50'});
+ await c.responder(0,{data:{ver:true,exportar:false}});
+ await c.responder(1,{data:{bodegas,permisos:{ver:true,exportar:false}}});
+ await c.responder(2,{count:1,results:[{id:50,sku:'REP-50',nombre:'Martillo',activo:true}]});
+ assert.equal(c.el('bodegaReporte').value,'');
+ assert.equal(c.requests.length,3);
+ assert.match(c.el('filasReporte').textContent,/Selecciona una bodega/);
+});
+
 test('búsqueda del Kardex invalida selección y descarta productos atrasados',async t=>{
  const c=await pantalla(t);await c.iniciar();c.campo('informeReporte','kardex');
  c.campo('buscarProductoReporte','Sierra','input');await c.responder(3,{count:1,results:[{id:8,sku:'VIEJO',nombre:'Anterior'}]});assert.doesNotMatch(c.el('productoReporte').textContent,/VIEJO/);
@@ -87,6 +121,52 @@ test('búsqueda del Kardex invalida selección y descarta productos atrasados',a
 test('fallo de catálogo de Kardex ofrece reintento y conserva búsqueda',async t=>{
  const c=await pantalla(t);await c.iniciar();c.campo('informeReporte','kardex');c.requests[3].reject(new Error('sin red'));await tick();await tick();
  assert.equal(c.el('reintentarProductosReporte').hidden,false);c.el('reintentarProductosReporte').click();assert.equal(c.requests[4].url.pathname,'/api/v1/reportes/productos/');
+});
+
+test('la paginación bajo el selector cambia las opciones y conserva el Kardex abierto',async t=>{
+ const c=await pantalla(t);
+ await c.iniciar();
+ c.campo('informeReporte','kardex');
+ const producto = id => ({id,sku:'P-'+id,nombre:'Producto '+id,activo:true});
+ const primera = Array.from({length:25},(_,i)=>producto(i+1));
+ const segunda = Array.from({length:25},(_,i)=>producto(i+26));
+ const selector=c.el('productoReporte');
+ const anterior=c.el('productosReporteAnterior');
+ const siguiente=c.el('productosReporteSiguiente');
+ assert.equal(anterior.parentElement,selector.nextElementSibling);
+ assert.equal(siguiente.parentElement,selector.nextElementSibling);
+ await c.responder(3,{count:50,results:primera});
+ assert.equal(anterior.disabled,true);
+ assert.equal(siguiente.disabled,false);
+
+ c.campo('productoReporte','1');
+ await c.responder(4,pagina(1));
+ const reporte=c.el('filasReporte').textContent;
+ siguiente.click();
+ assert.equal(c.requests.length,6);
+ assert.equal(c.requests[5].url.pathname,'/api/v1/reportes/productos/');
+ assert.equal(c.requests[5].url.searchParams.get('page'),'2');
+ await c.responder(5,{count:50,results:segunda});
+ assert.equal(c.el('estadoProductosReporte').textContent,'Página 2 de 2 · 50 productos');
+ assert.equal(selector.value,'1');
+ assert.equal(selector.options.length,27);
+ assert.equal(selector.querySelector('optgroup option').value,'1');
+ assert.ok(selector.querySelector('option[value="26"]'));
+ assert.equal(selector.querySelector('option[value="2"]'),null);
+ assert.equal(c.el('filasReporte').textContent,reporte);
+ assert.equal(c.el('exportarReporte').disabled,false);
+ assert.equal(siguiente.disabled,true);
+ siguiente.click();
+ assert.equal(c.requests.length,6);
+
+ anterior.click();
+ assert.equal(c.requests[6].url.searchParams.get('page'),'1');
+ await c.responder(6,{count:50,results:primera});
+ assert.equal(selector.value,'1');
+ assert.equal(selector.querySelector('optgroup'),null);
+ assert.equal(selector.querySelector('option[value="26"]'),null);
+ assert.equal(c.el('estadoProductosReporte').textContent,'Página 1 de 2 · 50 productos');
+ assert.equal(anterior.disabled,true);
 });
 
 test('selector del Kardex recupera la última página si se eliminaron productos',async t=>{

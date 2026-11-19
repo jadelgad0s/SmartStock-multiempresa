@@ -148,6 +148,22 @@ class ReportesTests(TestCase):
         self.assertEqual(len(opciones['bodegas']), 2)
         self.assertEqual(self.client.get(ROOT + 'productos/', {'search': 'REP-1'}).data['results'][0]['activo'], False)
 
+    def test_selector_resuelve_producto_fuera_de_la_pagina(self):
+        Producto.objects.bulk_create([
+            Producto(sku=f'L-{n}', nombre=f'Llave {n:02d}') for n in range(26)
+        ])
+        Producto.objects.filter(pk=self.producto.pk).update(activo=False)
+        respuesta = self.client.get(ROOT + 'productos/', {'seleccion': self.producto.pk})
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data['count'], 27)
+        self.assertNotIn(self.producto.pk, [p['id'] for p in respuesta.data['results']])
+        self.assertEqual(respuesta.data['seleccion'], {
+            'id': self.producto.pk, 'sku': self.producto.sku,
+            'nombre': self.producto.nombre, 'activo': False,
+        })
+        self.assertIsNone(self.client.get(ROOT + 'productos/', {'seleccion': 99999}).data['seleccion'])
+        self.assertEqual(self.client.get(ROOT + 'productos/', {'seleccion': 0}).status_code, 400)
+
     def test_fechas_locales_incluyen_dia_completo_y_excluyen_siguiente(self):
         for fecha in (datetime(2026, 10, 20, 0, 0, tzinfo=ZONA), datetime(2026, 10, 20, 23, 59, 59, tzinfo=ZONA), datetime(2026, 10, 21, 0, 0, tzinfo=ZONA)):
             self.movimiento(1, fecha=fecha); self.merma(1, fecha=fecha)
@@ -204,6 +220,14 @@ class ReportesTests(TestCase):
         self.assertEqual(r.data['results'][0]['tipo'], 'Transferencia: salida')
         self.assertEqual(self.resumen(r)['Salidas (incluye mermas)'], 2)
         self.assertEqual(r.data['results'][0]['saldo'], 13)
+        self.assertNotIn('transferencia_id', r.data['results'][0])
+
+        self.client.force_authenticate(self.superusuario)
+        self.movimiento(2, entrada=False, referencia=f'Transferencia #{transferencia.pk}')
+        self.movimiento(3, entrada=False, tipo=tipo, referencia=f'Transferencia #{transferencia.pk}')
+        r = self.consulta(informe='kardex', producto=self.producto.pk)
+        self.assertEqual([fila.get('transferencia_id') for fila in r.data['results']],
+                         [transferencia.pk, None, None])
 
     def test_periodo_sin_eventos_conserva_saldo_y_reporta_cero_filas(self):
         self.movimiento(2, fecha=datetime(2026, 10, 25, 12, tzinfo=tz.utc))

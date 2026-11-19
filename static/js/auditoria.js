@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/dashboard/'; return;
     }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     el('user-name-sidebar').textContent = usuario.nombre_completo || 'Administrador';
     el('user-role-sidebar').textContent = usuario.rol_nombre || 'Administrador';
     el('user-avatar').src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(usuario.nombre_completo || 'Admin') + '&background=0f766e&color=fff';
@@ -342,6 +343,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     el('exportarAuditoria').addEventListener('click', () => exportar('csv'));
     el('imprimirAuditoria').addEventListener('click', () => exportar('pdf'));
-    cargarHistorial();
-    cargarOpciones();
+    conCarga('Cargando auditoría…', () => Promise.all([cargarHistorial(), cargarOpciones()]));
 });

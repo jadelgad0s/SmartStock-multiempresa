@@ -55,7 +55,8 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         POST   /api/v1/usuarios/{id}/activar/    Reactivar usuario
         POST   /api/v1/usuarios/{id}/resetear-password/    Resetear contraseña
     """
-    queryset = Usuario.objects.select_related('rol').all()
+    # Las cuentas técnicas se administran en Django Admin.
+    queryset = Usuario.objects.filter(is_superuser=False).select_related('rol')
     permission_classes = [IsAuthenticated, EsAdministrador]
     pagination_class = UsuariosPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]

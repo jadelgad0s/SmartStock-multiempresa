@@ -8,8 +8,11 @@ Uso:
 Datos que crea:
 - Permisos base del sistema (agrupados por módulo)
 - Roles del sistema: administrador, encargado_bodega, operador
-- Un superusuario administrador de prueba (admin@smartstock.cl / Admin1234!)
+- Un administrador de negocio de prueba con una contraseña generada al crear la cuenta.
 """
+from secrets import token_urlsafe
+
+from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -107,7 +110,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--sin-admin',
             action='store_true',
-            help='No crea el superusuario de prueba',
+            help='Omite el administrador de negocio de prueba',
         )
 
     @transaction.atomic
@@ -177,30 +180,26 @@ class Command(BaseCommand):
             )
 
     def _crear_admin_prueba(self):
-        self.stdout.write('\n→ Creando superusuario de prueba...')
-
         email_admin = 'admin@smartstock.cl'
-        password_admin = 'Admin1234!'
-
-        if Usuario.objects.filter(email=email_admin).exists():
-            self.stdout.write(self.style.WARNING(
-                f'  El usuario {email_admin} ya existe. No se crea nuevamente.'
-            ))
+        password_admin = token_urlsafe(18)
+        usuario, creado = Usuario.objects.get_or_create(
+            email=email_admin,
+            defaults={
+                'nombres': 'Administrador',
+                'apellidos': 'SmartStock',
+                'rol': Rol.objects.get(codigo='administrador'),
+                'password': lambda: make_password(password_admin),
+            },
+        )
+        if not creado:
+            mensaje = f'  La cuenta {usuario.email} ya existe.'
+            if usuario.is_superuser:
+                mensaje += ' Tiene privilegios técnicos. Para la demo, usa una cuenta de negocio distinta.'
+            self.stdout.write(self.style.WARNING(mensaje))
             return
 
-        rol_admin = Rol.objects.get(codigo='administrador')
-
-        Usuario.objects.create_superuser(
-            email=email_admin,
-            password=password_admin,
-            nombres='Administrador',
-            apellidos='SmartStock',
-            rol=rol_admin,
-        )
-
         self.stdout.write(self.style.SUCCESS(
-            f'  ✓ Superusuario creado.\n'
+            f'  ✓ Administrador de negocio de prueba creado.\n'
             f'    Email:    {email_admin}\n'
-            f'    Password: {password_admin}\n'
-            f'    ⚠️  Cambia esta contraseña en producción.'
+            f'    Password: {password_admin}'
         ))
