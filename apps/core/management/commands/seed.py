@@ -14,7 +14,7 @@ from secrets import token_urlsafe
 
 from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from apps.core.empresa import transaccion_operativa
 
 from apps.usuarios.models import Usuario, Rol, Permiso
 
@@ -113,7 +113,7 @@ class Command(BaseCommand):
             help='Omite el administrador de negocio de prueba',
         )
 
-    @transaction.atomic
+    @transaccion_operativa()
     def handle(self, *args, **options):
         self.stdout.write(self.style.MIGRATE_HEADING('=== SEEDING SMARTSTOCK ==='))
 

@@ -4,12 +4,13 @@ from contextlib import contextmanager
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from django.db import connection, transaction
+from django.db import connections
 from django.db.models import Case, CharField, Count, F, IntegerField, Q, Sum, Value, When
 from django.db.models.functions import Concat
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.core.empresa import alias_operativo, transaccion_operativa
 from .models import Bodega, DetalleMovimiento, DetalleTransferencia, Merma, Producto, StockBodega
 from .stock import AGOTADO, BAJO, anotar_stock, estado_stock
 
@@ -31,8 +32,9 @@ def lectura_consistente():
     No mantiene un cursor ni una transacción durante la descarga. Las pruebas
     TestCase ya están dentro de una transacción y no cambian su aislamiento.
     """
+    connection = connections[alias_operativo()]
     exterior = not connection.in_atomic_block
-    with transaction.atomic():
+    with transaccion_operativa():
         if exterior and connection.vendor == 'postgresql':
             with connection.cursor() as cursor:
                 cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')

@@ -8,11 +8,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.html import strip_tags
 
+from apps.core.empresa import transaccion_operativa
 from .models import CodigoBarra, CupoConsultaExterna, FichaProductoExterna, Producto
 
 PROVEEDOR = 'open_food_facts'
@@ -101,7 +101,7 @@ def procedencia(ficha):
 
 def reservar_consulta():
     ahora = timezone.now()
-    with transaction.atomic():
+    with transaccion_operativa():
         CupoConsultaExterna.objects.get_or_create(proveedor=PROVEEDOR)
         cupo = CupoConsultaExterna.objects.select_for_update().get(pk=PROVEEDOR)
         if cupo.bloqueado_hasta and cupo.bloqueado_hasta > ahora:

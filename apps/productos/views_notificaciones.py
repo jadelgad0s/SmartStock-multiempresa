@@ -2,18 +2,20 @@
 
 Los endpoints solo permiten leer o modificar las notificaciones del usuario.
 """
-from django.db import transaction, models
+from django.db import models
+
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
+from apps.core.empresa import transaccion_operativa
 from apps.core.responses import success_response, error_response
 from apps.usuarios.models import Usuario
 from .models import Notificacion
 
 
-@transaction.atomic
+@transaccion_operativa()
 def notificar_administradores(*, tipo, titulo, mensaje, link, actor_id=None):
     """Un aviso por administrador activo y para quien realiza la operación.
 

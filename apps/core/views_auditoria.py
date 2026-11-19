@@ -241,7 +241,8 @@ def celda_csv(valor):
 @permission_classes([IsAuthenticated, EsAdministrador])
 def exportar_auditoria(request):
     eventos, filtros = consulta_filtrada(request)
-    eventos = fijar_reporte(eventos)
+    # La descarga lee los lotes después de que haya terminado el middleware de empresa.
+    eventos = fijar_reporte(eventos).using(eventos.db)
     total = eventos.count()
     generado = timezone.localtime()
     metadatos = [

@@ -1,4 +1,5 @@
 """Cola persistente de SMS. La red se utiliza después del commit de inventario."""
+from contextvars import copy_context
 from datetime import timedelta
 from functools import partial
 import logging
@@ -16,6 +17,7 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.http.http_client import TwilioHttpClient
 from twilio.rest import Client
 
+from apps.core.empresa import alias_operativo, transaccion_operativa
 from .models import Bodega, EnvioAlertaSMS, EstadoStockSMS, LimiteDiarioSMS, Producto, StockBodega, StockMinimo
 from .stock import estado_stock
 
@@ -115,7 +117,7 @@ def callback_url(envio_id):
     return settings.TWILIO_PUBLIC_BASE_URL.rstrip('/') + reverse('sms-twilio-estado', kwargs={'envio_id': envio_id})
 
 
-@transaction.atomic
+@transaccion_operativa()
 def evaluar_alerta_sms(producto, bodega):
     """Se llama dentro de la transacción que ya bloqueó el producto."""
     configuracion = configuracion_sms()
@@ -153,10 +155,12 @@ def evaluar_alerta_sms(producto, bodega):
             cantidad=cantidad, minimo=minimo, destinatario=telefono,
             mensaje=mensaje_sms(producto, bodega, cantidad, minimo, nivel),
         )
-        transaction.on_commit(partial(enviar_alerta_sms, envio.pk), robust=True)
+        # La confirmación de una transacción exterior puede llegar después de salir del contexto de empresa.
+        al_confirmar = partial(copy_context().run, enviar_alerta_sms, envio.pk)
+        transaction.on_commit(al_confirmar, using=alias_operativo(), robust=True)
 
 
-@transaction.atomic
+@transaccion_operativa()
 def cancelar_alertas_producto(producto):
     EnvioAlertaSMS.objects.filter(producto=producto, estado='PENDIENTE').update(
         estado='CANCELADO', detalle='Producto desactivado.', fecha_modificacion=timezone.now(),
@@ -169,7 +173,7 @@ def cancelar_alertas_producto(producto):
 
 def reservar_intento(envio_id, configuracion):
     """Reservar cuota y reclamar la fila antes de abrir la conexión externa."""
-    with transaction.atomic():
+    with transaccion_operativa():
         limite, _ = LimiteDiarioSMS.objects.select_for_update().get_or_create(fecha=timezone.localdate())
         envio = EnvioAlertaSMS.objects.select_for_update().filter(pk=envio_id).first()
         ahora = timezone.now()
@@ -223,7 +227,7 @@ def enviar_alerta_sms(envio_id):
         )
         if not re.fullmatch(r'SM[0-9a-fA-F]{32}', str(respuesta.sid)):
             raise ValueError('Respuesta sin identificador SMS válido.')
-        with transaction.atomic():
+        with transaccion_operativa():
             actual = EnvioAlertaSMS.objects.select_for_update().get(pk=envio.pk)
             # Un callback firmado puede llegar antes que la respuesta REST.
             if actual.twilio_sid and actual.twilio_sid != respuesta.sid:

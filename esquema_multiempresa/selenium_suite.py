@@ -1,0 +1,67 @@
+"""Prueba de dos empresas en pestañas del mismo navegador con bases SQLite desechables."""
+from io import StringIO
+from urllib.parse import urlsplit
+
+from django.conf import settings
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.core.management import call_command
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+from apps.core.empresa import usar_empresa
+from apps.productos.models import Bodega, Producto, StockBodega
+from esquema_multiempresa.models import Empresa
+
+
+if (settings.SETTINGS_MODULE != 'esquema_multiempresa.testing'
+        or settings.DATABASES['central']['ENGINE'] != 'django.db.backends.sqlite3'):
+    raise RuntimeError('Ejecuta esta suite con esquema_multiempresa.testing y SS_TEST_POSTGRES desactivado.')
+
+
+class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+
+    def test_mismo_navegador_dos_inventarios_y_cierre_de_sesion_independiente(self):
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        pestanas = []
+        for codigo, cantidad in (('la-fragua', 15), ('punto-motor', 4)):
+            empresa = Empresa.objects.get(codigo=codigo)
+            salida = StringIO()
+            call_command('seed_empresa', codigo, stdout=salida)
+            clave = next(linea.partition(':')[2].strip() for linea in salida.getvalue().splitlines()
+                         if linea.strip().startswith('Password:'))
+            with usar_empresa(empresa):
+                bodega = Bodega.objects.create(nombre='Bodega Central')
+                producto = Producto.objects.create(sku='QA-001', nombre='Pieza de prueba')
+                StockBodega.objects.create(bodega=bodega, producto=producto, cantidad_total=cantidad)
+
+            if pestanas:
+                navegador.switch_to.new_window('tab')
+            pestanas.append(navegador.current_window_handle)
+            navegador.get(self.live_server_url)
+            navegador.find_element(By.ID, 'empresa').send_keys(codigo)
+            navegador.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
+            espera.until(EC.visibility_of_element_located((By.ID, 'email')))
+            self.assertEqual(urlsplit(navegador.current_url).hostname, codigo + '.localhost')
+            self.assertIn(empresa.nombre, navegador.title)
+            navegador.find_element(By.ID, 'email').send_keys('admin@smartstock.cl')
+            navegador.find_element(By.ID, 'password').send_keys(clave)
+            navegador.find_element(By.ID, 'login-submit').click()
+            espera.until(EC.url_contains('/dashboard/'))
+            espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == str(cantidad))
+
+        navegador.switch_to.window(pestanas[0])
+        espera.until(EC.element_to_be_clickable((By.ID, 'btn-logout'))).click()
+        espera.until(EC.visibility_of_element_located((By.ID, 'email')))
+        navegador.switch_to.window(pestanas[1])
+        navegador.refresh()
+        espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == '4')
+        self.assertIn('Repuestos Punto Motor', navegador.title)

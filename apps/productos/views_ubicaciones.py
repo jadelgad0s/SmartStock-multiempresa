@@ -1,5 +1,4 @@
 """Estructura física y referencias de productos; el stock pertenece a la bodega."""
-from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -9,6 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 
+from apps.core.empresa import transaccion_operativa
 from apps.core.responses import error_response, success_response
 from apps.core.utils import registrar_auditoria
 from .bodegas import opciones_bodegas
@@ -144,7 +144,7 @@ class EstructuraViewSet(viewsets.ViewSet):
         camino = camino.removeprefix(padre + '__')
         return get_object_or_404(modelo_padre, pk=identificador, **{camino: bodega})
 
-    @transaction.atomic
+    @transaccion_operativa()
     def create(self, request):
         bodega, _ = consulta(request, bloquear=True)
         modelo, padre, _, _, _ = self.configuracion()
@@ -162,7 +162,7 @@ class EstructuraViewSet(viewsets.ViewSet):
         registrar(request, modelo.__name__, objeto.pk, 'CREATE', f'{modelo.__name__} creado: {codigo}. Bodega: {bodega.nombre}.')
         return success_response(self.datos(self.objetos(bodega).get(pk=objeto.pk)), 'Estructura creada.', 201)
 
-    @transaction.atomic
+    @transaccion_operativa()
     def partial_update(self, request, pk=None):
         bodega, _ = consulta(request, bloquear=True)
         modelo, padre, _, _, _ = self.configuracion()
@@ -179,7 +179,7 @@ class EstructuraViewSet(viewsets.ViewSet):
             registrar(request, modelo.__name__, objeto.pk, 'UPDATE', f'{modelo.__name__}: {anterior} → {codigo}. Bodega: {bodega.nombre}.')
         return success_response(self.datos(objeto), 'Código actualizado.')
 
-    @transaction.atomic
+    @transaccion_operativa()
     def destroy(self, request, pk=None):
         bodega, _ = consulta(request, bloquear=True)
         modelo, _, _, _, hijos = self.configuracion()
@@ -256,7 +256,7 @@ def asignaciones_ubicaciones(request):
         paginador = PaginasUbicaciones()
         filas = paginador.paginate_queryset(qs, request)
         return paginador.get_paginated_response([datos_asignacion(o) for o in filas])
-    with transaction.atomic():
+    with transaccion_operativa():
         s = NuevaAsignacion(data=request.data)
         s.is_valid(raise_exception=True)
         producto = get_object_or_404(Producto.objects.select_for_update(no_key=True), pk=s.validated_data['producto_id'])
@@ -277,7 +277,7 @@ def asignaciones_ubicaciones(request):
 @never_cache
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated, AccesoUbicaciones])
-@transaction.atomic
+@transaccion_operativa()
 def retirar_asignacion(request, pk):
     bodega, _ = consulta(request)
     referencia = get_object_or_404(asignaciones(bodega), pk=pk)

@@ -11,15 +11,16 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 
 from apps.core.responses import success_response, error_response
 from apps.core.utils import registrar_auditoria
+from .tokens import RenovacionEmpresa
 from .navegacion import cuenta_habilitada, inicio_usuario, modulos_usuario
 from .serializers import (
     CustomTokenObtainPairSerializer,
+    RenovarTokenSerializer,
     CambioPasswordSerializer,
     UsuarioDetailSerializer,
 )
@@ -88,7 +89,7 @@ class LoginWebView(LoginView):
 
 
 def invalidar_refresh(usuario, refresh):
-    token = RefreshToken(refresh)
+    token = RenovacionEmpresa(refresh)
     if str(token.get(api_settings.USER_ID_CLAIM)) != str(usuario.pk):
         raise TokenError('El token pertenece a otra cuenta.')
     token.blacklist()
@@ -228,6 +229,7 @@ def cambiar_password_view(request):
 
 class CustomTokenRefreshView(TokenRefreshView):
     """Refresh de token JWT con respuesta estandarizada."""
+    serializer_class = RenovarTokenSerializer
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)

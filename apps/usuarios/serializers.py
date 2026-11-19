@@ -2,12 +2,14 @@
 Serializers del módulo de usuarios.
 """
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from .models import Usuario, Rol, Permiso
 from .navegacion import cuenta_habilitada, inicio_usuario
+from .tokens import RenovacionEmpresa
 
 
 class PermisoSerializer(serializers.ModelSerializer):
@@ -191,6 +193,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     Valida cuenta activa, cuenta bloqueada y agrega info del usuario al token.
     """
     username_field = 'email'
+    token_class = RenovacionEmpresa
 
     @classmethod
     def get_token(cls, user):
@@ -258,3 +261,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         }
         return data
 
+
+
+class RenovarTokenSerializer(TokenRefreshSerializer):
+    token_class = RenovacionEmpresa

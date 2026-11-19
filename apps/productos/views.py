@@ -19,7 +19,9 @@ from apps.usuarios.navegacion import es_administrador, puede_acceder_admin
 from apps.usuarios.permissions import PermisoLectura
 from apps.usuarios.permissions import EsAdministrador
 from apps.core.safe_delete import tiene_relaciones
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
+
+from apps.core.empresa import transaccion_operativa
 from .models import Bodega, Producto, CodigoBarra, StockMinimo
 from .stock import AGOTADO, BAJO, anotar_stock, estado_stock
 from .bodegas import bodegas_activas, obtener_bodega, opciones_bodegas
@@ -124,7 +126,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
 
     def guardar_producto(self, serializer):
         try:
-            with transaction.atomic():
+            with transaccion_operativa():
                 return serializer.save()
         except IntegrityError:
             # Las validaciones previas no sustituyen las restricciones únicas
@@ -166,7 +168,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             link='/productos/?' + urlencode(filtros), actor_id=self.request.user.pk,
         )
 
-    @transaction.atomic
+    @transaccion_operativa()
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
@@ -186,7 +188,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             status_code=status.HTTP_201_CREATED
         )
 
-    @transaction.atomic
+    @transaccion_operativa()
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         partial = kwargs.pop('partial', False)
@@ -208,7 +210,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
             mensaje='Producto actualizado exitosamente.'
         )
 
-    @transaction.atomic
+    @transaccion_operativa()
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if not instance.activo:
@@ -225,7 +227,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         return success_response(mensaje='Producto desactivado exitosamente.')
 
     @action(detail=True, methods=['delete'], url_path='eliminar-definitivamente')
-    @transaction.atomic
+    @transaccion_operativa()
     def eliminar_definitivamente(self, request, pk=None):
         """Solo administradores; nunca borra productos con referencias históricas."""
         producto = self.get_object()
@@ -244,7 +246,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         return success_response(mensaje='Producto eliminado definitivamente.')
 
     @action(detail=True, methods=['post'])
-    @transaction.atomic
+    @transaccion_operativa()
     def activar(self, request, pk=None):
         """Reactiva un producto previamente desactivado."""
         producto = self.get_object()
@@ -284,7 +286,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         })
 
     @action(detail=True, methods=['get', 'patch'], url_path='stock-minimo')
-    @transaction.atomic
+    @transaccion_operativa()
     def stock_minimo(self, request, pk=None):
         guardar = request.method == 'PATCH'
         serializer = (GuardarStockMinimoSerializer if guardar else ConsultaStockMinimoSerializer)(

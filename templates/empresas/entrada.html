@@ -1,0 +1,13 @@
+{% extends 'usuarios/base_acceso.html' %}
+{% block title %}Acceder a mi empresa - SmartStock{% endblock %}
+{% block acceso_content %}
+<h1 id="titulo-acceso">Acceder a mi empresa</h1>
+<form method="get" action="/">
+  <div class="mb-3">
+    <label for="empresa" class="form-label">Código de empresa</label>
+    <input id="empresa" name="empresa" class="form-control" type="text" value="{{ codigo }}" maxlength="60" required autocapitalize="none" spellcheck="false" autofocus>
+  </div>
+  {% if codigo %}<p class="alert alert-danger" role="alert">Revisa el código de tu empresa.</p>{% endif %}
+  <button class="btn btn-primary" type="submit">Continuar</button>
+</form>
+{% endblock %}

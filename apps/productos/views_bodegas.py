@@ -1,5 +1,4 @@
 """Administración de las bodegas existentes, con bajas protegidas."""
-from django.db import transaction
 from django.db.models import IntegerField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils.decorators import method_decorator
@@ -9,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
 
+from apps.core.empresa import transaccion_operativa
 from apps.core.responses import error_response, success_response
 from apps.core.utils import registrar_auditoria
 from apps.usuarios.navegacion import es_administrador, puede_acceder_admin
@@ -107,7 +107,7 @@ class BodegaViewSet(viewsets.ModelViewSet):
         notificar_administradores(tipo='OTRO', titulo=titulo, mensaje=texto,
                                  link='/bodegas/', actor_id=self.request.user.pk)
 
-    @transaction.atomic
+    @transaccion_operativa()
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -116,7 +116,7 @@ class BodegaViewSet(viewsets.ModelViewSet):
         return success_response(data=self.get_serializer(self.get_queryset().get(pk=objeto.pk)).data,
                                 mensaje='Bodega creada.', status_code=status.HTTP_201_CREATED)
 
-    @transaction.atomic
+    @transaccion_operativa()
     def update(self, request, *args, **kwargs):
         objeto = Bodega.objects.select_for_update().get(pk=self.get_object().pk)
         serializer = self.get_serializer(objeto, data=request.data, partial=kwargs.pop('partial', False))
@@ -139,7 +139,7 @@ class BodegaViewSet(viewsets.ModelViewSet):
             return 'La bodega tiene transferencias pendientes.'
         return ''
 
-    @transaction.atomic
+    @transaccion_operativa()
     def destroy(self, request, *args, **kwargs):
         objeto = Bodega.objects.select_for_update().get(pk=self.get_object().pk)
         if not objeto.activa:
@@ -153,7 +153,7 @@ class BodegaViewSet(viewsets.ModelViewSet):
         return success_response(mensaje='Bodega desactivada.')
 
     @action(detail=True, methods=['post'])
-    @transaction.atomic
+    @transaccion_operativa()
     def activar(self, request, pk=None):
         objeto = Bodega.objects.select_for_update().get(pk=self.get_object().pk)
         if objeto.activa:

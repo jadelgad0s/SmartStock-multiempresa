@@ -9,7 +9,9 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth.password_validation import password_validators_help_texts
 from django.db.models import Q
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
+
+from apps.core.empresa import transaccion_operativa
 from apps.core.safe_delete import tiene_relaciones
 
 from django.shortcuts import render
@@ -114,7 +116,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            with transaction.atomic():
+            with transaccion_operativa():
                 usuario = serializer.save()
                 registrar_auditoria(
                     accion='CREATE', modelo='Usuario', objeto_id=usuario.id,
@@ -134,7 +136,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             status_code=status.HTTP_201_CREATED
         )
 
-    @transaction.atomic
+    @transaccion_operativa()
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
@@ -169,7 +171,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             mensaje='Usuario actualizado exitosamente.'
         )
 
-    @transaction.atomic
+    @transaccion_operativa()
     def destroy(self, request, *args, **kwargs):
         """Desactivación (soft delete) del usuario."""
         instance = self.get_object()
@@ -200,7 +202,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         return success_response(mensaje='Usuario desactivado exitosamente.')
 
     @action(detail=True, methods=['delete'], url_path='eliminar-definitivamente')
-    @transaction.atomic
+    @transaccion_operativa()
     def eliminar_definitivamente(self, request, pk=None):
         """Nunca eliminar administradores, cuenta propia o usuarios con historial."""
         usuario = self.get_object()
@@ -224,7 +226,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         return success_response(mensaje='Usuario eliminado definitivamente.')
 
     @action(detail=True, methods=['post'])
-    @transaction.atomic
+    @transaccion_operativa()
     def activar(self, request, pk=None):
         """Reactiva un usuario previamente desactivado."""
         usuario = self.get_object()
@@ -246,7 +248,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=['post'], url_path='resetear-password')
-    @transaction.atomic
+    @transaccion_operativa()
     def resetear_password(self, request, pk=None):
         """
         Resetea la contraseña de un usuario.
