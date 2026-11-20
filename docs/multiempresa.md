@@ -105,7 +105,7 @@ Para registrar una empresa adicional, su base y conexión deben estar preparadas
 
 ## Ficha de empresa y actualización de instalaciones existentes
 
-La ficha central incluye nombre comercial, razón social o nombre del titular, RUT, rubro, contacto principal, correo, teléfono y dirección de contacto (dirección, comuna y región). En un alta nueva se requieren los datos de identificación y el nombre y correo del contacto. El teléfono y la dirección son opcionales. Las empresas registradas antes de esta ampliación conservan sus accesos y pueden completar su información gradualmente. Los datos faltantes se indican en **Ver ficha**.
+La ficha central incluye nombre comercial, razón social o nombre del titular, RUT, rubro, nombre(s) y apellido(s) del contacto, correo, teléfono y dirección de contacto. En un alta nueva se requieren los datos de identificación, nombre, apellidos y correo del contacto. El teléfono y la dirección son opcionales. Las empresas registradas antes de esta ampliación conservan sus accesos y pueden completar su información gradualmente. Los datos faltantes se indican en **Ver ficha**.
 
 Después de actualizar el código, aplica esta migración en la base central antes de iniciar el servidor.
 
@@ -114,6 +114,12 @@ python manage.py migrate --database=central --settings=esquema_multiempresa.migr
 ```
 
 La migración `empresas.0003_ficha_empresa` amplía la tabla `empresas`. Conserva los códigos, las bases asignadas y el estado de acceso. Las fechas de registro de las empresas anteriores quedan sin dato porque no se conocen. Las nuevas altas y las actualizaciones guardan sus fechas automáticamente. Se mantienen 17 tablas en la central y 46 en cada empresa.
+
+La migración `empresas.0005_contacto_apellidos` agrega los apellidos del contacto exclusivamente a la tabla `empresas` de la central. Conserva el texto del contacto anterior sin intentar dividirlo automáticamente. Si ese texto incluía apellidos, se puede separar manualmente desde **Editar ficha**. Los datos operativos y usuarios de cada empresa se conservan. Esta ampliación solo requiere el comando de migración central indicado arriba.
+
+La dirección ofrece primero la región y después sus comunas. Al cambiar la región, la comuna anterior se limpia para que se seleccione una válida. La ficha y Django Admin usan el mismo listado y la misma validación del servidor: no se admite una comuna de otra región mediante un envío manual. Región y comuna pueden quedar vacías porque la dirección es opcional.
+
+El catálogo local incluye las 16 regiones y 346 comunas de la planilla oficial [CUT de SUBDERE](https://www.subdere.gov.cl/documentacion/c%C3%B3digos-%C3%BAnicos-territoriales-actualizados-al-06-de-septiembre-2018), descargada el 20 de noviembre de 2026. Se guarda en `esquema_multiempresa/datos/regiones_comunas.json`, con su fuente y huella del archivo de origen. El formulario funciona sin consultas a servicios externos. Las variaciones reconocidas de direcciones antiguas se muestran normalizadas; los valores anteriores no reconocidos se conservan como opciones marcadas hasta corregirlos. Esa excepción solo permite conservar los valores que la empresa ya tenía.
 
 El RUT admite puntos y un verificador K en minúscula o mayúscula. Se valida el dígito verificador y se guarda sin puntos y con K mayúscula. Un RUT informado pertenece a una sola ficha. El código de acceso se genera a partir del nombre cuando se deja vacío.
 
@@ -144,7 +150,7 @@ python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.prue
 
 Para ejecutar la misma suite con PostgreSQL local o en CI, configura las variables `SS_TEST_DB_USER`, `SS_TEST_DB_PASSWORD`, `SS_TEST_DB_HOST` y `SS_TEST_DB_PORT` con un usuario de pruebas que pueda crear bases y establece `SS_TEST_POSTGRES=true`. El perfil de pruebas usa nombres de base reservados para QA.
 
-La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome y comprueba sus saldos y sesiones independientes. En el panel central crea las cuentas de Administrador de plataforma y Soporte técnico, verifica sus menús y las URLs restringidas, registra un usuario de empresa con el administrador, comprueba las consultas de soporte y prueba el menú móvil. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
+La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome y comprueba sus saldos y sesiones independientes. En el panel central crea las cuentas de Administrador de plataforma y Soporte técnico, verifica sus menús y las URLs restringidas, registra un usuario de empresa con el administrador, comprueba las consultas de soporte y prueba el menú móvil. También edita los nombres y apellidos del contacto, cambia entre Maule y Metropolitana, verifica que las comunas cambian y comprueba la selección guardada al reabrir la ficha. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
 
 ```bat
 set "SS_TEST_POSTGRES="

@@ -29,9 +29,12 @@ class EmpresaPanelForm(FormularioPanel, EmpresaForm):
         self.fields['rut'].widget = forms.TextInput(attrs={'placeholder': '12.345.678-5', 'maxlength': 15})
         # Los registros anteriores pueden completar su ficha gradualmente.
         if self.instance._state.adding:
-            for nombre in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_email'):
+            for nombre in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_apellidos', 'contacto_email'):
                 self.fields[nombre].required = True
-        self.fields['contacto_nombre'].widget.attrs['autocomplete'] = 'name'
+        self.fields['contacto_nombre'].widget.attrs['autocomplete'] = 'given-name'
+        self.fields['contacto_apellidos'].widget.attrs['autocomplete'] = 'family-name'
+        if not self.instance._state.adding and self.instance.contacto_nombre and not self.instance.contacto_apellidos:
+            self.fields['contacto_apellidos'].help_text = 'Si el nombre anterior incluye apellidos, sepáralos en estos dos campos al actualizar el contacto.'
         self.fields['contacto_email'].widget.attrs['autocomplete'] = 'email'
         self.fields['contacto_telefono'].widget = forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'})
         self.fields['direccion'].widget.attrs['autocomplete'] = 'street-address'
@@ -43,9 +46,9 @@ class EmpresaPanelForm(FormularioPanel, EmpresaForm):
             ('Identificación de la empresa', 'Datos que identifican al cliente de SmartStock.',
              [self[nombre] for nombre in ('nombre', 'razon_social', 'rut', 'rubro')]),
             ('Contacto principal', 'Persona con quien coordinar la habilitación y el soporte del servicio.',
-             [self[nombre] for nombre in ('contacto_nombre', 'contacto_email', 'contacto_telefono')]),
+             [self[nombre] for nombre in ('contacto_nombre', 'contacto_apellidos', 'contacto_email', 'contacto_telefono')]),
             ('Dirección de contacto', 'Opcional. Las direcciones de las bodegas se registran en su propio módulo.',
-             [self[nombre] for nombre in ('direccion', 'comuna', 'region')]),
+             [self[nombre] for nombre in ('direccion', 'region', 'comuna')]),
             ('Acceso a SmartStock', 'Asigna la base preparada y revisa el acceso de la empresa.',
              [self[nombre] for nombre in ('codigo', 'alias_bd', 'activa')]),
         ]

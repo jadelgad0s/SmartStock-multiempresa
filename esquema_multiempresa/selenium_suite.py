@@ -176,12 +176,22 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
         navegador.get(self.live_server_url + '/sistema/empresas/la-fragua/editar/')
         for campo, valor in (('razon_social', 'Ferretería La Fragua Limitada'), ('rut', '12.345.678-5'),
-                             ('contacto_nombre', 'Contacto de prueba'), ('contacto_email', 'contacto@example.invalid'),
-                             ('contacto_telefono', '+56 9 1234 5678'), ('direccion', 'Dirección de prueba 100'),
-                             ('comuna', 'Santiago'), ('region', 'Metropolitana')):
+                             ('contacto_nombre', 'César Andrés'), ('contacto_apellidos', 'Guzmán Pérez'),
+                             ('contacto_email', 'contacto@example.invalid'), ('contacto_telefono', '+56 9 1234 5678'),
+                             ('direccion', 'Dirección de prueba 100')):
             elemento = navegador.find_element(By.ID, 'id_' + campo)
             elemento.clear()
             elemento.send_keys(valor)
+        self.assertFalse(navegador.find_element(By.ID, 'id_comuna').is_enabled())
+        region = Select(navegador.find_element(By.ID, 'id_region'))
+        region.select_by_visible_text('Maule')
+        comuna = Select(navegador.find_element(By.ID, 'id_comuna'))
+        self.assertIn('Talca', [opcion.text for opcion in comuna.options])
+        self.assertNotIn('Providencia', [opcion.text for opcion in comuna.options])
+        comuna.select_by_visible_text('Talca')
+        region.select_by_visible_text('Metropolitana de Santiago')
+        self.assertEqual(comuna.first_selected_option.get_attribute('value'), '')
+        comuna.select_by_visible_text('Providencia')
         Select(navegador.find_element(By.ID, 'id_rubro')).select_by_value('ferreteria')
         guardar = navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]')
         navegador.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", guardar)
@@ -191,7 +201,14 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/empresas/la-fragua/')
         self.assertIn('12345678-5', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertIn('contacto@example.invalid', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('César Andrés', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('Guzmán Pérez', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+        navegador.get(self.live_server_url + '/sistema/empresas/la-fragua/editar/')
+        self.assertEqual(Select(navegador.find_element(By.ID, 'id_region')).first_selected_option.text, 'Metropolitana de Santiago')
+        self.assertEqual(Select(navegador.find_element(By.ID, 'id_comuna')).first_selected_option.text, 'Providencia')
+        navegador.refresh()
+        self.assertEqual(Select(navegador.find_element(By.ID, 'id_comuna')).first_selected_option.text, 'Providencia')
         navegador.set_window_size(1440, 1000)
         Bodega.objects.using('ferreteria').update(activa=False)
         navegador.get(self.live_server_url + '/sistema/inventario/?empresa=la-fragua')

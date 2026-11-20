@@ -19,6 +19,7 @@ from apps.usuarios.models import Rol, Sesion, Usuario
 from .models import Empresa
 from .forms import EmpresaPanelForm
 from .permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
+from .territorio import regiones_chile
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
@@ -298,7 +299,7 @@ class PanelSmartStockTests(TestCase):
 
     def datos_empresa(self, **cambios):
         return {'nombre': 'Ferretería El Roble', 'razon_social': 'El Roble Limitada',
-                'rut': '12.345.678-5', 'rubro': 'ferreteria', 'contacto_nombre': 'Responsable de prueba',
+                'rut': '12.345.678-5', 'rubro': 'ferreteria', 'contacto_nombre': 'Responsable', 'contacto_apellidos': 'De Prueba',
                 'contacto_email': 'contacto@example.invalid', 'contacto_telefono': '+56 9 1234 5678',
                 'direccion': 'Dirección de prueba 100', 'comuna': 'Santiago', 'region': 'Metropolitana',
                 'codigo': '', 'alias_bd': 'repuestos', 'activa': 'on', **cambios}
@@ -327,6 +328,7 @@ class PanelSmartStockTests(TestCase):
         empresa = Empresa.objects.using('central').get(codigo='ferreteria-el-roble')
         self.assertEqual((empresa.rut, empresa.alias_bd), ('12345678-5', 'repuestos'))
         self.assertEqual(empresa.contacto_email, 'contacto@example.invalid')
+        self.assertEqual((empresa.contacto_nombre, empresa.contacto_apellidos), ('Responsable', 'De Prueba'))
         self.assertEqual(empresa.datos_pendientes, [])
         self.assertIsNotNone(empresa.creada_en)
         self.assertIsNotNone(empresa.actualizada_en)
@@ -338,7 +340,7 @@ class PanelSmartStockTests(TestCase):
     def test_alta_exige_identificacion_y_contacto_y_la_ficha_antigua_sigue_editable(self):
         self.entrar()
         pagina = self.guardar('/sistema/empresas/nueva/', {'nombre': 'Nueva', 'alias_bd': 'ferreteria'})
-        for campo in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_email'):
+        for campo in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_apellidos', 'contacto_email'):
             self.assertIn(campo, pagina.context['formulario'].errors)
         respuesta = self.guardar('/sistema/empresas/la-fragua/editar/',
                                  {'nombre': 'Nombre actualizado', 'codigo': 'la-fragua', 'activa': 'on'})
@@ -452,6 +454,84 @@ class PanelSmartStockTests(TestCase):
         self.assertContains(pagina, 'Reintentar consulta')
         self.assertNotContains(pagina, 'Sin productos activos')
         self.assertNotContains(pagina, 'id="sistema-kpi-stock"')
+
+    def test_editar_contacto_separa_nombres_y_apellidos_sin_modificar_usuarios_o_stock(self):
+        self.entrar()
+        respuesta = self.guardar('/sistema/empresas/la-fragua/editar/',
+                                 self.datos_empresa(codigo='la-fragua', contacto_nombre='César Andrés',
+                                                    contacto_apellidos='Guzmán Pérez'))
+        self.assertEqual(respuesta.status_code, 302)
+        ficha = self.cliente.get(respuesta.url)
+        self.assertContains(ficha, 'César Andrés')
+        self.assertContains(ficha, 'Guzmán Pérez')
+        self.fragua.refresh_from_db()
+        self.assertEqual(self.fragua.contacto_apellidos, 'Guzmán Pérez')
+        for alias, stock in (('ferreteria', 15), ('repuestos', 4)):
+            self.assertEqual(Usuario.objects.using(alias).get(pk=90).email, 'cliente@example.invalid')
+            self.assertEqual(StockBodega.objects.using(alias).get(producto_id=10).cantidad_total, stock)
+
+    def test_direccion_anterior_reconocible_selecciona_su_region_y_comuna(self):
+        self.fragua.region, self.fragua.comuna = 'Región Metropolitana', 'providencia'
+        self.fragua.save()
+        formulario = EmpresaPanelForm(instance=self.fragua)
+        self.assertEqual(formulario.initial['region'], 'Metropolitana de Santiago')
+        self.assertEqual(formulario.initial['comuna'], 'Providencia')
+        comunas = dict(formulario.fields['comuna'].choices)
+        self.assertIn('Providencia', comunas)
+        self.assertNotIn('Talca', comunas)
+        self.assertFalse(formulario.direccion_anterior)
+
+    def test_servidor_rechaza_comuna_ajena_y_guarda_solo_pares_validos(self):
+        self.entrar()
+        ruta = '/sistema/empresas/la-fragua/editar/'
+        invalido = self.guardar(ruta, self.datos_empresa(codigo='la-fragua', region='Maule', comuna='Providencia'))
+        self.assertEqual(invalido.status_code, 200)
+        self.assertIn('comuna', invalido.context['formulario'].errors)
+        self.assertEqual(Empresa.objects.get(pk=self.fragua.pk).region, '')
+        valido = self.guardar(ruta, self.datos_empresa(codigo='la-fragua', region='Maule', comuna='Talca'))
+        self.assertEqual(valido.status_code, 302)
+        self.fragua.refresh_from_db()
+        self.assertEqual((self.fragua.region, self.fragua.comuna), ('Maule', 'Talca'))
+        self.assertEqual(Empresa.objects.get(pk=self.motor.pk).comuna, '')
+
+    def test_direccion_opcional_y_valores_antiguos_no_se_pierden_al_editar_contacto(self):
+        self.fragua.region, self.fragua.comuna = 'Región histórica sin normalizar', 'Comuna anterior'
+        self.fragua.save()
+        datos = self.datos_empresa(codigo='la-fragua', region=self.fragua.region, comuna=self.fragua.comuna)
+        formulario = EmpresaPanelForm(datos, instance=self.fragua)
+        self.assertTrue(formulario.direccion_anterior)
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        guardada = formulario.save()
+        self.assertEqual((guardada.region, guardada.comuna), (self.fragua.region, self.fragua.comuna))
+        cambiado = EmpresaPanelForm({**datos, 'region': 'Maule'}, instance=guardada)
+        self.assertFalse(cambiado.is_valid())
+        self.assertIn('comuna', cambiado.errors)
+        nueva = EmpresaPanelForm({**datos, 'codigo': '', 'alias_bd': 'otra'})
+        self.assertFalse(nueva.is_valid())
+        self.assertIn('region', nueva.errors)
+        self.assertIn('comuna', nueva.errors)
+        vacia = EmpresaPanelForm({**datos, 'region': '', 'comuna': ''}, instance=self.fragua)
+        self.assertTrue(vacia.is_valid(), vacia.errors)
+
+    def test_comuna_anterior_sin_region_se_conserva_y_no_se_admite_una_nueva(self):
+        self.fragua.comuna = 'Providencia'
+        self.fragua.save()
+        datos = self.datos_empresa(codigo='la-fragua', region='', comuna='Providencia')
+        anterior = EmpresaPanelForm(datos, instance=self.fragua)
+        self.assertTrue(anterior.is_valid(), anterior.errors)
+        otra = EmpresaPanelForm({**datos, 'comuna': 'Talca'}, instance=self.fragua)
+        self.assertFalse(otra.is_valid())
+        self.assertIn('comuna', otra.errors)
+
+    def test_catalogo_territorial_cubre_las_regiones_y_las_comunas_de_cada_una(self):
+        regiones = regiones_chile()
+        self.assertEqual(len(regiones), 16)
+        self.assertEqual(sum(len(region['comunas']) for region in regiones), 346)
+        codigos = [comuna['codigo'] for region in regiones for comuna in region['comunas']]
+        self.assertEqual(len(set(codigos)), 346)
+        for region in regiones:
+            self.assertTrue(all(comuna['codigo'].startswith(region['codigo']) for comuna in region['comunas']))
+        self.assertEqual(next(region for region in regiones if region['codigo'] == '16')['nombre'], 'Ñuble')
 
     def test_superusuario_asigna_los_dos_perfiles_y_registra_al_responsable(self):
         self.entrar(self.superusuario)
@@ -614,17 +694,18 @@ class MigracionFichaEmpresaTests(TransactionTestCase):
             original = empresa_anterior.objects.using('central').create(
                 codigo='existente', nombre='Empresa anterior', alias_bd='ferreteria', activa=False)
             MigrationExecutor(conexion).migrate(actual)
-            conservada = Empresa.objects.using('central').get(pk=original.pk)
+            modelo_actual = MigrationExecutor(conexion).loader.project_state(actual).apps.get_model('empresas', 'Empresa')
+            conservada = modelo_actual.objects.using('central').get(pk=original.pk)
             self.assertEqual((conservada.codigo, conservada.nombre, conservada.alias_bd, conservada.activa),
                              ('existente', 'Empresa anterior', 'ferreteria', False))
             self.assertEqual((conservada.rut, conservada.contacto_email), ('', ''))
             self.assertIsNone(conservada.creada_en)
             self.assertIsNone(conservada.actualizada_en)
-            nueva = Empresa.objects.using('central').create(codigo='posterior', nombre='Alta posterior', alias_bd='repuestos')
+            nueva = modelo_actual.objects.using('central').create(codigo='posterior', nombre='Alta posterior', alias_bd='repuestos')
             self.assertIsNotNone(nueva.creada_en)
             self.assertIsNotNone(nueva.actualizada_en)
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0004_perfiles_equipo')])
+            MigrationExecutor(conexion).migrate([('empresas', '0005_contacto_apellidos')])
 
 
 class MigracionPerfilesEquipoTests(TransactionTestCase):
@@ -673,5 +754,29 @@ class MigracionPerfilesEquipoTests(TransactionTestCase):
             for alias, datos in datos_empresas.items():
                 self.assertEqual(list(Usuario.objects.using(alias).values('id', 'email', 'password', 'rol_id')), datos)
                 self.assertEqual(list(Rol.objects.using(alias).values_list('codigo', flat=True)), ['administrador'])
+        finally:
+            MigrationExecutor(conexion).migrate([('empresas', '0005_contacto_apellidos')])
+
+
+class MigracionApellidosContactoTests(TransactionTestCase):
+    databases = {'central'}
+
+    def test_nombre_completo_anterior_se_conserva_sin_inventar_apellidos(self):
+        conexion = connections['central']
+        anterior = [('empresas', '0004_perfiles_equipo')]
+        actual = [('empresas', '0005_contacto_apellidos')]
+        MigrationExecutor(conexion).migrate(anterior)
+        try:
+            modelo_anterior = MigrationExecutor(conexion).loader.project_state(anterior).apps.get_model('empresas', 'Empresa')
+            original = modelo_anterior.objects.using('central').create(
+                nombre='Empresa anterior', codigo='anterior', alias_bd='ferreteria', activa=False,
+                contacto_nombre='César Guzmán Pérez', contacto_email='anterior@example.invalid',
+                direccion='Dirección de prueba 100', region='Región Metropolitana', comuna='Providencia')
+            MigrationExecutor(conexion).migrate(actual)
+            conservada = Empresa.objects.using('central').get(pk=original.pk)
+            self.assertEqual((conservada.contacto_nombre, conservada.contacto_apellidos), ('César Guzmán Pérez', ''))
+            self.assertEqual(conservada.contacto_email, 'anterior@example.invalid')
+            self.assertEqual((conservada.region, conservada.comuna), ('Región Metropolitana', 'Providencia'))
+            self.assertEqual((conservada.codigo, conservada.alias_bd, conservada.activa), ('anterior', 'ferreteria', False))
         finally:
             MigrationExecutor(conexion).migrate(actual)

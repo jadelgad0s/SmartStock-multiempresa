@@ -14,7 +14,8 @@ class Empresa(models.Model):
     razon_social = models.CharField('razón social o nombre del titular', max_length=200, blank=True)
     rut = models.CharField('RUT del cliente', max_length=12, blank=True, validators=[validar_rut])
     rubro = models.CharField(max_length=20, blank=True, choices=RUBROS)
-    contacto_nombre = models.CharField('contacto principal', max_length=160, blank=True)
+    contacto_nombre = models.CharField('nombre(s) del contacto', max_length=160, blank=True)
+    contacto_apellidos = models.CharField('apellido(s) del contacto', max_length=160, blank=True)
     contacto_email = models.EmailField('correo de contacto', max_length=254, blank=True)
     contacto_telefono = models.CharField('teléfono de contacto', max_length=30, blank=True)
     direccion = models.CharField('dirección', max_length=250, blank=True)
@@ -41,7 +42,8 @@ class Empresa(models.Model):
     @property
     def datos_pendientes(self):
         campos = [('razon_social', 'razón social o titular'), ('rut', 'RUT'), ('rubro', 'rubro'),
-                  ('contacto_nombre', 'contacto principal'), ('contacto_email', 'correo de contacto')]
+                  ('contacto_nombre', 'nombre del contacto'), ('contacto_apellidos', 'apellidos del contacto'),
+                  ('contacto_email', 'correo de contacto')]
         return [etiqueta for campo, etiqueta in campos if not getattr(self, campo)]
 
     def __str__(self):
