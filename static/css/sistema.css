@@ -31,6 +31,8 @@
 .ss-sistema-check { display: flex; align-items: center; gap: .65rem; padding-top: 1.5rem; }
 .ss-sistema-check label { margin: 0; }
 .ss-sistema-check .form-check-input { margin: 0; flex-shrink: 0; }
+.ss-sistema-check { flex-wrap: wrap; }
+.ss-sistema-check .form-text { flex-basis: 100%; }
 .ss-sistema .errorlist { list-style: none; padding: 0; margin: .4rem 0 0; }
 .ss-sistema-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end; padding: 1rem; margin-bottom: 1.25rem; }
 .ss-sistema-filtros .ss-sistema-acciones { grid-column: 1 / -1; }

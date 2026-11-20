@@ -128,7 +128,11 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
             elemento.clear()
             elemento.send_keys(valor)
         Select(navegador.find_element(By.ID, 'id_rubro')).select_by_value('ferreteria')
-        navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').click()
+        guardar = navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]')
+        navegador.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", guardar)
+        espera.until(lambda d: d.execute_script(
+            'const r = arguments[0].getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight;', guardar))
+        guardar.click()
         espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/empresas/la-fragua/')
         self.assertIn('12345678-5', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertIn('contacto@example.invalid', navegador.find_element(By.TAG_NAME, 'body').text)
