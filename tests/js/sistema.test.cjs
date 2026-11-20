@@ -53,3 +53,23 @@ test('volver por el historial restablece los formularios y cierra la carga', asy
   assert.equal(dialogo.open, false);
   assert.equal(enviar('guardar').defaultPrevented, false);
 });
+
+test('un período sin movimientos conserva el gráfico de existencias y permite cambiar el tema', async t => {
+  const datos = {chart_labels: [], chart_entradas: [], chart_salidas: [],
+    estado_inventario: {suficiente: 1, bajo: 0, agotado: 0}};
+  const dom = new JSDOM(`<dialog id="ss-carga"></dialog><p id="ss-carga-texto"></p>
+    <canvas id="sistema-grafico-estado"></canvas>
+    <script type="application/json" id="sistema-datos-dashboard">${JSON.stringify(datos)}</script>`,
+  {runScripts: 'outside-only'});
+  t.after(() => dom.window.close());
+  const creados = [];
+  dom.window.Chart = function(lienzo, opciones) {
+    assert.ok(lienzo, 'Cada gráfico necesita un lienzo real');
+    creados.push({id: lienzo.id, tipo: opciones.type, datos: opciones.data});
+  };
+  dom.window.eval(readFileSync(path.resolve(__dirname, '../../static/js/sistema.js'), 'utf8'));
+  await new Promise(resolve => setImmediate(resolve));
+  dom.window.dispatchEvent(new dom.window.Event('smartstock:themechange'));
+  assert.deepEqual(creados.map(({id, tipo}) => ({id, tipo})), [{id: 'sistema-grafico-estado', tipo: 'doughnut'}]);
+  assert.deepEqual(Array.from(creados[0].datos.datasets[0].data), [1, 0, 0]);
+});

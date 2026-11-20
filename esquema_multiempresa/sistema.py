@@ -17,7 +17,7 @@ from apps.core.empresa import usar_empresa
 from apps.core.models import Auditoria
 from apps.core.views_auditoria import consulta_filtrada, datos_evento
 from apps.productos.models import Bodega, Producto
-from apps.usuarios.models import Usuario
+from apps.usuarios.models import Rol, Usuario
 from rest_framework.exceptions import ValidationError
 from .forms import CuentaTecnicaForm, EmpresaPanelForm, UsuarioEmpresaForm
 from .models import Empresa
@@ -134,7 +134,9 @@ def empresas_sistema(request):
     consulta = Empresa.objects.order_by('nombre', 'id')
     texto = request.GET.get('search', '').strip()[:200]
     if texto:
-        consulta = consulta.filter(Q(nombre__icontains=texto) | Q(codigo__icontains=texto))
+        consulta = consulta.filter(Q(nombre__icontains=texto) | Q(codigo__icontains=texto)
+                                   | Q(razon_social__icontains=texto) | Q(rut__icontains=texto.replace('.', '').upper())
+                                   | Q(contacto_email__icontains=texto))
     contexto['resumen_empresas'] = [resumen_empresa(empresa) for empresa in paginar(request, contexto, consulta)]
     return render(request, 'sistema/empresas.html', contexto)
 
@@ -148,17 +150,38 @@ def editar_empresa(request, codigo=None):
         nueva = empresa._state.adding
         try:
             with transaction.atomic(using='central'):
-                guardada = formulario.save()
+                guardada = formulario.save(commit=False)
+                guardada.save(using='central')
                 auditar_gestion(request, 'central', 'CREATE' if nueva else 'UPDATE', 'Empresa', guardada,
                                 f'Empresa guardada · {guardada.nombre}')
         except IntegrityError:
-            formulario.add_error(None, 'El código o la base ya están vinculados a otra empresa. Revisa los datos.')
+            formulario.add_error(None, 'El RUT, el código o la base ya están vinculados a otra empresa. Revisa los datos.')
         else:
             messages.success(request, 'Empresa guardada correctamente.')
-            return redirect('sistema_empresas')
+            return redirect('sistema_ficha_empresa', codigo=guardada.codigo)
     contexto = contexto_sistema(request, 'empresas', 'Añadir empresa' if codigo is None else 'Editar empresa')
-    contexto.update(formulario=formulario, volver=reverse('sistema_empresas'))
-    return render(request, 'sistema/formulario.html', contexto)
+    contexto.update(formulario=formulario, volver=reverse('sistema_empresas'),
+                    secciones_formulario=formulario.secciones(), nueva=empresa._state.adding,
+                    sin_bases=empresa._state.adding and not formulario.bases_disponibles)
+    return render(request, 'sistema/empresa_formulario.html', contexto)
+
+
+@requiere_personal
+@require_http_methods(['GET'])
+def ficha_empresa(request, codigo):
+    empresa = empresa_del_panel(codigo)
+    contexto = contexto_sistema(request, 'empresas', 'Ficha de empresa', empresa=empresa)
+    resumen = resumen_empresa(empresa)
+    if resumen['disponible']:
+        try:
+            with usar_empresa(empresa):
+                resumen['administrador'] = Usuario.objects.filter(
+                    activo=True, is_superuser=False, rol__codigo='administrador', rol__activo=True,
+                ).exists()
+        except DatabaseError:
+            resumen['disponible'] = False
+    contexto['resumen'] = resumen
+    return render(request, 'sistema/empresa_ficha.html', contexto)
 
 
 @requiere_personal
@@ -202,7 +225,10 @@ def formulario_cuenta(request, empresa, usuario_id):
     clase = UsuarioEmpresaForm if empresa else CuentaTecnicaForm
     estaba_activo = usuario.activo
     with usar_empresa(empresa):
-        formulario = clase(request.POST or None, instance=usuario, **opciones)
+        iniciales = {}
+        if empresa and es_nueva and request.GET.get('rol') == 'administrador':
+            iniciales['rol'] = Rol.objects.using(alias).filter(codigo='administrador', activo=True).first()
+        formulario = clase(request.POST or None, instance=usuario, initial=iniciales, **opciones)
         if request.method == 'POST' and formulario.is_valid():
             try:
                 with transaction.atomic(using=alias):

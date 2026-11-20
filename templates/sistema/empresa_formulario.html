@@ -1,0 +1,17 @@
+{% extends 'sistema/base.html' %}
+{% block panel_content %}
+<p class="text-muted">{% if nueva %}Registra los datos de la empresa y vincula una base disponible.{% else %}Actualiza la ficha y el contacto de la empresa. Los datos pendientes pueden completarse gradualmente.{% endif %} Los campos con * son obligatorios.</p>
+<form method="post" class="card ss-sistema-formulario" data-ss-loading="Guardando empresa…">
+  {% csrf_token %}
+  {% if formulario.errors %}<div class="alert alert-danger" role="alert">Revisa los campos indicados antes de guardar.{{ formulario.non_field_errors }}</div>{% endif %}
+  {% for nombre, descripcion, campos in secciones_formulario %}
+  <fieldset class="ss-sistema-grupo">
+    <legend>{{ nombre }}</legend>
+    <p class="text-muted small">{{ descripcion }}</p>
+    {% if forloop.last and sin_bases %}<div class="alert alert-warning" role="status">No hay bases disponibles para registrar otra empresa. El equipo técnico debe preparar una nueva base y su conexión antes de continuar. Las bases asignadas se conservan para sus empresas.</div>{% endif %}
+    <div class="ss-sistema-campos">{% for campo in campos %}{% include 'sistema/campo_formulario.html' %}{% endfor %}</div>
+  </fieldset>
+  {% endfor %}
+  <div class="ss-sistema-acciones"><button type="submit" class="btn btn-primary"{% if sin_bases %} disabled{% endif %}>{% if nueva %}Crear empresa{% else %}Guardar cambios{% endif %}</button><a class="btn btn-outline-secondary" href="{{ volver }}">Cancelar</a></div>
+</form>
+{% endblock %}
