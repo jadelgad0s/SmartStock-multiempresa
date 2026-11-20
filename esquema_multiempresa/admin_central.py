@@ -6,7 +6,10 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
+from django.contrib.admin.utils import NestedObjects
 from django.core.exceptions import PermissionDenied
+from django.db import connections, transaction
+from django.db.models.deletion import ProtectedError
 from django.shortcuts import redirect
 
 from apps.usuarios.admin_site import SmartStockAdminSite
@@ -84,6 +87,21 @@ class EditarCuentaTecnica(UserChangeForm):
         fields = ('email', 'password', 'nombres', 'apellidos', 'activo', 'is_superuser')
 
 
+class RecolectorCuentasCentrales(NestedObjects):
+    """Recorre las relaciones que existen en la base central."""
+
+    def __init__(self):
+        super().__init__(using='central')
+        self.tablas = set(connections['central'].introspection.table_names())
+
+    def related_objects(self, related_model, related_fields, objs):
+        # Los modelos operativos están registrados, pero sus tablas solo
+        # existen en las bases de las empresas.
+        if related_model._meta.db_table not in self.tablas:
+            return related_model._base_manager.using('central').none()
+        return super().related_objects(related_model, related_fields, objs)
+
+
 @admin.register(Usuario, site=sitio_sistema)
 class CuentaTecnicaAdmin(UserAdmin):
     add_form = NuevaCuentaTecnica
@@ -100,9 +118,32 @@ class CuentaTecnicaAdmin(UserAdmin):
     add_fieldsets = ((None, {'fields': ('email', 'nombres', 'apellidos', 'password1', 'password2', 'is_superuser')}),)
 
     def get_queryset(self, request):
-        return super().get_queryset(request).filter(is_staff=True)
+        return super().get_queryset(request).using('central').filter(is_staff=True)
 
     def save_model(self, request, obj, form, change):
         obj.is_staff = True
         obj.rol = None
         super().save_model(request, obj, form, change)
+
+    def get_deleted_objects(self, objs, request):
+        recolector = RecolectorCuentasCentrales()
+        recolector.collect(objs)
+        formato = lambda obj: f'{obj._meta.verbose_name}: {obj}'
+        cantidades = {
+            modelo._meta.verbose_name_plural: len(instancias)
+            for modelo, instancias in recolector.model_objs.items()
+        }
+        # Este sitio exige un superusuario central antes de llegar a la vista.
+        return (recolector.nested(formato), cantidades, set(),
+                [formato(obj) for obj in recolector.protected])
+
+    def delete_model(self, request, obj):
+        self.delete_queryset(request, self.model._base_manager.filter(pk=obj.pk))
+
+    def delete_queryset(self, request, queryset):
+        with transaction.atomic(using='central'):
+            recolector = RecolectorCuentasCentrales()
+            recolector.collect(queryset.using('central').filter(is_staff=True))
+            if recolector.protected:
+                raise ProtectedError('La cuenta tiene registros protegidos.', recolector.protected)
+            recolector.delete()

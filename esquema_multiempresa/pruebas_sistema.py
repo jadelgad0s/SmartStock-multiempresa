@@ -1,4 +1,5 @@
 """Permisos del panel central, consultas por empresa y gestión sin cruces de IDs."""
+from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
@@ -6,12 +7,13 @@ from django.core.cache import cache
 from django.core.management import call_command
 from django.db import OperationalError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.core.empresa import empresa_actual, usar_empresa
 from apps.core.models import Auditoria
 from apps.productos.models import Bodega, Producto, StockBodega
-from apps.usuarios.models import Rol, Usuario
+from apps.usuarios.models import Rol, Sesion, Usuario
 from .models import Empresa
 
 
@@ -230,3 +232,54 @@ class PanelSmartStockTests(TestCase):
             pagina = self.cliente.get('/sistema/')
         self.assertContains(pagina, 'Sin conexión con la empresa')
         self.assertEqual(self.cliente.get('/sistema/cuentas/').status_code, 200)
+
+    def test_eliminar_superusuario_central_conserva_auditoria_y_usuarios_de_empresas(self):
+        cuenta = Usuario.objects.db_manager('central').create_superuser(
+            pk=92, email='eliminar@example.invalid', password=self.clave, nombres='Cuenta central')
+        for empresa in (self.fragua, self.motor):
+            with usar_empresa(empresa):
+                Usuario.objects.create_user(
+                    pk=92, email=cuenta.email, password=self.clave, nombres=empresa.nombre,
+                    rol=Rol.objects.get(codigo='operador'))
+        registro = Auditoria.objects.using('central').create(
+            usuario=cuenta, accion='LOGIN', modelo='Usuario', descripcion='Historial anterior')
+        Sesion.objects.using('central').create(
+            usuario=cuenta, token_jti='sesion-cuenta-92',
+            fecha_expiracion=timezone.now() + timedelta(days=1))
+        self.entrar(self.superusuario)
+        ruta = '/sistema/configuracion/usuarios/usuario/92/delete/'
+        self.assertContains(self.cliente.get(ruta), cuenta.email)
+        respuesta = self.guardar(ruta, {'post': 'yes'})
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(Usuario.objects.using('central').filter(pk=92).exists())
+        self.assertTrue(Usuario.objects.using('central').filter(pk=self.superusuario.pk).exists())
+        self.assertFalse(Sesion.objects.using('central').filter(usuario_id=92).exists())
+        registro.refresh_from_db(using='central')
+        self.assertIsNone(registro.usuario_id)
+        self.assertEqual(registro.descripcion, 'Historial anterior')
+        for empresa in (self.fragua, self.motor):
+            with usar_empresa(empresa):
+                self.assertEqual(Usuario.objects.get(pk=92).nombres, empresa.nombre)
+
+    def test_eliminar_cuentas_centrales_desde_accion_del_listado(self):
+        for pk in (92, 93):
+            Usuario.objects.db_manager('central').create_user(
+                pk=pk, email=f'eliminar-{pk}@example.invalid', password=self.clave,
+                nombres=f'Cuenta {pk}', is_staff=True)
+        self.entrar(self.superusuario)
+        ruta = '/sistema/configuracion/usuarios/usuario/'
+        datos = {'action': 'delete_selected', '_selected_action': ['92', '93']}
+        confirmacion = self.guardar(ruta, datos)
+        self.assertContains(confirmacion, 'eliminar-92@example.invalid')
+        self.assertContains(confirmacion, 'eliminar-93@example.invalid')
+        respuesta = self.guardar(ruta, {**datos, 'post': 'yes'})
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(Usuario.objects.using('central').filter(pk__in=(92, 93)).exists())
+        self.assertEqual(Usuario.objects.using('central').filter(pk__in=(90, 91)).count(), 2)
+
+    def test_tecnico_no_puede_eliminar_un_superusuario_por_url_directa(self):
+        self.entrar()
+        ruta = '/sistema/configuracion/usuarios/usuario/90/delete/'
+        self.assertEqual(self.cliente.get(ruta).status_code, 403)
+        self.assertEqual(self.guardar(ruta, {'post': 'yes'}).status_code, 403)
+        self.assertTrue(Usuario.objects.using('central').filter(pk=90, is_superuser=True).exists())
