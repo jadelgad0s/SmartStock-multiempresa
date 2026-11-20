@@ -73,8 +73,11 @@ class PanelSmartStockTests(TestCase):
         self.entrar()
         panel = self.cliente.get('/sistema/')
         self.assertContains(panel, 'ss-app-layout')
-        for modulo in ('Empresas', 'Usuarios de empresas', 'Mi cuenta', 'Auditoría', 'Catálogo', 'Transferencias'):
+        for modulo in ('Empresas', 'Usuarios de empresas', 'Auditoría', 'Catálogo', 'Transferencias'):
             self.assertContains(panel, modulo)
+        self.assertContains(panel, 'href="/sistema/mi-cuenta/" class="ss-sidebar-profile ss-sistema-perfil')
+        self.assertFalse(any(enlace['nombre'] == 'Mi cuenta' for seccion in panel.context['secciones_menu']
+                             for enlace in seccion['enlaces']))
         self.assertContains(panel, 'Administrador de plataforma')
         self.assertNotContains(panel, 'href="/sistema/cuentas/"')
         self.assertNotContains(panel, 'href="/sistema/configuracion/"')

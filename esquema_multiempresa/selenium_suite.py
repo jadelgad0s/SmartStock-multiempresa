@@ -38,6 +38,30 @@ for _alias in ('central', 'ferreteria', 'repuestos'):
 class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
     databases = {'central', 'ferreteria', 'repuestos'}
 
+    def comprobar_menu(self, navegador):
+        grupos = navegador.execute_script('''
+            return Array.from(document.querySelectorAll('.ss-sistema-menu-lista'), grupo =>
+                Array.from(grupo.querySelectorAll('.sidebar-item'), enlace => {
+                    const r = enlace.getBoundingClientRect();
+                    return {top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right};
+                }));
+        ''')
+        for filas in grupos:
+            for anterior, actual in zip(filas, filas[1:]):
+                self.assertAlmostEqual(anterior['height'], actual['height'], delta=1)
+                self.assertAlmostEqual(anterior['left'], actual['left'], delta=1)
+                self.assertAlmostEqual(anterior['right'], actual['right'], delta=1)
+                self.assertGreaterEqual(actual['top'] - anterior['bottom'], 0)
+                self.assertLessEqual(actual['top'] - anterior['bottom'], 6)
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.ss-sidebar-links a[href="/sistema/mi-cuenta/"]'))
+        perfil = navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil')
+        self.assertEqual(urlsplit(perfil.get_attribute('href')).path, '/sistema/mi-cuenta/')
+        self.assertTrue(navegador.execute_script('''
+            const perfil = arguments[0].getBoundingClientRect();
+            const menu = document.querySelector('.ss-sidebar-links').getBoundingClientRect();
+            return perfil.bottom <= window.innerHeight && menu.bottom <= perfil.top + 1;
+        ''', perfil))
+
     def test_mismo_navegador_dos_inventarios_y_cierre_de_sesion_independiente(self):
         call_command('registrar_empresas_prueba', stdout=StringIO())
         opciones = webdriver.ChromeOptions()
@@ -91,6 +115,11 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         espera.until(EC.url_contains('/sistema/'))
         self.assertIn('Administración de SmartStock', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, 'a[href="/sistema/configuracion/"]'))
+        self.comprobar_menu(navegador)
+        navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/mi-cuenta/')
+        self.assertEqual(navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').get_attribute('aria-current'), 'page')
+        self.assertEqual(navegador.find_element(By.ID, 'id_email').get_attribute('value'), 'tecnico@example.invalid')
         navegador.find_element(By.LINK_TEXT, 'Equipo de SmartStock').click()
         for perfil, correo in ((ADMINISTRADOR_PLATAFORMA, 'gestion-qa@example.invalid'),
                                (SOPORTE_TECNICO, 'soporte-qa@example.invalid')):
@@ -131,6 +160,15 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         navegador.find_element(By.CSS_SELECTOR, '.ss-menu-toggle').click()
         espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+        self.comprobar_menu(navegador)
+        navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/mi-cuenta/')
+        self.assertEqual(navegador.find_element(By.ID, 'id_email').get_attribute('value'), 'gestion-qa@example.invalid')
+        navegador.find_element(By.CSS_SELECTOR, '.ss-menu-toggle').click()
+        espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
+        self.assertEqual(navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').get_attribute('aria-current'), 'page')
+        self.comprobar_menu(navegador)
+        navegador.find_element(By.CSS_SELECTOR, '.ss-sidebar-close').click()
 
         navegador.get(self.live_server_url + '/sistema/empresas/nueva/')
         self.assertIn('No hay bases disponibles', navegador.find_element(By.TAG_NAME, 'body').text)

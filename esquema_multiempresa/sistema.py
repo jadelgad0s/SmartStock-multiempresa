@@ -58,8 +58,7 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
                          ('transferencias', 'Transferencias', 'right-left', 'sistema_transferencias'),
                          ('mermas', 'Mermas y bajas', 'triangle-exclamation', 'sistema_mermas')]),
         ('Sistema', [('sms', 'Alertas SMS', 'comment-sms', 'sistema_sms'),
-                     ('auditoria', 'Auditoría', 'clipboard-list', 'sistema_auditoria'),
-                     ('mi_cuenta', 'Mi cuenta', 'user', 'sistema_mi_cuenta')]),
+                     ('auditoria', 'Auditoría', 'clipboard-list', 'sistema_auditoria')]),
     ]
     if contexto['es_superusuario']:
         secciones[-1][1].insert(0, ('cuentas', 'Equipo de SmartStock', 'user-gear', 'sistema_cuentas'))
