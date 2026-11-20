@@ -20,4 +20,5 @@ jobs:
       - run: python -m pip install -r requirements-web.txt selenium==4.52.0
       - run: python manage.py test apps.core.selenium_suite --settings=config.settings.testing --verbosity 2 --noinput
       - name: Probar dos empresas en el mismo navegador
+        if: ${{ !cancelled() }}
         run: python manage.py test esquema_multiempresa.selenium_suite --settings=esquema_multiempresa.testing --verbosity 2 --noinput

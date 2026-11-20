@@ -79,6 +79,13 @@ class SmartStockSeleniumTests(StaticLiveServerTestCase):
         return StockBodega.objects.create(producto=producto, bodega=bodega, cantidad_total=10)
 
     def abrir_movimiento(self, sku, tipo, cantidad):
+        # La pantalla permite reintentar una lectura de bodegas fallida.
+        # Esperamos ese estado o la carga correcta antes de utilizar el escáner.
+        self.espera.until(lambda navegador:
+            navegador.find_element(By.ID, 'inputEscaner').is_enabled()
+            or navegador.find_element(By.ID, 'reintentarBodegasMovimiento').is_displayed())
+        if self.navegador.find_element(By.ID, 'reintentarBodegasMovimiento').is_displayed():
+            self.clic('reintentarBodegasMovimiento')
         escaner = self.espera.until(EC.element_to_be_clickable((By.ID, 'inputEscaner')))
         escaner.send_keys(sku, Keys.ENTER)
         self.espera.until(EC.visibility_of_element_located((By.ID, 'modalAccionMovimiento')))
