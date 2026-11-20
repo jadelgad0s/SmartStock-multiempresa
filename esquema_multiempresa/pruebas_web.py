@@ -64,11 +64,12 @@ class AccesoPorEmpresaTests(TestCase):
         with self.assertRaises(CommandError):
             call_command('seed_empresa', self.motor.codigo, stdout=StringIO())
         tablas_centrales = set(connections['central'].introspection.table_names())
-        self.assertTrue({'empresas', 'tickets_acceso', 'usuarios', 'django_session'} <= tablas_centrales)
+        self.assertTrue({'empresas', 'tickets_acceso', 'usuarios', 'django_session', 'notificaciones_sistema'} <= tablas_centrales)
         self.assertFalse({'productos', 'bodegas', 'stock_bodega'} & tablas_centrales)
         tablas_a = set(connections['ferreteria'].introspection.table_names())
         self.assertNotIn('empresas', tablas_a)
         self.assertNotIn('tickets_acceso', tablas_a)
+        self.assertNotIn('notificaciones_sistema', tablas_a)
         self.assertTrue({'usuarios', 'productos', 'stock_bodega', 'django_session'} <= tablas_a)
         self.assertEqual(tablas_a, set(connections['repuestos'].introspection.table_names()))
 

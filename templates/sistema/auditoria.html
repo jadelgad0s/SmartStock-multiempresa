@@ -1,6 +1,7 @@
 {% extends 'sistema/base.html' %}
 {% block panel_content %}
 {% include 'sistema/selector_empresa.html' %}
+{% if requiere_empresa %}<p class="text-muted">Selecciona una empresa para consultar su auditoría.</p>{% else %}
 <form method="get" class="card ss-sistema-filtros" data-ss-loading="Consultando auditoría…">
   {% if empresa_seleccionada %}<input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}">{% endif %}
   <div><label for="buscar-evento">Buscar evento</label><input id="buscar-evento" type="search" name="search" maxlength="200" value="{{ request.GET.search }}" class="form-control" placeholder="Usuario o descripción"></div>
@@ -12,4 +13,5 @@
   <thead><tr><th>Fecha / hora</th><th>Usuario</th><th>Acción</th><th>Módulo</th><th>Descripción</th></tr></thead>
   <tbody>{% for evento in eventos %}<tr><td>{{ evento.fecha }}</td><td>{{ evento.usuario }}</td><td>{{ evento.accion_etiqueta }}</td><td>{{ evento.modelo }}</td><td>{{ evento.descripcion }}</td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted py-4">No hay eventos para esta consulta.</td></tr>{% endfor %}</tbody>
 </table></div>{% include 'sistema/paginacion.html' %}</div>
+{% endif %}
 {% endblock %}

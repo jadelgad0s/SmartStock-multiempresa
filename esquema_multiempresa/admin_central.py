@@ -1,4 +1,6 @@
+import json
 import re
+from copy import deepcopy
 from functools import wraps
 
 from django import forms
@@ -14,10 +16,11 @@ from django.shortcuts import redirect
 from django.utils.text import slugify
 
 from apps.usuarios.admin_site import SmartStockAdminSite
-from apps.usuarios.models import Usuario
+from apps.usuarios.models import Rol, Usuario
 from .models import Empresa
-from .permisos import es_superusuario_smartstock
+from .permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO, es_superusuario_smartstock, nombre_perfil_personal
 from .validadores import normalizar_rut
+from .territorio import normalizar_comuna, normalizar_region, regiones_chile
 
 
 class AdministracionSistema(SmartStockAdminSite):
@@ -51,14 +54,21 @@ sitio_sistema = AdministracionSistema(name='sistema_admin')
 
 
 class EmpresaForm(forms.ModelForm):
+    region = forms.ChoiceField(label='Región', required=False)
+    comuna = forms.ChoiceField(label='Comuna', required=False)
+
     class Meta:
         model = Empresa
-        fields = ('nombre', 'razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_email',
+        fields = ('nombre', 'razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_apellidos', 'contacto_email',
                   'contacto_telefono', 'direccion', 'comuna', 'region', 'codigo', 'alias_bd', 'activa')
         labels = {'nombre': 'Nombre comercial', 'activa': 'Empresa activa'}
 
+    class Media:
+        js = ('js/empresa_direccion.js',)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.preparar_direccion()
         self.fields['codigo'].required = False
         ocupadas = set(Empresa.objects.using('central').exclude(pk=self.instance.pk).values_list('alias_bd', flat=True))
         self.bases_disponibles = [alias for alias in settings.BASES_EMPRESA if alias not in ocupadas]
@@ -66,6 +76,47 @@ class EmpresaForm(forms.ModelForm):
             (alias, alias) for alias in self.bases_disponibles
         ]])
         self.fields['alias_bd'].disabled = not self.instance._state.adding
+
+    def preparar_direccion(self):
+        regiones = deepcopy(regiones_chile())
+        region_anterior = normalizar_region(self.instance.region) or self.instance.region.strip()
+        comuna_anterior = normalizar_comuna(self.instance.comuna, region_anterior) or self.instance.comuna.strip()
+        region_valida = next((region for region in regiones if region['nombre'] == region_anterior), None)
+        self.direccion_anterior = False
+        if self.instance.pk and (region_anterior or comuna_anterior):
+            if region_valida is None:
+                region_valida = {'nombre': region_anterior, 'anterior': True, 'comunas': []}
+                regiones.append(region_valida)
+                self.direccion_anterior = True
+            if comuna_anterior and not any(comuna['nombre'] == comuna_anterior for comuna in region_valida['comunas']):
+                region_valida['comunas'].append({'nombre': comuna_anterior, 'anterior': True})
+                self.direccion_anterior = True
+        self.initial.update(region=region_anterior, comuna=comuna_anterior)
+        if self.is_bound:
+            self.data = self.data.copy()
+            region_clave, comuna_clave = self.add_prefix('region'), self.add_prefix('comuna')
+            region = normalizar_region(self.data.get(region_clave)) or self.data.get(region_clave, '').strip()
+            comuna = normalizar_comuna(self.data.get(comuna_clave), region) or self.data.get(comuna_clave, '').strip()
+            self.data[region_clave], self.data[comuna_clave] = region, comuna
+        else:
+            region = region_anterior
+        seleccionada = next((item for item in regiones if item['nombre'] == region), None)
+        self.fields['region'].choices = [('', 'Selecciona una región'), *[
+            (item['nombre'], item['nombre'] + (' (valor anterior)' if item.get('anterior') else ''))
+            for item in regiones if item['nombre']
+        ]]
+        self.fields['comuna'].choices = [('', 'Selecciona una comuna'), *[
+            (item['nombre'], item['nombre'] + (' (valor anterior)' if item.get('anterior') else ''))
+            for item in (seleccionada['comunas'] if seleccionada else [])
+        ]]
+        self.fields['region'].widget.attrs.update({
+            'data-ss-regiones-comunas': json.dumps(regiones, ensure_ascii=False, separators=(',', ':')),
+            'data-ss-comuna-nombre': self.add_prefix('comuna'), 'autocomplete': 'address-level1',
+        })
+        self.fields['comuna'].widget.attrs['autocomplete'] = 'address-level2'
+        self.fields['comuna'].help_text = 'Selecciona una región para ver sus comunas.'
+        if self.direccion_anterior:
+            self.fields['region'].help_text = 'Se conserva un valor anterior. Selecciona la región y comuna del listado para actualizarlo.'
 
     def clean_rut(self):
         rut = normalizar_rut(self.cleaned_data.get('rut', ''))
@@ -111,16 +162,35 @@ class EmpresaAdmin(admin.ModelAdmin):
     readonly_fields = ('creada_en', 'actualizada_en')
 
 
-class NuevaCuentaTecnica(UserCreationForm):
+class PerfilCuentaCentralForm:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['rol'].queryset = Rol.objects.using('central').filter(
+            codigo__in=(ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO),
+        )
+        self.fields['rol'].label = 'Perfil del equipo'
+        self.fields['rol'].label_from_instance = lambda rol: rol.nombre
+        self.fields['rol'].help_text = 'Selecciona Administrador de plataforma o Soporte técnico para una cuenta sin superusuario.'
+
+    def clean(self):
+        datos = super().clean()
+        if datos.get('is_superuser'):
+            datos['rol'] = None
+        elif datos.get('rol') is None:
+            self.add_error('rol', 'Selecciona un perfil para la cuenta del equipo.')
+        return datos
+
+
+class NuevaCuentaTecnica(PerfilCuentaCentralForm, UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = Usuario
-        fields = ('email', 'nombres', 'apellidos', 'is_superuser')
+        fields = ('email', 'nombres', 'apellidos', 'is_superuser', 'rol')
 
 
-class EditarCuentaTecnica(UserChangeForm):
+class EditarCuentaTecnica(PerfilCuentaCentralForm, UserChangeForm):
     class Meta(UserChangeForm.Meta):
         model = Usuario
-        fields = ('email', 'password', 'nombres', 'apellidos', 'activo', 'is_superuser')
+        fields = ('email', 'password', 'nombres', 'apellidos', 'activo', 'is_superuser', 'rol')
 
 
 class RecolectorCuentasCentrales(NestedObjects):
@@ -142,23 +212,28 @@ class RecolectorCuentasCentrales(NestedObjects):
 class CuentaTecnicaAdmin(UserAdmin):
     add_form = NuevaCuentaTecnica
     form = EditarCuentaTecnica
-    list_display = ('email', 'nombre_completo', 'activo')
+    list_display = ('email', 'nombre_completo', 'perfil_del_equipo', 'activo')
     list_filter = ('activo',)
     search_fields = ('email', 'nombres', 'apellidos')
     ordering = ('email',)
     filter_horizontal = ()
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Cuenta técnica', {'fields': ('nombres', 'apellidos', 'activo', 'is_superuser')}),
+        ('Cuenta del equipo', {'fields': ('nombres', 'apellidos', 'activo', 'is_superuser', 'rol')}),
     )
-    add_fieldsets = ((None, {'fields': ('email', 'nombres', 'apellidos', 'password1', 'password2', 'is_superuser')}),)
+    add_fieldsets = ((None, {'fields': ('email', 'nombres', 'apellidos', 'password1', 'password2', 'is_superuser', 'rol')}),)
+
+    @admin.display(description='Perfil del equipo')
+    def perfil_del_equipo(self, obj):
+        return nombre_perfil_personal(obj)
 
     def get_queryset(self, request):
         return super().get_queryset(request).using('central').filter(is_staff=True)
 
     def save_model(self, request, obj, form, change):
         obj.is_staff = True
-        obj.rol = None
+        if obj.is_superuser:
+            obj.rol = None
         super().save_model(request, obj, form, change)
 
     def get_deleted_objects(self, objs, request):

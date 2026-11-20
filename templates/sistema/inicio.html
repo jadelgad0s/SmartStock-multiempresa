@@ -1,5 +1,5 @@
 {% extends 'sistema/base.html' %}
-{% block acciones %}<a class="btn btn-primary" href="{% url 'sistema_nueva_empresa' %}"><i class="fa-solid fa-plus me-2" aria-hidden="true"></i>Añadir empresa</a>{% endblock %}
+{% block acciones %}{% if puede_gestionar_empresas %}<a class="btn btn-primary" href="{% url 'sistema_nueva_empresa' %}"><i class="fa-solid fa-plus me-2" aria-hidden="true"></i>Añadir empresa</a>{% endif %}{% endblock %}
 {% block panel_content %}
 <section class="ss-dash-kpis" aria-label="Resumen del sistema">
   {% for etiqueta, valor in kpis %}<div class="card ss-dash-kpi"><span class="kpi-title">{{ etiqueta }}</span><strong class="kpi-value">{{ valor|default_if_none:'—' }}</strong></div>{% endfor %}

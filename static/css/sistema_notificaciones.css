@@ -1,0 +1,33 @@
+.ss-sistema-avisos { position: relative; }
+#sistema-notificaciones-boton { position: relative; min-width: 40px; }
+.ss-sistema-avisos-total { position: absolute; top: -.4rem; right: -.4rem; padding: .12rem .35rem; border-radius: 1rem; background: #dc3545; color: #fff; font-size: .65rem; line-height: 1.2; font-weight: 650; }
+.ss-sistema-avisos-panel { position: absolute; top: calc(100% + .5rem); right: 0; display: flex; flex-direction: column; width: min(360px, calc(100vw - 2rem)); max-height: min(30rem, calc(100dvh - var(--ss-avisos-top, 6rem) - 1rem)); background: var(--bs-body-bg, #fff); color: var(--slate-800); border: 1px solid var(--slate-200); border-radius: .75rem; box-shadow: 0 .8rem 2rem #0f172a26; z-index: 1030; overflow: hidden; }
+.ss-sistema-avisos-panel[hidden], .ss-sistema-avisos-total[hidden], .ss-sistema-confirmacion[hidden] { display: none !important; }
+.ss-sistema-avisos-cabecera, .ss-sistema-avisos-pie { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .6rem 1rem; flex-shrink: 0; }
+.ss-sistema-avisos-cabecera { border-bottom: 1px solid var(--slate-200); }
+.ss-sistema-avisos-cabecera strong { font-size: .9rem; }
+.ss-sistema-avisos-pie { border-top: 1px solid var(--slate-200); }
+.ss-sistema-avisos-pie small { font-size: .65rem; color: var(--slate-600); }
+.ss-sistema-avisos-cabecera button, .ss-sistema-avisos-pie button { border: 0; background: transparent; color: var(--teal-600); text-decoration: underline; padding: .4rem 0; min-height: 36px; font-size: .75rem; }
+.ss-sistema-avisos-cabecera button:disabled { color: var(--slate-600); opacity: .6; cursor: default; }
+#sistema-notificaciones-error { padding: .6rem 1rem; margin: 0; flex-shrink: 0; }
+.ss-sistema-avisos-lista { list-style: none; margin: 0; padding: .4rem; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.ss-sistema-avisos-vacio { padding: 1rem .5rem; text-align: center; color: var(--slate-600); font-size: .8rem; }
+.ss-sistema-aviso { display: block; width: 100%; padding: .8rem; border: 0; border-radius: .4rem; background: transparent; text-align: left; color: var(--slate-800); overflow-wrap: anywhere; }
+.ss-sistema-aviso:hover { background: var(--slate-100); }
+.ss-sistema-aviso strong, .ss-sistema-aviso span, .ss-sistema-aviso small { display: block; }
+.ss-sistema-aviso strong { font-size: .8rem; }
+.ss-sistema-aviso span { font-size: .78rem; margin-top: .2rem; color: var(--slate-600); }
+.ss-sistema-aviso small { font-size: .7rem; margin-top: .3rem; color: var(--slate-600); }
+.ss-sistema-aviso[data-leida="false"] { border-left: 3px solid var(--teal-600); }
+.ss-sistema-confirmacion { position: fixed; bottom: 1rem; right: 1rem; z-index: 1080; display: flex; align-items: flex-start; gap: .75rem; max-width: min(390px, calc(100vw - 2rem)); padding: 1rem; background: var(--bs-body-bg, #fff); color: var(--slate-800); border: 1px solid var(--slate-200); border-left: 4px solid var(--teal-600); border-radius: .65rem; box-shadow: 0 .6rem 2rem #0f172a26; overflow-wrap: anywhere; }
+.ss-sistema-confirmacion > i { color: var(--teal-600); padding-top: .1rem; }
+.ss-sistema-confirmacion > div { min-width: 0; flex: 1; }
+.ss-sistema-confirmacion strong { display: block; font-size: .875rem; }
+.ss-sistema-confirmacion p { margin: .3rem 0 0; font-size: .8rem; white-space: pre-line; }
+.ss-sistema-confirmacion button { background: transparent; border: 0; color: var(--slate-600); min-width: 32px; min-height: 32px; margin: -.35rem -.4rem 0 0; }
+.ss-sistema-avisos button:focus-visible, .ss-sistema-confirmacion button:focus-visible { outline: 2px solid var(--teal-600); outline-offset: -2px; }
+@media (max-width: 575.98px) {
+  .ss-sistema-avisos-panel { position: fixed; top: var(--ss-avisos-top, 6rem); right: 1rem; left: auto; }
+  .ss-sistema-avisos-cabecera button, .ss-sistema-avisos-pie button, .ss-sistema-confirmacion button { min-height: 44px; }
+}

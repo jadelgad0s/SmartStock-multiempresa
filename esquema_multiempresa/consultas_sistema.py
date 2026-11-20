@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 
 from django.db import DatabaseError
 from django.db.models import Q
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -17,7 +18,7 @@ from apps.productos.stock import anotar_stock
 from apps.productos.views_dashboard import datos_resumen_dashboard
 from apps.productos.views_reportes import archivo_reporte, documento_reporte
 from .forms import ConsultaInventarioForm
-from .permisos import requiere_personal
+from .permisos import es_administrador_plataforma, requiere_personal
 from .sistema import contexto_sistema, paginar, parametros_consulta
 
 
@@ -114,6 +115,9 @@ def tabla_sms(request, contexto, datos):
 @requiere_personal
 @require_GET
 def consulta_sistema(request, modulo):
+    if (modulo == 'reportes' and request.GET.get('exportar') in ('csv', 'pdf')
+            and not es_administrador_plataforma(request.user)):
+        raise PermissionDenied
     contexto = contexto_sistema(request, modulo, TITULOS[modulo])
     empresa = contexto['empresa_seleccionada']
     if empresa is not None:

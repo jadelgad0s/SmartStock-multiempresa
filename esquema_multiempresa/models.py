@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 
 from .validadores import normalizar_rut, validar_rut
+from .borrado import cascada_central
 
 
 class Empresa(models.Model):
@@ -14,7 +15,8 @@ class Empresa(models.Model):
     razon_social = models.CharField('razón social o nombre del titular', max_length=200, blank=True)
     rut = models.CharField('RUT del cliente', max_length=12, blank=True, validators=[validar_rut])
     rubro = models.CharField(max_length=20, blank=True, choices=RUBROS)
-    contacto_nombre = models.CharField('contacto principal', max_length=160, blank=True)
+    contacto_nombre = models.CharField('nombre(s) del contacto', max_length=160, blank=True)
+    contacto_apellidos = models.CharField('apellido(s) del contacto', max_length=160, blank=True)
     contacto_email = models.EmailField('correo de contacto', max_length=254, blank=True)
     contacto_telefono = models.CharField('teléfono de contacto', max_length=30, blank=True)
     direccion = models.CharField('dirección', max_length=250, blank=True)
@@ -41,7 +43,8 @@ class Empresa(models.Model):
     @property
     def datos_pendientes(self):
         campos = [('razon_social', 'razón social o titular'), ('rut', 'RUT'), ('rubro', 'rubro'),
-                  ('contacto_nombre', 'contacto principal'), ('contacto_email', 'correo de contacto')]
+                  ('contacto_nombre', 'nombre del contacto'), ('contacto_apellidos', 'apellidos del contacto'),
+                  ('contacto_email', 'correo de contacto')]
         return [etiqueta for campo, etiqueta in campos if not getattr(self, campo)]
 
     def __str__(self):
@@ -59,3 +62,23 @@ class TicketAcceso(models.Model):
     class Meta:
         db_table = 'tickets_acceso'
         default_permissions = ()
+
+
+class NotificacionSistema(models.Model):
+    """Avisos del panel interno, separados de las notificaciones de clientes."""
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    # La relación no se expone en los gestores operativos de usuarios: la
+    # tabla solo existe en la central, no en las bases de las empresas.
+    destinatario = models.ForeignKey('usuarios.Usuario', on_delete=cascada_central, related_name='+')
+    titulo = models.CharField(max_length=150)
+    mensaje = models.TextField()
+    empresa_nombre = models.CharField(max_length=160, blank=True)
+    link = models.CharField(max_length=300, blank=True)
+    leida = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'notificaciones_sistema'
+        default_permissions = ()
+        ordering = ['-fecha_creacion', '-id']
+        indexes = [models.Index(fields=['destinatario', 'leida', '-fecha_creacion'], name='aviso_sistema_pendientes')]

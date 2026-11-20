@@ -21,6 +21,7 @@ class Auditoria(TimestampedModel):
         ('DEACTIVATE', 'Desactivación'), ('REACTIVATE', 'Reactivación'),
         ('DELETE', 'Eliminación definitiva'), ('LOGIN', 'Inicio de sesión'),
         ('LOGOUT', 'Cierre de sesión'), ('LOGIN_FAILED', 'Intento fallido de login'),
+        ('CONSULTA', 'Consulta de empresa'),
     ]
     usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.SET_NULL, null=True, blank=True, related_name='acciones_auditoria')
     accion = models.CharField(max_length=20, choices=ACCION_CHOICES)

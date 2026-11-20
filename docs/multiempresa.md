@@ -43,7 +43,7 @@ Comprueba el esquema de las tres bases.
 python manage.py plan_esquema --settings=esquema_multiempresa.settings
 ```
 
-Con el esquema actual deben aparecer 17 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica y pases de acceso.
+Con el esquema actual deben aparecer 18 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica, pases de acceso y notificaciones del equipo.
 
 ```bat
 python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
@@ -63,19 +63,49 @@ python manage.py runserver 127.0.0.1:8000 --settings=esquema_multiempresa.web
 
 El primer comando registra las asociaciones que falten. Se puede repetir y conserva el estado de las empresas registradas. Los dos comandos `seed_empresa` preparan los permisos y roles en la base correspondiente. Cuando se crea una cuenta de administrador de negocio, el comando muestra su correo y una contraseña aleatoria propia de esa empresa. Guarda cada contraseña por separado. Si la cuenta ya existía, conserva sus credenciales. La opción `--sin-admin` permite preparar solo los roles y permisos.
 
-El comando `createsuperuser` prepara el superusuario en la central y solicita un correo propio del equipo SmartStock, nombre, apellido y contraseña. Desde **Cuentas técnicas** se pueden crear las cuentas del personal de soporte.
+El comando `createsuperuser` prepara el superusuario en la central y solicita un correo propio del equipo SmartStock, nombre, apellido y contraseña. Ese superusuario puede crear las demás cuentas desde **Equipo de SmartStock → Añadir cuenta del equipo** y seleccionar su perfil.
 
 Abre [el inicio de sesión local](http://127.0.0.1:8000/) e ingresa tu correo y contraseña. Una cuenta de empresa accede a su propia dirección automáticamente y llega a la vista de su rol. El personal de SmartStock accede al panel `/sistema/`, con el diseño, menú lateral, tema y carga de los módulos de la aplicación.
 
-El panel incluye Dashboard, Empresas, Usuarios de empresas, Cuentas técnicas y Auditoría. Al seleccionar una empresa se consultan su resumen de inventario, catálogo, bodegas, movimientos, transferencias, mermas, alertas SMS y reportes. Los reportes usan los cálculos del Kardex y las existencias de la empresa y permiten descargar CSV e imprimir o guardar PDF. Los formularios de usuarios guardan en la base de la empresa elegida y registran al técnico que realizó el cambio en la descripción de auditoría.
+El panel incluye Dashboard, Empresas, Usuarios de empresas y Auditoría. Al seleccionar una empresa se consultan su resumen de inventario, catálogo, bodegas, movimientos, transferencias, mermas, alertas SMS y reportes. Los reportes usan los cálculos del Kardex y las existencias de la empresa. Los formularios de usuarios guardan en la base de la empresa elegida y registran al responsable de SmartStock en la descripción de auditoría.
 
-Las cuentas centrales con `is_staff=True` representan al personal técnico. El superusuario tiene además `is_superuser=True`. Ambos pueden usar los módulos del panel. **Configuración** abre Django Admin en `/sistema/configuracion/` y exige superusuario tanto en el menú como en cualquier URL interna. La gestión de cuentas del panel permite que un superusuario asigne ese perfil. Las cuentas técnicas pueden administrar otras cuentas técnicas y sus propios datos.
+## Perfiles del equipo de SmartStock
+
+| Función | Superusuario técnico | Administrador de plataforma | Soporte técnico |
+| --- | --- | --- | --- |
+| Consultar empresas, usuarios e inventarios | Sí | Sí | Sí |
+| Crear o editar empresas y activar su servicio | Sí | Sí | No |
+| Crear, editar o desactivar usuarios de empresas | Sí | Sí | No |
+| Consultar reportes y auditoría de una empresa | Sí | Sí | Sí |
+| Exportar reportes CSV o imprimir/PDF | Sí | Sí | No |
+| Consultar la auditoría central de SmartStock | Sí | Sí | No |
+| Gestionar las cuentas y perfiles del equipo | Sí | No | No |
+| Abrir Configuración (Django Admin) | Sí | No | No |
+| Actualizar datos y contraseña en Mi cuenta | Sí | Sí | Sí |
+
+Las cuentas centrales requieren `is_staff=True`, estar activas y tener uno de los perfiles internos activos en la tabla `roles` de la central. El superusuario utiliza además `is_superuser=True` y no necesita un rol de negocio. Los códigos internos son `administrador_plataforma` y `soporte_tecnico`. Los cambios de perfil y su desactivación se comprueban en cada solicitud, incluso en una sesión abierta. Un campo agregado manualmente al formulario no permite modificar el propio perfil ni gestionar otras cuentas.
+
+**Equipo de SmartStock** y **Configuración** solo aparecen para el superusuario. Las URLs y los envíos POST también aplican estas restricciones. Al pulsar el nombre o avatar del usuario, en la parte inferior del menú, se abre **Mi cuenta**. Allí cada integrante puede actualizar sus datos y contraseña; conserva su perfil y no puede desactivar la cuenta propia. El bloque del usuario se resalta mientras esa página está abierta. Un alta nueva propone **Soporte técnico**. El superusuario puede asignar cualquiera de los tres perfiles.
+
+Cada solicitud GET que consulta información de una empresa desde el panel registra un evento **CONSULTA** en la auditoría central, con el responsable, la empresa, el módulo, fecha e IP. Una página que resume varias empresas registra una consulta por empresa. El evento identifica la solicitud; si una base no responde, la pantalla conserva su mensaje de error. El registro no contiene contraseñas ni copia los datos consultados al historial de la empresa. Soporte debe seleccionar una empresa para consultar su auditoría y no accede a los eventos de la central.
+
+Para actualizar una instalación anterior, detén el servidor y aplica las migraciones en los tres alias antes de volver a iniciarlo:
+
+```bat
+python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
+python manage.py migrate --database=ferreteria --settings=esquema_multiempresa.migracion
+python manage.py migrate --database=repuestos --settings=esquema_multiempresa.migracion
+```
+
+La migración `empresas.0004_perfiles_equipo` crea los dos roles internos exclusivamente en la central. Asigna **Administrador de plataforma** a las cuentas técnicas anteriores que no tenían rol para conservar sus funciones de gestión de clientes, y deja constancia de esa asignación en auditoría. Conserva sus contraseñas y estado activo/inactivo. Los superusuarios conservan su perfil. La migración `core.0005_consultas_empresa` agrega la etiqueta de auditoría **CONSULTA**. Los perfiles reutilizan las tablas existentes de roles y usuarios.
+
+Los roles de las empresas siguen siendo **Administrador**, **Encargado de bodega** y **Operador**, almacenados en sus propias bases. Sus permisos no cambian en esta actualización. La cuenta de soporte consulta los datos mediante el panel central; no recibe una sesión operativa de la empresa. El panel central de inventario sigue siendo de consulta para los tres perfiles internos.
 
 Para registrar una empresa adicional, su base y conexión deben estar preparadas en el servidor. Las empresas inactivas siguen disponibles en el panel de soporte y su acceso operativo queda bloqueado.
 
 ## Ficha de empresa y actualización de instalaciones existentes
 
-La ficha central incluye nombre comercial, razón social o nombre del titular, RUT, rubro, contacto principal, correo, teléfono y dirección de contacto (dirección, comuna y región). En un alta nueva se requieren los datos de identificación y el nombre y correo del contacto. El teléfono y la dirección son opcionales. Las empresas registradas antes de esta ampliación conservan sus accesos y pueden completar su información gradualmente. Los datos faltantes se indican en **Ver ficha**.
+La ficha central incluye nombre comercial, razón social o nombre del titular, RUT, rubro, nombre(s) y apellido(s) del contacto, correo, teléfono y dirección de contacto. En un alta nueva se requieren los datos de identificación, nombre, apellidos y correo del contacto. El teléfono y la dirección son opcionales. Las empresas registradas antes de esta ampliación conservan sus accesos y pueden completar su información gradualmente. Los datos faltantes se indican en **Ver ficha**.
 
 Después de actualizar el código, aplica esta migración en la base central antes de iniciar el servidor.
 
@@ -83,7 +113,13 @@ Después de actualizar el código, aplica esta migración en la base central ant
 python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
 ```
 
-La migración `empresas.0003_ficha_empresa` amplía la tabla `empresas`. Conserva los códigos, las bases asignadas y el estado de acceso. Las fechas de registro de las empresas anteriores quedan sin dato porque no se conocen. Las nuevas altas y las actualizaciones guardan sus fechas automáticamente. Se mantienen 17 tablas en la central y 46 en cada empresa.
+La migración `empresas.0003_ficha_empresa` amplía la tabla `empresas`. Conserva los códigos, las bases asignadas y el estado de acceso. Las fechas de registro de las empresas anteriores quedan sin dato porque no se conocen. Las nuevas altas y las actualizaciones guardan sus fechas automáticamente.
+
+La migración `empresas.0005_contacto_apellidos` agrega los apellidos del contacto exclusivamente a la tabla `empresas` de la central. Conserva el texto del contacto anterior sin intentar dividirlo automáticamente. Si ese texto incluía apellidos, se puede separar manualmente desde **Editar ficha**. Los datos operativos y usuarios de cada empresa se conservan. Esta ampliación solo requiere el comando de migración central indicado arriba.
+
+La dirección ofrece primero la región y después sus comunas. Al cambiar la región, la comuna anterior se limpia para que se seleccione una válida. La ficha y Django Admin usan el mismo listado y la misma validación del servidor: no se admite una comuna de otra región mediante un envío manual. Región y comuna pueden quedar vacías porque la dirección es opcional.
+
+El catálogo local incluye las 16 regiones y 346 comunas de la planilla oficial [CUT de SUBDERE](https://www.subdere.gov.cl/documentacion/c%C3%B3digos-%C3%BAnicos-territoriales-actualizados-al-06-de-septiembre-2018), descargada el 20 de noviembre de 2026. Se guarda en `esquema_multiempresa/datos/regiones_comunas.json`, con su fuente y huella del archivo de origen. El formulario funciona sin consultas a servicios externos. Las variaciones reconocidas de direcciones antiguas se muestran normalizadas; los valores anteriores no reconocidos se conservan como opciones marcadas hasta corregirlos. Esa excepción solo permite conservar los valores que la empresa ya tenía.
 
 El RUT admite puntos y un verificador K en minúscula o mayúscula. Se valida el dígito verificador y se guarda sin puntos y con K mayúscula. Un RUT informado pertenece a una sola ficha. El código de acceso se genera a partir del nombre cuando se deja vacío.
 
@@ -101,11 +137,25 @@ El paso a una empresa usa un pase de dos minutos enviado por POST desde el orige
 
 Django comprueba que la empresa sigue activa en cada petición. El perfil web escribe las sesiones técnicas y los pases en la central. Las transacciones de inventario, el Kardex, las comparaciones y las descargas usan la base de la empresa. Los archivos subidos se guardan en `media/<alias>/`. Los correos de recuperación aparecen en la consola de desarrollo y los envíos SMS están desactivados en esta prueba.
 
+## Carga, confirmaciones y campana del panel central
+
+El panel usa la tarjeta blanca de carga con spinner verde y fondo desenfocado. Aparece al navegar entre módulos, consultar filtros, cerrar sesión y guardar formularios. Los envíos repetidos se bloquean y los datos inválidos mantienen el formulario disponible para corregirlos. Volver por el historial restablece los botones y cierra el indicador. Las exportaciones CSV y PDF conservan su comportamiento propio.
+
+Un guardado correcto muestra una sola confirmación breve, con el mismo identificador que su aviso en la campana. Se elimina la franja verde duplicada. Consultar la campana, cambiar de módulo o volver por el historial no vuelve a anunciar ese guardado. Los errores se presentan junto al formulario y no crean notificaciones de éxito.
+
+La migración `empresas.0006_notificaciones_sistema` agrega `notificaciones_sistema` exclusivamente en la central. Cada integrante ve sus propios avisos de empresas, usuarios de empresas, cuentas del equipo y Mi cuenta. Cuando corresponde se identifica la empresa. La sesión central y CSRF protegen la consulta y las marcas de lectura; no se utilizan los JWT de los clientes. Se conservan 46 tablas en cada empresa y la central pasa a 18. Basta actualizar y ejecutar `migrate --database=central --settings=esquema_multiempresa.migracion` con el servidor detenido si las migraciones anteriores ya estaban aplicadas.
+
+El aviso se registra después del commit de la operación y apunta a la cuenta central que la realizó, incluso al gestionar usuarios de una empresa. La confirmación del guardado se mantiene si falla la escritura posterior del historial de avisos; ese fallo se registra en el servidor. No se escriben contraseñas en los avisos. La relación de borrado se limita a la central y no consulta esa tabla al eliminar un usuario de empresa con el mismo ID.
+
+La campana muestra pendientes y **Ver anteriores** permite revisar las últimas 20 notificaciones, incluidas las leídas. **Marcar todas** afecta solo a los avisos propios hasta la fecha de la consulta; un aviso que llega después permanece pendiente. Leer un aviso conserva el historial y puede abrir su ficha o módulo relacionado. La campana se actualiza al abrirla y cada 10 segundos mientras la pestaña está visible, sin mostrar un indicador de pantalla completa por esas consultas de fondo. Los estados de lectura se sincronizan en las otras pestañas con la siguiente consulta.
+
+Las notificaciones operativas de las empresas siguen en sus propias bases, separadas de las del equipo interno. La suite comprueba la pertenencia de los avisos, sesiones revocadas, CSRF, lecturas idempotentes, conservación de avisos nuevos y borrados sin cruzar las bases.
+
 ## Comprobar el aislamiento
 
 Crea una bodega y el mismo SKU en las dos empresas. Registra una entrada de 15 unidades en La Fragua y otra de 4 en Punto Motor. Desde La Fragua registra una salida de 3 unidades. El Kardex de La Fragua debe terminar en 12 y mostrar esa salida. El de Punto Motor debe seguir en 4. Para contrastarlo en el dashboard, crea un segundo SKU en cada catálogo y usa **Comparar productos** sobre la misma bodega y período.
 
-La suite automatizada crea sus propias tres bases desechables. Comprueba el inicio de sesión, las restricciones entre empresas, el Kardex y el comparador, la exportación de auditoría, las sesiones, los archivos y las reversiones de transacciones.
+La suite automatizada crea sus propias tres bases desechables. Comprueba el inicio de sesión, las restricciones entre empresas, el Kardex y el comparador, la exportación de auditoría, las sesiones, los archivos, las reversiones de transacciones y la matriz de permisos internos. Incluye envíos manuales de formularios, restricciones de exportación y de Django Admin, cambios de perfil en sesiones abiertas y la migración de las cuentas anteriores.
 
 ```bat
 set "SS_TEST_POSTGRES="
@@ -114,7 +164,7 @@ python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.prue
 
 Para ejecutar la misma suite con PostgreSQL local o en CI, configura las variables `SS_TEST_DB_USER`, `SS_TEST_DB_PASSWORD`, `SS_TEST_DB_HOST` y `SS_TEST_DB_PORT` con un usuario de pruebas que pueda crear bases y establece `SS_TEST_POSTGRES=true`. El perfil de pruebas usa nombres de base reservados para QA.
 
-La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome y comprueba sus saldos y sesiones independientes. En el panel central crea una cuenta técnica, verifica su menú y la restricción de Configuración, registra un usuario en La Fragua y prueba el menú móvil. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
+La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome y comprueba sus saldos y sesiones independientes. En el panel central crea las cuentas de Administrador de plataforma y Soporte técnico, verifica sus menús y las URLs restringidas, registra un usuario de empresa con el administrador, comprueba las consultas de soporte y prueba el menú móvil. También edita los nombres y apellidos del contacto, cambia entre Maule y Metropolitana, verifica que las comunas cambian y comprueba la selección guardada al reabrir la ficha. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
 
 ```bat
 set "SS_TEST_POSTGRES="

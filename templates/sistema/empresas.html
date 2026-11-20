@@ -1,5 +1,5 @@
 {% extends 'sistema/base.html' %}
-{% block acciones %}<a class="btn btn-primary" href="{% url 'sistema_nueva_empresa' %}"><i class="fa-solid fa-plus me-2" aria-hidden="true"></i>Añadir empresa</a>{% endblock %}
+{% block acciones %}{% if puede_gestionar_empresas %}<a class="btn btn-primary" href="{% url 'sistema_nueva_empresa' %}"><i class="fa-solid fa-plus me-2" aria-hidden="true"></i>Añadir empresa</a>{% endif %}{% endblock %}
 {% block panel_content %}
 <form method="get" class="ss-sistema-busqueda" role="search" data-ss-loading="Buscando empresas…">
   <label for="buscar-empresa">Buscar empresa</label><div class="d-flex gap-2"><input id="buscar-empresa" type="search" name="search" value="{{ request.GET.search }}" maxlength="200" class="form-control" placeholder="Nombre, RUT, código o correo"><button type="submit" class="btn btn-outline-secondary">Buscar</button></div>

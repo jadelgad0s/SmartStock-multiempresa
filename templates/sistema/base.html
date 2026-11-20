@@ -3,7 +3,8 @@
 {% block title %}{{ titulo }} - SmartStock{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=carga-1">
-<link rel="stylesheet" href="{% static 'css/sistema.css' %}?v=ficha-2">
+<link rel="stylesheet" href="{% static 'css/sistema.css' %}?v=avisos-4">
+<link rel="stylesheet" href="{% static 'css/sistema_notificaciones.css' %}?v=1">
 {% endblock %}
 {% block content %}
 <div class="d-flex ss-app-layout ss-sistema" data-ss-autorizado>
@@ -15,18 +16,21 @@
     </a>
     <nav class="ss-sidebar-links" aria-label="Módulos del sistema">
       {% for seccion in secciones_menu %}
-      <p class="text-sidebar-muted">{{ seccion.nombre }}</p>
-      <ul class="nav nav-pills flex-column">
+      <section class="ss-sistema-menu-grupo" aria-labelledby="ss-menu-seccion-{{ forloop.counter }}">
+      <h2 id="ss-menu-seccion-{{ forloop.counter }}" class="text-sidebar-muted">{{ seccion.nombre }}</h2>
+      <ul class="nav nav-pills flex-column ss-sistema-menu-lista">
         {% for enlace in seccion.enlaces %}
-        <li><a href="{{ enlace.url }}" class="nav-link sidebar-item{% if enlace.activo %} active{% endif %}"{% if enlace.activo %} aria-current="page"{% endif %}><i class="fa-solid fa-{{ enlace.icono }} sidebar-icon" aria-hidden="true"></i>{{ enlace.nombre }}</a></li>
+        <li><a href="{{ enlace.url }}" class="nav-link sidebar-item{% if enlace.activo %} active{% endif %}"{% if enlace.activo %} aria-current="page"{% endif %}><i class="fa-solid fa-{{ enlace.icono }} sidebar-icon" aria-hidden="true"></i><span>{{ enlace.nombre }}</span></a></li>
         {% endfor %}
       </ul>
+      </section>
       {% endfor %}
     </nav>
-    <div class="ss-sidebar-profile ss-sistema-perfil mt-auto">
+    <a href="{% url 'sistema_mi_cuenta' %}" class="ss-sidebar-profile ss-sistema-perfil mt-auto" aria-label="Mi cuenta de {{ request.user.nombre_completo|default:request.user.email }}" title="Abrir mi cuenta"{% if modulo == 'mi_cuenta' %} aria-current="page"{% endif %}>
       <span class="ss-dash-avatar rounded-circle" aria-hidden="true">{{ request.user.nombres|first|upper }}{{ request.user.apellidos|first|upper }}</span>
-      <div><strong>{{ request.user.nombre_completo|default:request.user.email }}</strong><span>{% if es_superusuario %}Superusuario{% else %}Técnico de SmartStock{% endif %}</span></div>
-    </div>
+      <span class="ss-sistema-perfil-datos"><strong>{{ request.user.nombre_completo|default:request.user.email }}</strong><span>{{ perfil_personal }}</span></span>
+      <i class="fa-solid fa-angle-right ss-sistema-perfil-flecha" aria-hidden="true"></i>
+    </a>
   </aside>
   <div class="ss-main flex-grow-1 d-flex flex-column">
     <header class="navbar bg-topbar px-4 py-3">
@@ -35,6 +39,7 @@
         <span class="ss-sistema-identidad">Administración de SmartStock</span>
         <div class="d-flex align-items-center gap-3">
           <button type="button" class="btn btn-sm btn-outline-secondary ss-theme-toggle" aria-label="Activar modo oscuro" aria-pressed="false"><i class="fa-solid fa-moon" aria-hidden="true"></i><span class="ss-theme-label ms-2">Oscuro</span></button>
+          {% include 'sistema/notificaciones.html' %}
           <button type="submit" form="ss-cerrar-sesion" class="btn btn-sm btn-outline-secondary">Cerrar sesión</button>
         </div>
       </div>
@@ -44,7 +49,7 @@
         <div><h1>{{ titulo }}</h1>{% if empresa_seleccionada %}<p class="ss-sistema-empresa">{{ empresa_seleccionada.nombre }}{% if not empresa_seleccionada.activa %} · Empresa inactiva{% endif %}</p>{% endif %}</div>
         {% block acciones %}{% endblock %}
       </div>
-      {% for mensaje in messages %}<div class="alert alert-success" role="status">{{ mensaje }}</div>{% endfor %}
+      {{ confirmaciones|json_script:'sistema-confirmaciones' }}
       {% if error_consulta %}<div class="alert alert-danger" role="alert">{{ error_consulta }}</div>{% endif %}
       {% block panel_content %}{% endblock %}
     </main>
@@ -55,5 +60,6 @@
 <script src="{% static 'js/theme.js' %}?v=1" defer></script>
 <script src="{% static 'js/responsive.js' %}?v=2" defer></script>
 <script src="{% static 'js/carga.js' %}" defer></script>
-<script src="{% static 'js/sistema.js' %}?v=ficha-2" defer></script>
+<script src="{% static 'js/sistema.js' %}?v=avisos-4" defer></script>
+<script src="{% static 'js/sistema_notificaciones.js' %}?v=1" defer></script>
 {% endblock %}

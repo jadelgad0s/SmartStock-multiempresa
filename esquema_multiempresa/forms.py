@@ -6,6 +6,7 @@ from apps.productos.models import Bodega, Producto
 from apps.productos.reportes import TITULOS
 from apps.usuarios.models import Rol, Usuario
 from .admin_central import EmpresaForm
+from .permisos import PERFILES_EQUIPO, SOPORTE_TECNICO, perfil_personal
 
 
 class FormularioPanel:
@@ -28,9 +29,12 @@ class EmpresaPanelForm(FormularioPanel, EmpresaForm):
         self.fields['rut'].widget = forms.TextInput(attrs={'placeholder': '12.345.678-5', 'maxlength': 15})
         # Los registros anteriores pueden completar su ficha gradualmente.
         if self.instance._state.adding:
-            for nombre in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_email'):
+            for nombre in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_apellidos', 'contacto_email'):
                 self.fields[nombre].required = True
-        self.fields['contacto_nombre'].widget.attrs['autocomplete'] = 'name'
+        self.fields['contacto_nombre'].widget.attrs['autocomplete'] = 'given-name'
+        self.fields['contacto_apellidos'].widget.attrs['autocomplete'] = 'family-name'
+        if not self.instance._state.adding and self.instance.contacto_nombre and not self.instance.contacto_apellidos:
+            self.fields['contacto_apellidos'].help_text = 'Si el nombre anterior incluye apellidos, sepáralos en estos dos campos al actualizar el contacto.'
         self.fields['contacto_email'].widget.attrs['autocomplete'] = 'email'
         self.fields['contacto_telefono'].widget = forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'})
         self.fields['direccion'].widget.attrs['autocomplete'] = 'street-address'
@@ -42,9 +46,9 @@ class EmpresaPanelForm(FormularioPanel, EmpresaForm):
             ('Identificación de la empresa', 'Datos que identifican al cliente de SmartStock.',
              [self[nombre] for nombre in ('nombre', 'razon_social', 'rut', 'rubro')]),
             ('Contacto principal', 'Persona con quien coordinar la habilitación y el soporte del servicio.',
-             [self[nombre] for nombre in ('contacto_nombre', 'contacto_email', 'contacto_telefono')]),
+             [self[nombre] for nombre in ('contacto_nombre', 'contacto_apellidos', 'contacto_email', 'contacto_telefono')]),
             ('Dirección de contacto', 'Opcional. Las direcciones de las bodegas se registran en su propio módulo.',
-             [self[nombre] for nombre in ('direccion', 'comuna', 'region')]),
+             [self[nombre] for nombre in ('direccion', 'region', 'comuna')]),
             ('Acceso a SmartStock', 'Asigna la base preparada y revisa el acceso de la empresa.',
              [self[nombre] for nombre in ('codigo', 'alias_bd', 'activa')]),
         ]
@@ -115,14 +119,14 @@ class UsuarioEmpresaForm(CuentaPanelForm):
 
 
 class CuentaTecnicaForm(CuentaPanelForm):
-    perfil = forms.ChoiceField(label='Perfil de acceso', choices=(('tecnico', 'Técnico de SmartStock'), ('superusuario', 'Superusuario')))
+    perfil = forms.ChoiceField(label='Perfil de acceso', choices=tuple(PERFILES_EQUIPO.items()))
 
     def __init__(self, *args, actor, **kwargs):
         self.actor = actor
         super().__init__(*args, alias='central', **kwargs)
-        self.initial['perfil'] = 'superusuario' if self.instance.is_superuser else 'tecnico'
+        self.initial['perfil'] = perfil_personal(self.instance) if self.instance.pk else SOPORTE_TECNICO
         if not actor.is_superuser:
-            del self.fields['perfil']
+            self.fields['perfil'].disabled = True
         if self.instance.pk == actor.pk:
             self.fields['activo'].disabled = True
             if 'perfil' in self.fields:
@@ -130,12 +134,26 @@ class CuentaTecnicaForm(CuentaPanelForm):
         self.order_fields(('nombres', 'apellidos', 'email', 'telefono', 'perfil', 'activo', 'password1', 'password2'))
         self.estilizar()
 
+    def clean(self):
+        datos = super().clean()
+        if not self.actor.is_superuser and (not self.instance.pk or self.instance.pk != self.actor.pk):
+            raise forms.ValidationError('Solo el superusuario puede gestionar cuentas del equipo.')
+        self.rol_elegido = None
+        perfil = datos.get('perfil')
+        if perfil and perfil != 'superusuario':
+            self.rol_elegido = Rol.objects.using('central').filter(codigo=perfil).first()
+            if self.rol_elegido is None:
+                self.add_error('perfil', 'Este perfil todavía no está preparado en la central.')
+            elif not self.rol_elegido.activo and self.instance.rol_id != self.rol_elegido.pk:
+                self.add_error('perfil', 'Selecciona un perfil activo.')
+        return datos
+
     def save(self, commit=True):
         usuario = super().save(commit=False)
         usuario.is_staff = True
-        usuario.rol = None
         if self.actor.is_superuser:
             usuario.is_superuser = self.cleaned_data['perfil'] == 'superusuario'
+            usuario.rol = self.rol_elegido
         if commit:
             usuario.save(using='central')
         return usuario
