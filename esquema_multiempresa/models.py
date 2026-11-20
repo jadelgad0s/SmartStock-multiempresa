@@ -82,3 +82,79 @@ class NotificacionSistema(models.Model):
         default_permissions = ()
         ordering = ['-fecha_creacion', '-id']
         indexes = [models.Index(fields=['destinatario', 'leida', '-fecha_creacion'], name='aviso_sistema_pendientes')]
+
+
+class BuzonContacto(models.Model):
+    """Estado de consulta del único buzón; nunca contiene credenciales."""
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    cuenta_zoho = models.CharField(max_length=40, blank=True)
+    ultima_consulta = models.DateTimeField(null=True, blank=True)
+    siguiente_pagina = models.PositiveIntegerField(default=1)
+    historial_completo = models.BooleanField(default=False)
+    bloqueo = models.UUIDField(null=True, blank=True)
+    iniciado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'buzon_contacto'
+        default_permissions = ()
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name='buzon_contacto_unico')]
+
+
+class MensajeContacto(models.Model):
+    ESTADOS = [('pendiente', 'Pendiente'), ('seguimiento', 'En seguimiento'), ('resuelto', 'Resuelto')]
+    CATEGORIAS = [('general', 'Consulta general'), ('acceso', 'Acceso a la cuenta'),
+                  ('uso', 'Ayuda con SmartStock'), ('incidencia', 'Incidencia'), ('otro', 'Otro')]
+    cuenta_zoho = models.CharField(max_length=40)
+    mensaje_zoho = models.CharField(max_length=40)
+    carpeta_zoho = models.CharField(max_length=40)
+    remitente_nombre = models.CharField(max_length=200, blank=True)
+    remitente_email = models.EmailField(max_length=254, blank=True)
+    asunto = models.CharField(max_length=300, blank=True)
+    resumen = models.TextField(blank=True)
+    contenido = models.TextField(blank=True)
+    contenido_cargado = models.BooleanField(default=False)
+    tiene_adjuntos = models.BooleanField(default=False)
+    recibido_en = models.DateTimeField(default=timezone.now)
+    leido = models.BooleanField(default=False)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='pendiente')
+    categoria = models.CharField(max_length=20, choices=CATEGORIAS, default='general')
+    seguimiento = models.DateField(null=True, blank=True)
+    version = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'mensajes_contacto'
+        default_permissions = ()
+        ordering = ['-recibido_en', '-pk']
+        constraints = [models.UniqueConstraint(fields=['cuenta_zoho', 'mensaje_zoho'], name='correo_contacto_sin_duplicar')]
+        indexes = [models.Index(fields=['estado', '-recibido_en'], name='contacto_estado_fecha')]
+
+
+class NotaContacto(models.Model):
+    mensaje = models.ForeignKey(MensajeContacto, on_delete=models.CASCADE, related_name='notas')
+    texto = models.TextField()
+    creada_en = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'notas_contacto'
+        default_permissions = ()
+        ordering = ['-creada_en', '-pk']
+
+
+class RespuestaContacto(models.Model):
+    ESTADOS = [('borrador', 'Borrador'), ('enviando', 'Enviando'), ('enviada', 'Enviada'),
+               ('incierta', 'Revisar en Zoho'), ('rechazada', 'No enviada')]
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    mensaje = models.ForeignKey(MensajeContacto, on_delete=models.CASCADE, related_name='respuestas')
+    texto = models.TextField()
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='borrador')
+    version = models.PositiveIntegerField(default=0)
+    creada_en = models.DateTimeField(default=timezone.now)
+    enviada_en = models.DateTimeField(null=True, blank=True)
+    iniciado_en = models.DateTimeField(null=True, blank=True)
+    mensaje_zoho = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        db_table = 'respuestas_contacto'
+        default_permissions = ()
+        ordering = ['-creada_en']
+        constraints = [models.UniqueConstraint(fields=['mensaje'], condition=models.Q(estado='borrador'), name='contacto_un_borrador')]

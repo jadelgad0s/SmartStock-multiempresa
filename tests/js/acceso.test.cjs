@@ -87,6 +87,12 @@ test('el acceso técnico abre su panel y un destino externo se rechaza',async t=
  c.completar();c.enviar();await c.responder({success:true,data:{destinos:[{url:'http://otra.example.com/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'}]}});
  assert.equal(enviado,false);assert.equal(c.el('login-submit').disabled,false);assert.equal(c.el('alert-box').hidden,false);
 });
+test('contacto abre únicamente su ruta permitida sin guardar JWT de empresas',async t=>{
+ const c=await pantalla(t);c.completar();c.enviar();await c.responder({success:true,data:{contacto:true,inicio:'/contacto/bandeja/'}});
+ assert.equal(c.el('login-submit').disabled,true);assert.equal(c.w.localStorage.getItem('access_token'),null);
+ const invalido=await pantalla(t);invalido.completar();invalido.enviar();await invalido.responder({success:true,data:{contacto:true,inicio:'https://example.invalid/'}});
+ assert.equal(invalido.el('login-submit').disabled,false);assert.equal(invalido.el('alert-box').hidden,false);
+});
 test('fallar al guardar la sesión limpia tokens parciales y conserva el tema',async t=>{
  const c=await pantalla(t);c.w.localStorage.setItem('smartstock-theme','dark');const original=c.w.Storage.prototype.setItem;
  c.w.Storage.prototype.setItem=function(k,v){if(k==='refresh_token')throw new c.w.DOMException('Cuota','QuotaExceededError');return original.call(this,k,v);};

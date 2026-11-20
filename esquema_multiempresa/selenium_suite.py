@@ -18,8 +18,10 @@ from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
 from apps.core.models import Auditoria
 from apps.usuarios.models import Usuario
-from esquema_multiempresa.models import Empresa, NotificacionSistema
+from esquema_multiempresa.models import Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
 from esquema_multiempresa.permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
+from esquema_multiempresa.permisos import CONTACTO, CORREO_CONTACTO
+from apps.usuarios.models import Rol
 
 
 if (settings.SETTINGS_MODULE != 'esquema_multiempresa.testing'
@@ -37,6 +39,14 @@ for _alias in ('central', 'ferreteria', 'repuestos'):
 
 class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
     databases = {'central', 'ferreteria', 'repuestos'}
+
+    def setUp(self):
+        super().setUp()
+        # StaticLiveServerTestCase vacía los datos entre clases; los roles de
+        # migración se preparan también cuando otra prueba de Chrome va antes.
+        for codigo, nombre in ((ADMINISTRADOR_PLATAFORMA, 'Administrador de plataforma'),
+                               (SOPORTE_TECNICO, 'Soporte técnico')):
+            Rol.objects.using('central').get_or_create(codigo=codigo, defaults={'nombre': nombre, 'es_sistema': True})
 
     def comprobar_menu(self, navegador):
         grupos = navegador.execute_script('''
@@ -291,3 +301,71 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertTrue(Auditoria.objects.using('central').filter(usuario=soporte, accion='CONSULTA',
                                                                objeto_id=str(Empresa.objects.get(codigo='la-fragua').pk)).exists())
         self.assertEqual(StockBodega.objects.using('repuestos').get(producto__sku='QA-001').cantidad_total, 4)
+
+
+class ContactoEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+
+    def test_alta_exclusiva_login_bandeja_borradores_y_seguimiento_en_movil(self):
+        Usuario.objects.db_manager('central').create_superuser(
+            email='root-contacto@example.invalid', password='Root-fixture-contacto-2026!', nombres='Root')
+        Rol.objects.using('central').get_or_create(codigo=CONTACTO, defaults={'nombre':'Contacto', 'es_sistema':True})
+        mensaje = MensajeContacto.objects.using('central').create(
+            cuenta_zoho='101', mensaje_zoho='201', carpeta_zoho='301', remitente_email='consulta@example.invalid',
+            remitente_nombre='Persona de prueba', asunto='Necesito ayuda con mi cuenta', contenido_cargado=True,
+            contenido='Quiero orientación sobre SmartStock.', resumen='Consulta de acceso')
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys('root-contacto@example.invalid')
+        navegador.find_element(By.ID, 'password').send_keys('Root-fixture-contacto-2026!')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/sistema/'))
+        navegador.get(self.live_server_url + '/sistema/cuentas/nueva/')
+        self.assertNotIn('Contacto', [opcion.text for opcion in Select(navegador.find_element(By.ID, 'id_perfil')).options])
+        navegador.get(self.live_server_url + '/sistema/contacto/cuenta/')
+        self.assertFalse(navegador.find_element(By.ID, 'id_email').is_enabled())
+        for campo, valor in [('nombres','Contacto'),('apellidos','SmartStock'),
+                             ('password1','Cuenta-fixture-contacto-2026!'),('password2','Cuenta-fixture-contacto-2026!')]:
+            navegador.find_element(By.ID, 'id_' + campo).send_keys(valor)
+        navegador.find_element(By.CSS_SELECTOR, '.ss-sistema-formulario button[type="submit"]').click()
+        espera.until(lambda d: Usuario.objects.using('central').filter(email=CORREO_CONTACTO).exists())
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        navegador.find_element(By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]').click()
+        espera.until(EC.visibility_of_element_located((By.ID, 'email')))
+        navegador.find_element(By.ID, 'email').send_keys(CORREO_CONTACTO)
+        navegador.find_element(By.ID, 'password').send_keys('Cuenta-fixture-contacto-2026!')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/contacto/bandeja/'))
+        self.assertIn('Atención de SmartStock', navegador.find_element(By.TAG_NAME, 'body').text)
+        for ruta in ('/sistema/','/sistema/empresas/','/sistema/configuracion/'):
+            self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, f'.ss-sidebar a[href="{ruta}"]'))
+        navegador.find_element(By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]').click()
+        espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
+        Select(navegador.find_element(By.ID, 'id_estado')).select_by_value('seguimiento')
+        navegador.find_element(By.CSS_SELECTOR, 'button[value="seguimiento"]').click()
+        espera.until(lambda d: MensajeContacto.objects.using('central').get(pk=mensaje.pk).estado == 'seguimiento')
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        navegador.find_element(By.CSS_SELECTOR, '[data-borrador-editor] textarea').send_keys('Gracias por escribirnos. Te orientaremos sobre el acceso.')
+        navegador.find_element(By.CSS_SELECTOR, 'button[value="borrador"]').click()
+        espera.until(lambda d: RespuestaContacto.objects.using('central').filter(mensaje=mensaje).exists())
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        self.assertFalse(navegador.find_element(By.CSS_SELECTOR, '[data-respuesta-enviar]').is_enabled())
+        nota = navegador.find_element(By.CSS_SELECTOR, '.ss-contacto-seguimiento textarea[name="texto"]')
+        nota.send_keys('Revisar consulta mañana.')
+        navegador.find_element(By.CSS_SELECTOR, 'button[value="nota"]').click()
+        espera.until(lambda d: NotaContacto.objects.using('central').filter(mensaje=mensaje).exists())
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        navegador.set_window_size(390, 844)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+        self.assertTrue(navegador.find_element(By.CSS_SELECTOR, '.ss-contacto-texto').is_displayed())
+        navegador.find_element(By.CSS_SELECTOR, '.ss-menu-toggle').click()
+        espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.ss-sistema-perfil'))).click()
+        espera.until(EC.url_contains('/contacto/mi-cuenta/'))
+        self.assertFalse(navegador.find_element(By.ID, 'id_email').is_enabled())
+        self.assertFalse(navegador.find_elements(By.ID, 'id_perfil'))
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))

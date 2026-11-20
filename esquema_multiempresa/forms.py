@@ -6,7 +6,7 @@ from apps.productos.models import Bodega, Producto
 from apps.productos.reportes import TITULOS
 from apps.usuarios.models import Rol, Usuario
 from .admin_central import EmpresaForm
-from .permisos import PERFILES_EQUIPO, SOPORTE_TECNICO, perfil_personal
+from .permisos import CONTACTO, CORREO_CONTACTO, PERFILES_EQUIPO, SOPORTE_TECNICO, perfil_personal
 
 
 class FormularioPanel:
@@ -75,6 +75,8 @@ class CuentaPanelForm(FormularioPanel, forms.ModelForm):
 
     def clean_email(self):
         correo = self.cleaned_data['email'].strip().lower()
+        if correo == CORREO_CONTACTO and not isinstance(self, CuentaContactoForm):
+            raise forms.ValidationError('Este correo está reservado. Utiliza Cuenta de contacto en el equipo de SmartStock.')
         existentes = Usuario.objects.using(self.alias).filter(email__iexact=correo)
         if self.instance.pk:
             existentes = existentes.exclude(pk=self.instance.pk)
@@ -154,6 +156,37 @@ class CuentaTecnicaForm(CuentaPanelForm):
         if self.actor.is_superuser:
             usuario.is_superuser = self.cleaned_data['perfil'] == 'superusuario'
             usuario.rol = self.rol_elegido
+        if commit:
+            usuario.save(using='central')
+        return usuario
+
+
+class CuentaContactoForm(CuentaPanelForm):
+    """Alta separada; ni el correo ni el rol se reciben del navegador."""
+    def __init__(self, *args, propia=False, **kwargs):
+        super().__init__(*args, alias='central', **kwargs)
+        self.fields['email'].initial = self.initial['email'] = CORREO_CONTACTO
+        self.fields['email'].disabled = True
+        self.fields['email'].help_text = 'Cuenta exclusiva de atención de SmartStock. El correo y el perfil son fijos.'
+        if propia:
+            self.fields['activo'].disabled = True
+        self.order_fields(('nombres', 'apellidos', 'email', 'telefono', 'activo', 'password1', 'password2'))
+
+    def clean(self):
+        datos = super().clean()
+        if self.instance.pk and self.instance.is_superuser:
+            raise forms.ValidationError('Este correo pertenece a un superusuario. Cambia primero su correo desde Equipo de SmartStock; no se convertirá automáticamente.')
+        self.rol_contacto = Rol.objects.using('central').filter(codigo=CONTACTO, activo=True).first()
+        if not self.rol_contacto:
+            raise forms.ValidationError('Aplica las migraciones de la central para preparar la cuenta de contacto.')
+        return datos
+
+    def save(self, commit=True):
+        usuario = super().save(commit=False)
+        usuario.email = CORREO_CONTACTO
+        usuario.is_staff = True
+        usuario.is_superuser = False
+        usuario.rol = self.rol_contacto
         if commit:
             usuario.save(using='central')
         return usuario

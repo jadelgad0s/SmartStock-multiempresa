@@ -74,6 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (d?.sistema === true && d.inicio === '/sistema/') {
         completado = true;
         window.location.href = d.inicio;
+      } else if (d?.contacto === true && d.inicio === '/contacto/bandeja/') {
+        completado = true;
+        window.location.href = d.inicio;
       } else if (Array.isArray(d?.destinos) && d.destinos.length) {
         clave.value = '';
         if (d.destinos.length === 1) {

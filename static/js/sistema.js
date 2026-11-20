@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!enlace || evento.defaultPrevented || evento.button !== 0 || evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey
         || enlace.hasAttribute('download') || (enlace.target && enlace.target !== '_self')) return;
     const url = new URL(enlace.href, window.location.href);
-    if (url.origin !== window.location.origin || !url.pathname.startsWith('/sistema/')
+    if (url.origin !== window.location.origin || !(/^\/(sistema|contacto)\//).test(url.pathname)
         || (url.pathname === window.location.pathname && url.search === window.location.search)) return;
     if (navegando) { evento.preventDefault(); return; }
     cargarPagina('Cargando ' + (enlace.textContent.trim() || 'SmartStock') + '…');

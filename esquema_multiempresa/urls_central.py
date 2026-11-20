@@ -6,6 +6,7 @@ from apps.usuarios.views_recuperacion import (
     RecuperacionEnviadaView, EstablecerNuevaClaveView, ClaveActualizadaView,
 )
 from .admin_central import sitio_sistema
+from .contacto import bandeja, cuenta_contacto, detalle_mensaje, mi_cuenta_contacto, sincronizar
 from .login import LoginCentralView, login_central
 from .recuperacion_central import SolicitarRecuperacionCentralView
 from .consultas_sistema import consulta_sistema, inventario_sistema
@@ -20,6 +21,10 @@ urlpatterns = [
     path('', login_central, name='login_page'),
     path('api/v1/auth/login-web/', LoginCentralView.as_view(), name='login_web'),
     path('contacto/', TemplateView.as_view(template_name='usuarios/contacto.html'), name='contacto_page'),
+    path('contacto/bandeja/', bandeja, name='contacto_bandeja'),
+    path('contacto/sincronizar/', sincronizar, name='contacto_sincronizar'),
+    path('contacto/mensajes/<int:mensaje_id>/', detalle_mensaje, name='contacto_mensaje'),
+    path('contacto/mi-cuenta/', mi_cuenta_contacto, name='contacto_mi_cuenta'),
     path('cerrar-sesion/', logout_web, name='logout_web'),
     path('recuperar-clave/', SolicitarRecuperacionCentralView.as_view(), name='recuperar_clave'),
     path('recuperacion-enviada/', RecuperacionEnviadaView.as_view(), name='recuperacion_enviada'),
@@ -34,6 +39,7 @@ urlpatterns = [
     path('sistema/empresas/<slug:codigo>/usuarios/nuevo/', editar_usuario_empresa, name='sistema_nuevo_usuario_empresa'),
     path('sistema/empresas/<slug:codigo>/usuarios/<int:usuario_id>/', editar_usuario_empresa, name='sistema_editar_usuario_empresa'),
     path('sistema/cuentas/', cuentas_sistema, name='sistema_cuentas'),
+    path('sistema/contacto/cuenta/', cuenta_contacto, name='sistema_cuenta_contacto'),
     path('sistema/cuentas/nueva/', editar_cuenta_tecnica, name='sistema_nueva_cuenta'),
     path('sistema/cuentas/<int:usuario_id>/', editar_cuenta_tecnica, name='sistema_editar_cuenta'),
     path('sistema/mi-cuenta/', mi_cuenta, name='sistema_mi_cuenta'),

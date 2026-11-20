@@ -6,3 +6,6 @@ class EmpresasConfig(AppConfig):
     label = 'empresas'
     verbose_name = 'Empresas de SmartStock'
     default_auto_field = 'django.db.models.BigAutoField'
+
+    def ready(self):
+        from . import identidad_contacto  # noqa: F401

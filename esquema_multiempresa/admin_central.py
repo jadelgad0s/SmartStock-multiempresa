@@ -174,6 +174,10 @@ class PerfilCuentaCentralForm:
 
     def clean(self):
         datos = super().clean()
+        from .permisos import CONTACTO, CORREO_CONTACTO
+        if (datos.get('email', '').lower() == CORREO_CONTACTO
+                or self.instance.rol_id and self.instance.rol.codigo == CONTACTO):
+            self.add_error(None, 'La cuenta de contacto se gestiona únicamente en /sistema/contacto/cuenta/.')
         if datos.get('is_superuser'):
             datos['rol'] = None
         elif datos.get('rol') is None:
