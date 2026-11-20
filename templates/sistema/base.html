@@ -25,7 +25,7 @@
     </nav>
     <div class="ss-sidebar-profile ss-sistema-perfil mt-auto">
       <span class="ss-dash-avatar rounded-circle" aria-hidden="true">{{ request.user.nombres|first|upper }}{{ request.user.apellidos|first|upper }}</span>
-      <div><strong>{{ request.user.nombre_completo|default:request.user.email }}</strong><span>{% if es_superusuario %}Superusuario{% else %}Técnico de SmartStock{% endif %}</span></div>
+      <div><strong>{{ request.user.nombre_completo|default:request.user.email }}</strong><span>{{ perfil_personal }}</span></div>
     </div>
   </aside>
   <div class="ss-main flex-grow-1 d-flex flex-column">

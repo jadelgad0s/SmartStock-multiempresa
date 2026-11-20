@@ -1,5 +1,6 @@
 """Permisos del panel central, consultas por empresa y gestión sin cruces de IDs."""
 from datetime import timedelta
+from importlib import import_module
 from io import StringIO
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from apps.productos.models import Bodega, DetalleMovimiento, Movimiento, Product
 from apps.usuarios.models import Rol, Sesion, Usuario
 from .models import Empresa
 from .forms import EmpresaPanelForm
+from .permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
@@ -40,7 +42,11 @@ class PanelSmartStockTests(TestCase):
         cls.superusuario = Usuario.objects.db_manager('central').create_superuser(
             pk=90, email='superusuario@example.invalid', password=cls.clave, nombres='Javier', apellidos='Prueba')
         cls.tecnico = Usuario.objects.db_manager('central').create_user(
-            pk=91, email='tecnico@example.invalid', password=cls.clave, nombres='Soporte', is_staff=True)
+            pk=91, email='tecnico@example.invalid', password=cls.clave, nombres='Gestión', is_staff=True,
+            rol=Rol.objects.using('central').get(codigo=ADMINISTRADOR_PLATAFORMA))
+        cls.soporte = Usuario.objects.db_manager('central').create_user(
+            pk=94, email='soporte@example.invalid', password=cls.clave, nombres='Soporte', is_staff=True,
+            rol=Rol.objects.using('central').get(codigo=SOPORTE_TECNICO))
 
     def setUp(self):
         cache.clear()
@@ -60,14 +66,17 @@ class PanelSmartStockTests(TestCase):
 
     def datos_cuenta(self, **cambios):
         return {'email': 'nueva@example.invalid', 'nombres': 'Nueva', 'apellidos': 'Cuenta',
-                'telefono': '', 'activo': 'on', 'password1': self.clave, 'password2': self.clave, **cambios}
+                'telefono': '', 'activo': 'on', 'perfil': SOPORTE_TECNICO,
+                'password1': self.clave, 'password2': self.clave, **cambios}
 
-    def test_tecnico_ingresa_sin_rol_de_negocio_y_recibe_panel_smartstock(self):
+    def test_administrador_plataforma_recibe_panel_propio_y_perfil_visible(self):
         self.entrar()
         panel = self.cliente.get('/sistema/')
         self.assertContains(panel, 'ss-app-layout')
-        for modulo in ('Empresas', 'Usuarios de empresas', 'Cuentas técnicas', 'Auditoría', 'Catálogo', 'Transferencias'):
+        for modulo in ('Empresas', 'Usuarios de empresas', 'Mi cuenta', 'Auditoría', 'Catálogo', 'Transferencias'):
             self.assertContains(panel, modulo)
+        self.assertContains(panel, 'Administrador de plataforma')
+        self.assertNotContains(panel, 'href="/sistema/cuentas/"')
         self.assertNotContains(panel, 'href="/sistema/configuracion/"')
         self.assertNotContains(panel, 'id="content-main"')
         self.assertRedirects(self.cliente.get('/'), '/sistema/', fetch_redirect_response=False)
@@ -149,14 +158,12 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(Usuario.objects.using('central').get(pk=90).email, self.superusuario.email)
         self.assertEqual(Auditoria.objects.using('ferreteria').latest('id').accion, 'DEACTIVATE')
 
-    def test_crear_tecnico_no_otorga_superusuario_y_no_permite_editar_un_superusuario(self):
+    def test_administrador_plataforma_no_gestiona_el_equipo_por_url_o_post(self):
         self.entrar()
         datos = self.datos_cuenta(perfil='superusuario', is_superuser='on')
-        self.assertEqual(self.guardar('/sistema/cuentas/nueva/', datos).status_code, 302)
-        nuevo = Usuario.objects.using('central').get(email='nueva@example.invalid')
-        self.assertTrue(nuevo.is_staff)
-        self.assertFalse(nuevo.is_superuser)
-        self.assertIsNone(nuevo.rol_id)
+        self.assertEqual(self.guardar('/sistema/cuentas/nueva/', datos).status_code, 403)
+        self.assertFalse(Usuario.objects.using('central').filter(email='nueva@example.invalid').exists())
+        self.assertEqual(self.cliente.get('/sistema/cuentas/').status_code, 403)
         ruta = f'/sistema/cuentas/{self.superusuario.pk}/'
         self.assertEqual(self.cliente.get(ruta).status_code, 403)
         self.assertEqual(self.guardar(ruta, self.datos_cuenta()).status_code, 403)
@@ -168,7 +175,7 @@ class PanelSmartStockTests(TestCase):
 
     def test_cambiar_la_clave_propia_conserva_la_sesion_y_no_desactiva_la_cuenta(self):
         self.entrar()
-        ruta = f'/sistema/cuentas/{self.tecnico.pk}/'
+        ruta = '/sistema/mi-cuenta/'
         datos = self.datos_cuenta(email=self.tecnico.email, activo='', password1='Otra-clave-para-fixture-2626!', password2='Otra-clave-para-fixture-2626!')
         self.assertEqual(self.guardar(ruta, datos).status_code, 302)
         usuario = Usuario.objects.using('central').get(pk=self.tecnico.pk)
@@ -177,14 +184,14 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(self.cliente.get('/sistema/').status_code, 200)
 
     def test_validaciones_y_csrf_evitan_guardados_parciales(self):
-        self.entrar()
+        self.entrar(self.superusuario)
         datos = self.datos_cuenta(password1='abc', password2='def')
         self.assertEqual(self.guardar('/sistema/cuentas/nueva/', datos).status_code, 200)
         self.assertFalse(Usuario.objects.using('central').filter(email=datos['email']).exists())
         self.assertEqual(self.cliente.post('/sistema/cuentas/nueva/', self.datos_cuenta()).status_code, 403)
 
     def test_usuarios_y_cuentas_tienen_paginacion_de_25_y_busqueda(self):
-        self.entrar()
+        self.entrar(self.superusuario)
         for numero in range(27):
             Usuario.objects.db_manager('central').create_user(email=f'qa{numero}@example.invalid', nombres=f'Cuenta {numero:02}', is_staff=True)
         pagina = self.cliente.get('/sistema/cuentas/')
@@ -233,7 +240,7 @@ class PanelSmartStockTests(TestCase):
         with patch('esquema_multiempresa.sistema.Producto.objects.filter', side_effect=OperationalError('base indisponible')):
             pagina = self.cliente.get('/sistema/')
         self.assertContains(pagina, 'Sin conexión con la empresa')
-        self.assertEqual(self.cliente.get('/sistema/cuentas/').status_code, 200)
+        self.assertEqual(self.cliente.get('/sistema/mi-cuenta/').status_code, 200)
 
     def test_eliminar_superusuario_central_conserva_auditoria_y_usuarios_de_empresas(self):
         cuenta = Usuario.objects.db_manager('central').create_superuser(
@@ -443,6 +450,152 @@ class PanelSmartStockTests(TestCase):
         self.assertNotContains(pagina, 'Sin productos activos')
         self.assertNotContains(pagina, 'id="sistema-kpi-stock"')
 
+    def test_superusuario_asigna_los_dos_perfiles_y_registra_al_responsable(self):
+        self.entrar(self.superusuario)
+        nueva = self.cliente.get('/sistema/cuentas/nueva/')
+        self.assertEqual(nueva.context['formulario'].initial['perfil'], SOPORTE_TECNICO)
+        for perfil in (ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO):
+            correo = perfil + '@example.invalid'
+            respuesta = self.guardar('/sistema/cuentas/nueva/', self.datos_cuenta(email=correo, perfil=perfil))
+            self.assertRedirects(respuesta, '/sistema/cuentas/', fetch_redirect_response=False)
+            cuenta = Usuario.objects.using('central').get(email=correo)
+            self.assertTrue(cuenta.is_staff and cuenta.activo)
+            self.assertFalse(cuenta.is_superuser)
+            self.assertEqual(cuenta.rol.codigo, perfil)
+            evento = Auditoria.objects.using('central').latest('id')
+            self.assertEqual(evento.usuario_id, self.superusuario.pk)
+            self.assertIn(cuenta.rol.nombre, evento.descripcion)
+            self.assertNotIn(self.clave, evento.descripcion)
+
+    def test_soporte_consulta_los_modulos_sin_controles_de_gestion(self):
+        self.entrar(self.soporte)
+        panel = self.cliente.get('/sistema/')
+        self.assertContains(panel, 'Soporte técnico')
+        for ruta in ('/sistema/cuentas/', '/sistema/configuracion/', '/sistema/empresas/nueva/'):
+            self.assertNotContains(panel, f'href="{ruta}"')
+        for ruta in ('empresas/', 'empresas/la-fragua/', 'usuarios/?empresa=la-fragua',
+                     'inventario/?empresa=la-fragua', 'catalogo/?empresa=la-fragua',
+                     'bodegas/?empresa=la-fragua', 'movimientos/?empresa=la-fragua',
+                     'transferencias/?empresa=la-fragua', 'mermas/?empresa=la-fragua',
+                     'alertas-sms/?empresa=la-fragua', 'reportes/?empresa=la-fragua',
+                     'auditoria/?empresa=la-fragua'):
+            pagina = self.cliente.get('/sistema/' + ruta)
+            self.assertEqual(pagina.status_code, 200, ruta)
+            for accion in ('Añadir empresa', 'Añadir usuario', 'Añadir administrador', 'Editar ficha', 'Exportar CSV', 'Imprimir / PDF'):
+                self.assertNotContains(pagina, accion)
+        self.assertEqual(self.cliente.get('/sistema/mi-cuenta/').status_code, 200)
+
+    def test_soporte_no_modifica_empresas_usuarios_o_equipo_aunque_envie_post_valido(self):
+        self.entrar(self.soporte)
+        rol = Rol.objects.using('ferreteria').get(codigo='administrador')
+        intentos = (
+            ('/sistema/empresas/nueva/', self.datos_empresa()),
+            ('/sistema/empresas/la-fragua/editar/', self.datos_empresa(codigo='la-fragua')),
+            ('/sistema/empresas/la-fragua/usuarios/nuevo/', self.datos_cuenta(rol=rol.pk)),
+            ('/sistema/empresas/la-fragua/usuarios/90/', self.datos_cuenta(rol=rol.pk, activo='')),
+            ('/sistema/cuentas/nueva/', self.datos_cuenta(perfil='superusuario')),
+            (f'/sistema/cuentas/{self.superusuario.pk}/', self.datos_cuenta(perfil=SOPORTE_TECNICO)),
+            ('/sistema/configuracion/usuarios/usuario/90/delete/', {'post': 'yes'}),
+        )
+        for ruta, datos in intentos:
+            self.assertEqual(self.cliente.get(ruta).status_code, 403, ruta)
+            respuesta = self.guardar(ruta, datos)
+            self.assertEqual(respuesta.status_code, 403, ruta)
+        self.assertEqual(Empresa.objects.get(pk=self.fragua.pk).nombre, self.fragua.nombre)
+        self.assertTrue(Empresa.objects.get(pk=self.fragua.pk).activa)
+        self.assertFalse(Usuario.objects.using('central').filter(email='nueva@example.invalid').exists())
+        for alias, stock in (('ferreteria', 15), ('repuestos', 4)):
+            cliente = Usuario.objects.using(alias).get(pk=90)
+            self.assertTrue(cliente.activo)
+            self.assertEqual(cliente.email, 'cliente@example.invalid')
+            self.assertEqual(StockBodega.objects.using(alias).get(producto_id=10).cantidad_total, stock)
+            self.assertFalse(Usuario.objects.using(alias).filter(email='nueva@example.invalid').exists())
+        self.assertTrue(Usuario.objects.using('central').get(pk=90).is_superuser)
+
+    def test_soporte_lee_reportes_pero_no_exporta_por_url_directa(self):
+        self.entrar(self.soporte)
+        for formato in ('csv', 'pdf'):
+            respuesta = self.cliente.get('/sistema/reportes/', {
+                'empresa': 'la-fragua', 'informe': 'existencias', 'bodega': 1, 'exportar': formato,
+            })
+            self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(StockBodega.objects.using('ferreteria').get(producto_id=10).cantidad_total, 15)
+
+    def test_mi_cuenta_impide_promocion_y_edicion_de_otra_identidad(self):
+        self.entrar(self.soporte)
+        datos = self.datos_cuenta(email=self.soporte.email, nombres='Nuevo nombre',
+                                 perfil='superusuario', rol=self.tecnico.rol_id, is_superuser='on',
+                                 is_staff='on', activo='', usuario_id=self.superusuario.pk,
+                                 password1='', password2='')
+        respuesta = self.guardar('/sistema/mi-cuenta/?usuario_id=90&empresa=la-fragua', datos)
+        self.assertRedirects(respuesta, '/sistema/mi-cuenta/', fetch_redirect_response=False)
+        soporte = Usuario.objects.using('central').get(pk=self.soporte.pk)
+        self.assertEqual(soporte.nombres, 'Nuevo nombre')
+        self.assertEqual(soporte.rol.codigo, SOPORTE_TECNICO)
+        self.assertTrue(soporte.activo and soporte.is_staff)
+        self.assertFalse(soporte.is_superuser)
+        self.assertEqual(Usuario.objects.using('central').get(pk=90).nombres, 'Javier')
+        self.assertEqual(Usuario.objects.using('ferreteria').get(pk=90).nombres, self.fragua.nombre)
+
+    def test_cambio_de_perfil_se_aplica_a_una_sesion_existente(self):
+        self.entrar(self.tecnico)
+        rol = Rol.objects.using('central').get(codigo=SOPORTE_TECNICO)
+        Usuario.objects.using('central').filter(pk=self.tecnico.pk).update(rol=rol)
+        self.assertContains(self.cliente.get('/sistema/'), 'Soporte técnico')
+        self.assertEqual(self.guardar('/sistema/empresas/la-fragua/editar/', self.datos_empresa()).status_code, 403)
+        self.assertEqual(self.cliente.get('/sistema/inventario/?empresa=la-fragua').status_code, 200)
+        self.assertEqual(self.cliente.get('/sistema/cuentas/').status_code, 403)
+
+    def test_perfil_inactivo_ausente_o_ajeno_bloquea_sesion_y_nuevo_login(self):
+        self.entrar(self.soporte)
+        rol = Rol.objects.using('central').get(codigo=SOPORTE_TECNICO)
+        Rol.objects.using('central').filter(pk=rol.pk).update(activo=False)
+        self.assertEqual(self.cliente.get('/sistema/').status_code, 403)
+        Rol.objects.using('central').filter(pk=rol.pk).update(activo=True)
+        ajeno = Rol.objects.using('central').create(nombre='Rol no técnico', codigo='administrador')
+        for rol_id in (None, ajeno.pk):
+            Usuario.objects.using('central').filter(pk=self.soporte.pk).update(rol_id=rol_id)
+            self.assertEqual(self.cliente.get('/sistema/').status_code, 403)
+            nuevo = APIClient(enforce_csrf_checks=True, HTTP_HOST='127.0.0.1:8000')
+            nuevo.get('/')
+            login = nuevo.post('/api/v1/auth/login-web/', {'email': self.soporte.email, 'password': self.clave},
+                               format='json', HTTP_X_CSRFTOKEN=nuevo.cookies['csrftoken'].value)
+            self.assertEqual(login.status_code, 401)
+        self.entrar(self.superusuario)
+        self.assertEqual(self.cliente.get('/sistema/configuracion/').status_code, 200)
+
+    def test_consulta_de_soporte_se_audita_en_central_y_conserva_historiales_de_empresas(self):
+        self.entrar(self.soporte)
+        evento = Auditoria.objects.using('central').create(accion='UPDATE', modelo='Usuario', descripcion='Evento interno reservado')
+        auditoria = self.cliente.get('/sistema/auditoria/')
+        self.assertContains(auditoria, 'Selecciona una empresa para consultar su auditoría.')
+        self.assertNotContains(auditoria, evento.descripcion)
+        antes = Auditoria.objects.using('central').filter(accion='CONSULTA').count()
+        self.cliente.get('/sistema/catalogo/?empresa=la-fragua')
+        self.assertEqual(Auditoria.objects.using('central').filter(accion='CONSULTA').count(), antes + 1)
+        registro = Auditoria.objects.using('central').latest('id')
+        self.assertEqual((registro.usuario_id, registro.objeto_id), (self.soporte.pk, str(self.fragua.pk)))
+        self.assertIn('Catálogo', registro.descripcion)
+        self.assertIn('la-fragua', registro.descripcion)
+        self.assertNotIn('punto-motor', registro.descripcion)
+        for alias in ('ferreteria', 'repuestos'):
+            self.assertFalse(Auditoria.objects.using(alias).exists())
+            self.assertEqual(set(Rol.objects.using(alias).values_list('codigo', flat=True)),
+                             {'administrador', 'encargado_bodega', 'operador'})
+
+    def test_django_admin_preserva_el_perfil_asignado_por_el_superusuario(self):
+        self.entrar(self.superusuario)
+        ruta = '/sistema/configuracion/usuarios/usuario/add/'
+        for numero, perfil in enumerate((ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO)):
+            rol = Rol.objects.using('central').get(codigo=perfil)
+            datos = self.datos_cuenta(email=f'django-{numero}@example.invalid', rol=rol.pk, usable_password='true')
+            respuesta = self.guardar(ruta, datos)
+            self.assertEqual(respuesta.status_code, 302, respuesta.context and respuesta.context['adminform'].form.errors)
+            cuenta = Usuario.objects.using('central').get(email=datos['email'])
+            self.assertEqual(cuenta.rol_id, rol.pk)
+            self.assertTrue(cuenta.is_staff)
+            self.assertFalse(cuenta.is_superuser)
+
 
 class MigracionFichaEmpresaTests(TransactionTestCase):
     databases = {'central'}
@@ -467,5 +620,55 @@ class MigracionFichaEmpresaTests(TransactionTestCase):
             nueva = Empresa.objects.using('central').create(codigo='posterior', nombre='Alta posterior', alias_bd='repuestos')
             self.assertIsNotNone(nueva.creada_en)
             self.assertIsNotNone(nueva.actualizada_en)
+        finally:
+            MigrationExecutor(conexion).migrate([('empresas', '0004_perfiles_equipo')])
+
+
+class MigracionPerfilesEquipoTests(TransactionTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+
+    def test_asigna_perfil_a_cuentas_anteriores_sin_cambiar_claves_ni_empresas(self):
+        conexion = connections['central']
+        anterior = [('empresas', '0003_ficha_empresa'),
+                    ('usuarios', '0002_alter_permiso_options_alter_rol_options_and_more'),
+                    ('core', '0005_consultas_empresa')]
+        actual = [('empresas', '0004_perfiles_equipo')]
+        MigrationExecutor(conexion).migrate(anterior)
+        try:
+            apps = MigrationExecutor(conexion).loader.project_state(anterior).apps
+            roles = apps.get_model('usuarios', 'Rol').objects.using('central')
+            # TransactionTestCase puede arrancar justo después de las migraciones.
+            roles.filter(codigo__in=(ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO)).delete()
+            usuarios = apps.get_model('usuarios', 'Usuario').objects.using('central')
+            for numero, staff, superusuario, activo in ((1, True, False, True), (2, True, False, False),
+                                                       (3, True, True, True), (4, False, False, True)):
+                usuarios.create(pk=numero, email=f'anterior-{numero}@example.invalid', nombres='Anterior',
+                                password='hash-anterior-no-modificar', is_staff=staff, is_superuser=superusuario, activo=activo)
+            datos_empresas = {}
+            for alias in ('ferreteria', 'repuestos'):
+                Rol.objects.using(alias).create(codigo='administrador', nombre='Administrador del negocio')
+                Usuario.objects.db_manager(alias).create_user(email='cliente@example.invalid', nombres='Cliente')
+                datos_empresas[alias] = list(Usuario.objects.using(alias).values('id', 'email', 'password', 'rol_id'))
+            MigrationExecutor(conexion).migrate(actual)
+            for numero in (1, 2):
+                cuenta = Usuario.objects.using('central').get(pk=numero)
+                self.assertEqual(cuenta.rol.codigo, ADMINISTRADOR_PLATAFORMA)
+                self.assertEqual(cuenta.password, 'hash-anterior-no-modificar')
+                self.assertEqual(cuenta.activo, numero == 1)
+                self.assertTrue(cuenta.is_staff)
+                self.assertFalse(cuenta.is_superuser)
+            for numero in (3, 4):
+                self.assertIsNone(Usuario.objects.using('central').get(pk=numero).rol_id)
+            self.assertEqual(set(Rol.objects.using('central').values_list('codigo', flat=True)),
+                             {ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO})
+            self.assertEqual(Auditoria.objects.using('central').filter(accion='UPDATE', modelo='Usuario').count(), 2)
+            # Repetir la preparación no duplica perfiles ni registros de migración.
+            preparar = import_module('esquema_multiempresa.migrations.0004_perfiles_equipo').preparar_perfiles
+            with conexion.schema_editor() as editor:
+                preparar(MigrationExecutor(conexion).loader.project_state(actual).apps, editor)
+            self.assertEqual(Auditoria.objects.using('central').filter(accion='UPDATE', modelo='Usuario').count(), 2)
+            for alias, datos in datos_empresas.items():
+                self.assertEqual(list(Usuario.objects.using(alias).values('id', 'email', 'password', 'rol_id')), datos)
+                self.assertEqual(list(Rol.objects.using(alias).values_list('codigo', flat=True)), ['administrador'])
         finally:
             MigrationExecutor(conexion).migrate(actual)

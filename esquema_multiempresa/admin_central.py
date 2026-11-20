@@ -14,9 +14,9 @@ from django.shortcuts import redirect
 from django.utils.text import slugify
 
 from apps.usuarios.admin_site import SmartStockAdminSite
-from apps.usuarios.models import Usuario
+from apps.usuarios.models import Rol, Usuario
 from .models import Empresa
-from .permisos import es_superusuario_smartstock
+from .permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO, es_superusuario_smartstock, nombre_perfil_personal
 from .validadores import normalizar_rut
 
 
@@ -111,16 +111,35 @@ class EmpresaAdmin(admin.ModelAdmin):
     readonly_fields = ('creada_en', 'actualizada_en')
 
 
-class NuevaCuentaTecnica(UserCreationForm):
+class PerfilCuentaCentralForm:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['rol'].queryset = Rol.objects.using('central').filter(
+            codigo__in=(ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO),
+        )
+        self.fields['rol'].label = 'Perfil del equipo'
+        self.fields['rol'].label_from_instance = lambda rol: rol.nombre
+        self.fields['rol'].help_text = 'Selecciona Administrador de plataforma o Soporte técnico para una cuenta sin superusuario.'
+
+    def clean(self):
+        datos = super().clean()
+        if datos.get('is_superuser'):
+            datos['rol'] = None
+        elif datos.get('rol') is None:
+            self.add_error('rol', 'Selecciona un perfil para la cuenta del equipo.')
+        return datos
+
+
+class NuevaCuentaTecnica(PerfilCuentaCentralForm, UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = Usuario
-        fields = ('email', 'nombres', 'apellidos', 'is_superuser')
+        fields = ('email', 'nombres', 'apellidos', 'is_superuser', 'rol')
 
 
-class EditarCuentaTecnica(UserChangeForm):
+class EditarCuentaTecnica(PerfilCuentaCentralForm, UserChangeForm):
     class Meta(UserChangeForm.Meta):
         model = Usuario
-        fields = ('email', 'password', 'nombres', 'apellidos', 'activo', 'is_superuser')
+        fields = ('email', 'password', 'nombres', 'apellidos', 'activo', 'is_superuser', 'rol')
 
 
 class RecolectorCuentasCentrales(NestedObjects):
@@ -142,23 +161,28 @@ class RecolectorCuentasCentrales(NestedObjects):
 class CuentaTecnicaAdmin(UserAdmin):
     add_form = NuevaCuentaTecnica
     form = EditarCuentaTecnica
-    list_display = ('email', 'nombre_completo', 'activo')
+    list_display = ('email', 'nombre_completo', 'perfil_del_equipo', 'activo')
     list_filter = ('activo',)
     search_fields = ('email', 'nombres', 'apellidos')
     ordering = ('email',)
     filter_horizontal = ()
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        ('Cuenta técnica', {'fields': ('nombres', 'apellidos', 'activo', 'is_superuser')}),
+        ('Cuenta del equipo', {'fields': ('nombres', 'apellidos', 'activo', 'is_superuser', 'rol')}),
     )
-    add_fieldsets = ((None, {'fields': ('email', 'nombres', 'apellidos', 'password1', 'password2', 'is_superuser')}),)
+    add_fieldsets = ((None, {'fields': ('email', 'nombres', 'apellidos', 'password1', 'password2', 'is_superuser', 'rol')}),)
+
+    @admin.display(description='Perfil del equipo')
+    def perfil_del_equipo(self, obj):
+        return nombre_perfil_personal(obj)
 
     def get_queryset(self, request):
         return super().get_queryset(request).using('central').filter(is_staff=True)
 
     def save_model(self, request, obj, form, change):
         obj.is_staff = True
-        obj.rol = None
+        if obj.is_superuser:
+            obj.rol = None
         super().save_model(request, obj, form, change)
 
     def get_deleted_objects(self, objs, request):

@@ -16,8 +16,10 @@ from selenium.webdriver.support.ui import Select
 
 from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
+from apps.core.models import Auditoria
 from apps.usuarios.models import Usuario
 from esquema_multiempresa.models import Empresa
+from esquema_multiempresa.permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
 
 
 if (settings.SETTINGS_MODULE != 'esquema_multiempresa.testing'
@@ -89,22 +91,26 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         espera.until(EC.url_contains('/sistema/'))
         self.assertIn('Administración de SmartStock', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, 'a[href="/sistema/configuracion/"]'))
-        navegador.find_element(By.LINK_TEXT, 'Cuentas técnicas').click()
-        navegador.find_element(By.LINK_TEXT, 'Añadir cuenta técnica').click()
-        for campo, valor in (('nombres', 'Soporte'), ('apellidos', 'QA'), ('email', 'soporte-qa@example.invalid'),
-                             ('password1', 'Cuenta-soporte-fixture-2626!'), ('password2', 'Cuenta-soporte-fixture-2626!')):
-            navegador.find_element(By.ID, 'id_' + campo).send_keys(valor)
-        Select(navegador.find_element(By.ID, 'id_perfil')).select_by_value('tecnico')
-        navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').click()
-        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/cuentas/')
-        self.assertIn('soporte-qa@example.invalid', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.find_element(By.LINK_TEXT, 'Equipo de SmartStock').click()
+        for perfil, correo in ((ADMINISTRADOR_PLATAFORMA, 'gestion-qa@example.invalid'),
+                               (SOPORTE_TECNICO, 'soporte-qa@example.invalid')):
+            navegador.find_element(By.LINK_TEXT, 'Añadir cuenta del equipo').click()
+            for campo, valor in (('nombres', 'Equipo'), ('apellidos', 'QA'), ('email', correo),
+                                 ('password1', 'Cuenta-equipo-fixture-2626!'), ('password2', 'Cuenta-equipo-fixture-2626!')):
+                navegador.find_element(By.ID, 'id_' + campo).send_keys(valor)
+            Select(navegador.find_element(By.ID, 'id_perfil')).select_by_value(perfil)
+            navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').click()
+            espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/cuentas/')
+            self.assertIn(correo, navegador.find_element(By.TAG_NAME, 'body').text)
         navegador.find_element(By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]').click()
         espera.until(EC.visibility_of_element_located((By.ID, 'email')))
-        navegador.find_element(By.ID, 'email').send_keys('soporte-qa@example.invalid')
-        navegador.find_element(By.ID, 'password').send_keys('Cuenta-soporte-fixture-2626!')
+        navegador.find_element(By.ID, 'email').send_keys('gestion-qa@example.invalid')
+        navegador.find_element(By.ID, 'password').send_keys('Cuenta-equipo-fixture-2626!')
         navegador.find_element(By.ID, 'login-submit').click()
         espera.until(EC.url_contains('/sistema/'))
         self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, 'a[href="/sistema/configuracion/"]'))
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, 'a[href="/sistema/cuentas/"]'))
+        self.assertIn('Administrador de plataforma', navegador.find_element(By.TAG_NAME, 'body').text)
         estado_configuracion = navegador.execute_async_script(
             "const listo = arguments[arguments.length - 1]; fetch('/sistema/configuracion/').then(r => listo(r.status));")
         self.assertEqual(estado_configuracion, 403)
@@ -163,3 +169,26 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertIn('Sin movimientos en el período', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertTrue(navegador.find_elements(By.ID, 'sistema-grafico-estado'))
         self.assertFalse(navegador.find_elements(By.ID, 'sistema-grafico-movimientos'))
+
+        navegador.find_element(By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]').click()
+        espera.until(EC.visibility_of_element_located((By.ID, 'email')))
+        navegador.find_element(By.ID, 'email').send_keys('soporte-qa@example.invalid')
+        navegador.find_element(By.ID, 'password').send_keys('Cuenta-equipo-fixture-2626!')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/sistema/'))
+        self.assertIn('Soporte técnico', navegador.find_element(By.TAG_NAME, 'body').text)
+        for ruta in ('/sistema/cuentas/', '/sistema/configuracion/', '/sistema/empresas/nueva/'):
+            self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, f'a[href="{ruta}"]'))
+        navegador.get(self.live_server_url + '/sistema/usuarios/?empresa=la-fragua')
+        self.assertFalse(navegador.find_elements(By.LINK_TEXT, 'Añadir usuario'))
+        self.assertFalse(navegador.find_elements(By.LINK_TEXT, 'Editar'))
+        for ruta in ('/sistema/empresas/la-fragua/editar/', '/sistema/cuentas/', '/sistema/configuracion/'):
+            estado = navegador.execute_async_script(
+                "const listo = arguments[arguments.length - 1]; fetch(arguments[0]).then(r => listo(r.status));", ruta)
+            self.assertEqual(estado, 403)
+        navegador.get(self.live_server_url + '/sistema/inventario/?empresa=la-fragua')
+        self.assertEqual(navegador.find_element(By.ID, 'sistema-kpi-stock').text, '15')
+        soporte = Usuario.objects.using('central').get(email='soporte-qa@example.invalid')
+        self.assertTrue(Auditoria.objects.using('central').filter(usuario=soporte, accion='CONSULTA',
+                                                               objeto_id=str(Empresa.objects.get(codigo='la-fragua').pk)).exists())
+        self.assertEqual(StockBodega.objects.using('repuestos').get(producto__sku='QA-001').cantidad_total, 4)

@@ -21,7 +21,12 @@ from apps.usuarios.models import Rol, Usuario
 from rest_framework.exceptions import ValidationError
 from .forms import CuentaTecnicaForm, EmpresaPanelForm, UsuarioEmpresaForm
 from .models import Empresa
-from .permisos import es_superusuario_smartstock, requiere_personal
+from .permisos import (
+    ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO, es_administrador_plataforma, es_personal_smartstock,
+    es_superusuario_smartstock, nombre_perfil_personal,
+    registrar_empresa_consultada, requiere_administrador_plataforma, requiere_personal,
+    requiere_superusuario,
+)
 
 
 def empresa_del_panel(codigo):
@@ -35,7 +40,12 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
         'titulo': titulo, 'modulo': modulo, 'empresa_seleccionada': empresa,
         'empresas_disponibles': list(Empresa.objects.order_by('nombre', 'id')),
         'es_superusuario': es_superusuario_smartstock(request.user),
+        'puede_gestionar_empresas': es_administrador_plataforma(request.user),
+        'perfil_personal': nombre_perfil_personal(request.user),
     }
+    request._modulo_consultado = titulo
+    if empresa is not None and modulo not in ('cuentas', 'mi_cuenta'):
+        registrar_empresa_consultada(request, empresa)
     secciones = [
         ('Visión general', [('inicio', 'Dashboard', 'chart-line', 'sistema_inicio')]),
         ('Gestión', [('empresas', 'Empresas', 'building', 'sistema_empresas'),
@@ -47,17 +57,18 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
         ('Operaciones', [('movimientos', 'Movimientos', 'box-open', 'sistema_movimientos'),
                          ('transferencias', 'Transferencias', 'right-left', 'sistema_transferencias'),
                          ('mermas', 'Mermas y bajas', 'triangle-exclamation', 'sistema_mermas')]),
-        ('Sistema', [('cuentas', 'Cuentas técnicas', 'user-gear', 'sistema_cuentas'),
-                     ('sms', 'Alertas SMS', 'comment-sms', 'sistema_sms'),
-                     ('auditoria', 'Auditoría', 'clipboard-list', 'sistema_auditoria')]),
+        ('Sistema', [('sms', 'Alertas SMS', 'comment-sms', 'sistema_sms'),
+                     ('auditoria', 'Auditoría', 'clipboard-list', 'sistema_auditoria'),
+                     ('mi_cuenta', 'Mi cuenta', 'user', 'sistema_mi_cuenta')]),
     ]
     if contexto['es_superusuario']:
+        secciones[-1][1].insert(0, ('cuentas', 'Equipo de SmartStock', 'user-gear', 'sistema_cuentas'))
         secciones[-1][1].append(('configuracion', 'Configuración', 'sliders', 'sistema_admin:index'))
     contexto['secciones_menu'] = [
         {'nombre': nombre, 'enlaces': [
             {'nombre': texto, 'icono': icono, 'activo': clave == modulo,
              'url': reverse(ruta) + ('?' + urlencode({'empresa': empresa.codigo})
-                                     if empresa and clave not in ('inicio', 'empresas', 'cuentas', 'configuracion') else '')}
+                                     if empresa and clave not in ('inicio', 'empresas', 'cuentas', 'configuracion', 'mi_cuenta') else '')}
             for clave, texto, icono, ruta in enlaces
         ]}
         for nombre, enlaces in secciones
@@ -93,7 +104,9 @@ def auditar_gestion(request, alias, accion, modelo, objeto, descripcion):
     )
 
 
-def resumen_empresa(empresa):
+def resumen_empresa(empresa, request=None):
+    if request is not None:
+        registrar_empresa_consultada(request, empresa)
     datos = {'empresa': empresa, 'disponible': True}
     if empresa.alias_bd not in settings.BASES_EMPRESA:
         datos['disponible'] = False
@@ -113,7 +126,7 @@ def resumen_empresa(empresa):
 def inicio_sistema(request):
     contexto = contexto_sistema(request, 'inicio', 'Resumen de SmartStock')
     empresas = contexto['empresas_disponibles']
-    resumenes = [resumen_empresa(empresa) for empresa in empresas]
+    resumenes = [resumen_empresa(empresa, request) for empresa in empresas]
     disponibles = all(fila['disponible'] for fila in resumenes)
     contexto.update(
         resumen_empresas=resumenes,
@@ -121,7 +134,9 @@ def inicio_sistema(request):
             ('Empresas registradas', len(empresas)),
             ('Empresas activas', sum(empresa.activa for empresa in empresas)),
             ('Usuarios de empresas', sum(fila.get('usuarios', 0) for fila in resumenes) if disponibles else None),
-            ('Personal activo de SmartStock', Usuario.objects.using('central').filter(is_staff=True, activo=True).count()),
+            ('Personal activo de SmartStock', Usuario.objects.using('central').filter(is_staff=True, activo=True).filter(
+                Q(is_superuser=True) | Q(rol__activo=True, rol__codigo__in=(ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO)),
+            ).count()),
         ],
     )
     return render(request, 'sistema/inicio.html', contexto)
@@ -137,11 +152,11 @@ def empresas_sistema(request):
         consulta = consulta.filter(Q(nombre__icontains=texto) | Q(codigo__icontains=texto)
                                    | Q(razon_social__icontains=texto) | Q(rut__icontains=texto.replace('.', '').upper())
                                    | Q(contacto_email__icontains=texto))
-    contexto['resumen_empresas'] = [resumen_empresa(empresa) for empresa in paginar(request, contexto, consulta)]
+    contexto['resumen_empresas'] = [resumen_empresa(empresa, request) for empresa in paginar(request, contexto, consulta)]
     return render(request, 'sistema/empresas.html', contexto)
 
 
-@requiere_personal
+@requiere_administrador_plataforma
 @require_http_methods(['GET', 'POST'])
 def editar_empresa(request, codigo=None):
     empresa = empresa_del_panel(codigo) if codigo else Empresa()
@@ -159,7 +174,8 @@ def editar_empresa(request, codigo=None):
         else:
             messages.success(request, 'Empresa guardada correctamente.')
             return redirect('sistema_ficha_empresa', codigo=guardada.codigo)
-    contexto = contexto_sistema(request, 'empresas', 'Añadir empresa' if codigo is None else 'Editar empresa')
+    contexto = contexto_sistema(request, 'empresas', 'Añadir empresa' if codigo is None else 'Editar empresa',
+                                empresa=empresa if codigo else None)
     contexto.update(formulario=formulario, volver=reverse('sistema_empresas'),
                     secciones_formulario=formulario.secciones(), nueva=empresa._state.adding,
                     sin_bases=empresa._state.adding and not formulario.bases_disponibles)
@@ -171,7 +187,7 @@ def editar_empresa(request, codigo=None):
 def ficha_empresa(request, codigo):
     empresa = empresa_del_panel(codigo)
     contexto = contexto_sistema(request, 'empresas', 'Ficha de empresa', empresa=empresa)
-    resumen = resumen_empresa(empresa)
+    resumen = resumen_empresa(empresa, request)
     if resumen['disponible']:
         try:
             with usar_empresa(empresa):
@@ -202,24 +218,28 @@ def usuarios_sistema(request):
     return render(request, 'sistema/usuarios.html', contexto)
 
 
-@requiere_personal
+@requiere_superusuario
 @require_http_methods(['GET'])
 def cuentas_sistema(request):
-    contexto = contexto_sistema(request, 'cuentas', 'Cuentas técnicas de SmartStock')
-    consulta = Usuario.objects.using('central').filter(is_staff=True).order_by('nombres', 'apellidos', 'id')
+    contexto = contexto_sistema(request, 'cuentas', 'Equipo de SmartStock')
+    consulta = Usuario.objects.using('central').filter(is_staff=True).select_related('rol').order_by('nombres', 'apellidos', 'id')
     texto = request.GET.get('search', '').strip()[:200]
     if texto:
         consulta = consulta.filter(Q(email__icontains=texto) | Q(nombres__icontains=texto) | Q(apellidos__icontains=texto))
-    contexto['cuentas_tecnicas'] = list(paginar(request, contexto, consulta))
+    cuentas = list(paginar(request, contexto, consulta))
+    for cuenta in cuentas:
+        cuenta.perfil_mostrado = nombre_perfil_personal(cuenta)
+        cuenta.perfil_habilitado = es_personal_smartstock(cuenta)
+    contexto['cuentas_tecnicas'] = cuentas
     return render(request, 'sistema/cuentas.html', contexto)
 
 
-def formulario_cuenta(request, empresa, usuario_id):
+def formulario_cuenta(request, empresa, usuario_id, propia=False):
     es_nueva = usuario_id is None
     alias = empresa.alias_bd if empresa else 'central'
     consulta = Usuario.objects.using(alias).filter(is_superuser=False) if empresa else Usuario.objects.using(alias).filter(is_staff=True)
     usuario = get_object_or_404(consulta, pk=usuario_id) if usuario_id else Usuario()
-    if empresa is None and usuario.is_superuser and not request.user.is_superuser:
+    if empresa is None and not request.user.is_superuser and not (propia and usuario.pk == request.user.pk):
         raise PermissionDenied
     opciones = {'alias': alias} if empresa else {'actor': request.user}
     clase = UsuarioEmpresaForm if empresa else CuentaTecnicaForm
@@ -236,34 +256,51 @@ def formulario_cuenta(request, empresa, usuario_id):
                     accion = 'CREATE' if es_nueva else 'UPDATE'
                     if not es_nueva and estaba_activo != guardado.activo:
                         accion = 'REACTIVATE' if guardado.activo else 'DEACTIVATE'
-                    auditar_gestion(request, alias, accion, 'Usuario', guardado,
-                                    f'Cuenta guardada · {guardado.email}')
+                    detalle = f'Cuenta guardada · {guardado.email}'
+                    if empresa is None:
+                        detalle += f' · Perfil: {nombre_perfil_personal(guardado)}'
+                    auditar_gestion(request, alias, accion, 'Usuario', guardado, detalle)
             except IntegrityError:
                 formulario.add_error(None, 'Ya existe una cuenta con esos datos. Revisa el correo electrónico.')
             else:
                 if empresa is None and guardado.pk == request.user.pk:
                     update_session_auth_hash(request, guardado)
                 messages.success(request, 'Cuenta guardada correctamente.')
-                destino = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo}) if empresa else reverse('sistema_cuentas')
+                if propia:
+                    destino = reverse('sistema_mi_cuenta')
+                elif empresa:
+                    destino = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo})
+                else:
+                    destino = reverse('sistema_cuentas')
                 return redirect(destino)
         titulo = ('Añadir usuario' if es_nueva else 'Editar usuario') if empresa else (
-            'Añadir cuenta técnica' if es_nueva else 'Editar cuenta técnica')
-        contexto = contexto_sistema(request, 'usuarios' if empresa else 'cuentas', titulo, empresa=empresa)
-        contexto.update(formulario=formulario,
-                        volver=reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo}) if empresa else reverse('sistema_cuentas'))
+            'Añadir cuenta del equipo' if es_nueva else 'Editar cuenta del equipo')
+        if propia:
+            titulo = 'Mi cuenta'
+        contexto = contexto_sistema(request, 'mi_cuenta' if propia else 'usuarios' if empresa else 'cuentas', titulo, empresa=empresa)
+        volver = reverse('sistema_inicio') if propia else reverse('sistema_cuentas')
+        if empresa:
+            volver = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo})
+        contexto.update(formulario=formulario, volver=volver)
         return render(request, 'sistema/formulario.html', contexto)
 
 
-@requiere_personal
+@requiere_administrador_plataforma
 @require_http_methods(['GET', 'POST'])
 def editar_usuario_empresa(request, codigo, usuario_id=None):
     return formulario_cuenta(request, empresa_del_panel(codigo), usuario_id)
 
 
-@requiere_personal
+@requiere_superusuario
 @require_http_methods(['GET', 'POST'])
 def editar_cuenta_tecnica(request, usuario_id=None):
     return formulario_cuenta(request, None, usuario_id)
+
+
+@requiere_personal
+@require_http_methods(['GET', 'POST'])
+def mi_cuenta(request):
+    return formulario_cuenta(request, None, request.user.pk, propia=True)
 
 
 @requiere_personal
@@ -271,6 +308,9 @@ def editar_cuenta_tecnica(request, usuario_id=None):
 def auditoria_sistema(request):
     contexto = contexto_sistema(request, 'auditoria', 'Auditoría')
     empresa = contexto['empresa_seleccionada']
+    if empresa is None and not es_administrador_plataforma(request.user):
+        contexto['requiere_empresa'] = True
+        return render(request, 'sistema/auditoria.html', contexto)
     try:
         with usar_empresa(empresa):
             consulta, _ = consulta_filtrada(SimpleNamespace(query_params=parametros_consulta(request)))

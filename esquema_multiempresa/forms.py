@@ -6,6 +6,7 @@ from apps.productos.models import Bodega, Producto
 from apps.productos.reportes import TITULOS
 from apps.usuarios.models import Rol, Usuario
 from .admin_central import EmpresaForm
+from .permisos import PERFILES_EQUIPO, SOPORTE_TECNICO, perfil_personal
 
 
 class FormularioPanel:
@@ -115,14 +116,14 @@ class UsuarioEmpresaForm(CuentaPanelForm):
 
 
 class CuentaTecnicaForm(CuentaPanelForm):
-    perfil = forms.ChoiceField(label='Perfil de acceso', choices=(('tecnico', 'Técnico de SmartStock'), ('superusuario', 'Superusuario')))
+    perfil = forms.ChoiceField(label='Perfil de acceso', choices=tuple(PERFILES_EQUIPO.items()))
 
     def __init__(self, *args, actor, **kwargs):
         self.actor = actor
         super().__init__(*args, alias='central', **kwargs)
-        self.initial['perfil'] = 'superusuario' if self.instance.is_superuser else 'tecnico'
+        self.initial['perfil'] = perfil_personal(self.instance) if self.instance.pk else SOPORTE_TECNICO
         if not actor.is_superuser:
-            del self.fields['perfil']
+            self.fields['perfil'].disabled = True
         if self.instance.pk == actor.pk:
             self.fields['activo'].disabled = True
             if 'perfil' in self.fields:
@@ -130,12 +131,26 @@ class CuentaTecnicaForm(CuentaPanelForm):
         self.order_fields(('nombres', 'apellidos', 'email', 'telefono', 'perfil', 'activo', 'password1', 'password2'))
         self.estilizar()
 
+    def clean(self):
+        datos = super().clean()
+        if not self.actor.is_superuser and (not self.instance.pk or self.instance.pk != self.actor.pk):
+            raise forms.ValidationError('Solo el superusuario puede gestionar cuentas del equipo.')
+        self.rol_elegido = None
+        perfil = datos.get('perfil')
+        if perfil and perfil != 'superusuario':
+            self.rol_elegido = Rol.objects.using('central').filter(codigo=perfil).first()
+            if self.rol_elegido is None:
+                self.add_error('perfil', 'Este perfil todavía no está preparado en la central.')
+            elif not self.rol_elegido.activo and self.instance.rol_id != self.rol_elegido.pk:
+                self.add_error('perfil', 'Selecciona un perfil activo.')
+        return datos
+
     def save(self, commit=True):
         usuario = super().save(commit=False)
         usuario.is_staff = True
-        usuario.rol = None
         if self.actor.is_superuser:
             usuario.is_superuser = self.cleaned_data['perfil'] == 'superusuario'
+            usuario.rol = self.rol_elegido
         if commit:
             usuario.save(using='central')
         return usuario

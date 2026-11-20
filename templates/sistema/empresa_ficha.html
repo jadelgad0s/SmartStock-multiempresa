@@ -1,5 +1,5 @@
 {% extends 'sistema/base.html' %}
-{% block acciones %}<a class="btn btn-primary" href="{% url 'sistema_editar_empresa' empresa_seleccionada.codigo %}">Editar ficha</a>{% endblock %}
+{% block acciones %}{% if puede_gestionar_empresas %}<a class="btn btn-primary" href="{% url 'sistema_editar_empresa' empresa_seleccionada.codigo %}">Editar ficha</a>{% endif %}{% endblock %}
 {% block panel_content %}
 <div class="ss-sistema-ficha">
   <section class="card"><h2 class="card-header">Identificación de la empresa</h2><div class="card-body">
@@ -33,7 +33,7 @@
       <li><strong>Productos activos</strong><span>{% if resumen.productos %}{{ resumen.productos }}{% else %}Sin productos activos registrados{% endif %}</span></li>
     </ul>
     <div class="ss-sistema-acciones">
-      {% if not resumen.administrador %}<a class="btn btn-primary" href="{% url 'sistema_nuevo_usuario_empresa' empresa_seleccionada.codigo %}?rol=administrador">Añadir administrador</a>{% endif %}
+      {% if puede_gestionar_empresas and not resumen.administrador %}<a class="btn btn-primary" href="{% url 'sistema_nuevo_usuario_empresa' empresa_seleccionada.codigo %}?rol=administrador">Añadir administrador</a>{% endif %}
       <a class="btn btn-outline-secondary" href="{% url 'sistema_usuarios' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver usuarios</a>
       <a class="btn btn-outline-secondary" href="{% url 'sistema_inventario' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver inventario</a>
     </div>
