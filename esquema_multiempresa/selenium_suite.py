@@ -1,5 +1,8 @@
 """Prueba de dos empresas en pestañas del mismo navegador con bases SQLite desechables."""
+import atexit
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -20,6 +23,14 @@ from esquema_multiempresa.models import Empresa
 if (settings.SETTINGS_MODULE != 'esquema_multiempresa.testing'
         or settings.DATABASES['central']['ENGINE'] != 'django.db.backends.sqlite3'):
     raise RuntimeError('Ejecuta esta suite con esquema_multiempresa.testing y SS_TEST_POSTGRES desactivado.')
+
+
+# Cada alias utiliza su propio archivo desechable para que las peticiones
+# simultáneas de las dos pestañas tengan conexiones SQLite independientes.
+_datos_selenium = TemporaryDirectory(prefix='smartstock-empresas-selenium-')
+atexit.register(_datos_selenium.cleanup)
+for _alias in ('central', 'ferreteria', 'repuestos'):
+    settings.DATABASES[_alias].setdefault('TEST', {})['NAME'] = str(Path(_datos_selenium.name) / f'{_alias}.sqlite3')
 
 
 class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
