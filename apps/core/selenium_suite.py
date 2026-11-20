@@ -6,8 +6,11 @@ python manage.py test apps.core.selenium_suite --settings=config.settings.testin
 Define SMARTSTOCK_SELENIUM_VISIBLE=1 para abrir Chrome y ver las acciones.
 """
 
+import atexit
 from io import StringIO
 from os import getenv
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import sleep
 
 from django.conf import settings
@@ -27,6 +30,14 @@ if (settings.SETTINGS_MODULE != 'config.settings.testing'
         or settings.DATABASES['default']['ENGINE'] != 'django.db.backends.sqlite3'
         or settings.DATABASES['default']['NAME'] != ':memory:'):
     raise RuntimeError('Ejecuta Selenium con config.settings.testing y SS_TEST_POSTGRES desactivado.')
+
+
+# LiveServer comparte la conexión SQLite en memoria entre el hilo de prueba
+# y las peticiones del navegador. Un archivo temporal permite conexiones
+# independientes para las lecturas de historial, bodegas y notificaciones.
+_datos_selenium = TemporaryDirectory(prefix='smartstock-selenium-')
+atexit.register(_datos_selenium.cleanup)
+settings.DATABASES['default'].setdefault('TEST', {})['NAME'] = str(Path(_datos_selenium.name) / 'pruebas.sqlite3')
 
 
 class SmartStockSeleniumTests(StaticLiveServerTestCase):
