@@ -2,21 +2,40 @@ document.addEventListener('DOMContentLoaded', () => {
   'use strict';
   const dialogo = document.getElementById('ss-carga');
   const textoCarga = document.getElementById('ss-carga-texto');
+  let navegando = false;
+  const cargarPagina = mensaje => {
+    navegando = true;
+    if (!dialogo || !textoCarga) return;
+    textoCarga.textContent = mensaje;
+    if (!dialogo.open && typeof dialogo.showModal === 'function') dialogo.showModal();
+  };
+  const salida = document.getElementById('ss-cerrar-sesion');
+  if (salida) salida.dataset.ssLoading = 'Cerrando sesión…';
   document.querySelectorAll('form[data-ss-loading]').forEach(formulario => {
     formulario.addEventListener('submit', evento => {
-      if (evento.submitter?.name === 'exportar') return;
-      if (formulario.getAttribute('aria-busy') === 'true') {
+      if (evento.defaultPrevented || evento.submitter?.name === 'exportar') return;
+      if (navegando || formulario.getAttribute('aria-busy') === 'true' || !formulario.checkValidity()) {
         evento.preventDefault();
         return;
       }
       formulario.setAttribute('aria-busy', 'true');
-      textoCarga.textContent = formulario.dataset.ssLoading;
-      if (!dialogo.open) dialogo.showModal();
+      cargarPagina(formulario.dataset.ssLoading);
     });
   });
+  document.querySelector('.ss-sistema')?.addEventListener('click', evento => {
+    const enlace = evento.target.closest('a[href]');
+    if (!enlace || evento.defaultPrevented || evento.button !== 0 || evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey
+        || enlace.hasAttribute('download') || (enlace.target && enlace.target !== '_self')) return;
+    const url = new URL(enlace.href, window.location.href);
+    if (url.origin !== window.location.origin || !url.pathname.startsWith('/sistema/')
+        || (url.pathname === window.location.pathname && url.search === window.location.search)) return;
+    if (navegando) { evento.preventDefault(); return; }
+    cargarPagina('Cargando ' + (enlace.textContent.trim() || 'SmartStock') + '…');
+  });
   window.addEventListener('pageshow', () => {
+    navegando = false;
     document.querySelectorAll('form[aria-busy]').forEach(formulario => formulario.setAttribute('aria-busy', 'false'));
-    if (dialogo.open) dialogo.close();
+    if (dialogo?.open) dialogo.close();
   });
 
   const contenido = document.getElementById('sistema-datos-dashboard');

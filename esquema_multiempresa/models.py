@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 
 from .validadores import normalizar_rut, validar_rut
+from .borrado import cascada_central
 
 
 class Empresa(models.Model):
@@ -61,3 +62,23 @@ class TicketAcceso(models.Model):
     class Meta:
         db_table = 'tickets_acceso'
         default_permissions = ()
+
+
+class NotificacionSistema(models.Model):
+    """Avisos del panel interno, separados de las notificaciones de clientes."""
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    # La relación no se expone en los gestores operativos de usuarios: la
+    # tabla solo existe en la central, no en las bases de las empresas.
+    destinatario = models.ForeignKey('usuarios.Usuario', on_delete=cascada_central, related_name='+')
+    titulo = models.CharField(max_length=150)
+    mensaje = models.TextField()
+    empresa_nombre = models.CharField(max_length=160, blank=True)
+    link = models.CharField(max_length=300, blank=True)
+    leida = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'notificaciones_sistema'
+        default_permissions = ()
+        ordering = ['-fecha_creacion', '-id']
+        indexes = [models.Index(fields=['destinatario', 'leida', '-fecha_creacion'], name='aviso_sistema_pendientes')]

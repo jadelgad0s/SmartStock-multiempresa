@@ -1,0 +1,16 @@
+<div class="ss-sistema-avisos" id="sistema-notificaciones" data-usuario="{{ request.user.pk }}" data-url="{% url 'sistema_notificaciones' %}" data-leer-todas="{% url 'sistema_notificaciones_leer_todas' %}">
+  <button type="button" id="sistema-notificaciones-boton" class="btn btn-sm btn-outline-secondary" aria-label="Notificaciones" aria-expanded="false" aria-controls="sistema-notificaciones-panel">
+    <i class="fa-regular fa-bell" aria-hidden="true"></i><span id="sistema-notificaciones-total" class="ss-sistema-avisos-total" aria-hidden="true" hidden></span>
+  </button>
+  <section id="sistema-notificaciones-panel" class="ss-sistema-avisos-panel" aria-labelledby="sistema-notificaciones-titulo" tabindex="-1" hidden>
+    <div class="ss-sistema-avisos-cabecera"><strong id="sistema-notificaciones-titulo">Notificaciones</strong><button type="button" id="sistema-notificaciones-leer" disabled>Marcar todas</button></div>
+    <p id="sistema-notificaciones-error" class="text-danger small" role="alert" hidden></p>
+    <ul id="sistema-notificaciones-lista" class="ss-sistema-avisos-lista"><li class="ss-sistema-avisos-vacio" role="status">Cargando notificaciones…</li></ul>
+    <div class="ss-sistema-avisos-pie"><button type="button" id="sistema-notificaciones-historial">Ver anteriores</button><small>Últimas 20 notificaciones</small></div>
+  </section>
+</div>
+<section id="sistema-confirmacion" class="ss-sistema-confirmacion" role="status" aria-live="polite" aria-atomic="true" hidden>
+  <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+  <div><strong id="sistema-confirmacion-titulo"></strong><p id="sistema-confirmacion-texto"></p></div>
+  <button type="button" id="sistema-confirmacion-cerrar" aria-label="Cerrar confirmación"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+</section>

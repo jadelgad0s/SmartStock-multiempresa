@@ -43,7 +43,7 @@ Comprueba el esquema de las tres bases.
 python manage.py plan_esquema --settings=esquema_multiempresa.settings
 ```
 
-Con el esquema actual deben aparecer 17 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica y pases de acceso.
+Con el esquema actual deben aparecer 18 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica, pases de acceso y notificaciones del equipo.
 
 ```bat
 python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
@@ -97,7 +97,7 @@ python manage.py migrate --database=ferreteria --settings=esquema_multiempresa.m
 python manage.py migrate --database=repuestos --settings=esquema_multiempresa.migracion
 ```
 
-La migración `empresas.0004_perfiles_equipo` crea los dos roles internos exclusivamente en la central. Asigna **Administrador de plataforma** a las cuentas técnicas anteriores que no tenían rol para conservar sus funciones de gestión de clientes, y deja constancia de esa asignación en auditoría. Conserva sus contraseñas y estado activo/inactivo. Los superusuarios conservan su perfil. La migración `core.0005_consultas_empresa` agrega la etiqueta de auditoría **CONSULTA**. No se agregan tablas: se mantienen 17 en la central y 46 en cada empresa.
+La migración `empresas.0004_perfiles_equipo` crea los dos roles internos exclusivamente en la central. Asigna **Administrador de plataforma** a las cuentas técnicas anteriores que no tenían rol para conservar sus funciones de gestión de clientes, y deja constancia de esa asignación en auditoría. Conserva sus contraseñas y estado activo/inactivo. Los superusuarios conservan su perfil. La migración `core.0005_consultas_empresa` agrega la etiqueta de auditoría **CONSULTA**. Los perfiles reutilizan las tablas existentes de roles y usuarios.
 
 Los roles de las empresas siguen siendo **Administrador**, **Encargado de bodega** y **Operador**, almacenados en sus propias bases. Sus permisos no cambian en esta actualización. La cuenta de soporte consulta los datos mediante el panel central; no recibe una sesión operativa de la empresa. El panel central de inventario sigue siendo de consulta para los tres perfiles internos.
 
@@ -113,7 +113,7 @@ Después de actualizar el código, aplica esta migración en la base central ant
 python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
 ```
 
-La migración `empresas.0003_ficha_empresa` amplía la tabla `empresas`. Conserva los códigos, las bases asignadas y el estado de acceso. Las fechas de registro de las empresas anteriores quedan sin dato porque no se conocen. Las nuevas altas y las actualizaciones guardan sus fechas automáticamente. Se mantienen 17 tablas en la central y 46 en cada empresa.
+La migración `empresas.0003_ficha_empresa` amplía la tabla `empresas`. Conserva los códigos, las bases asignadas y el estado de acceso. Las fechas de registro de las empresas anteriores quedan sin dato porque no se conocen. Las nuevas altas y las actualizaciones guardan sus fechas automáticamente.
 
 La migración `empresas.0005_contacto_apellidos` agrega los apellidos del contacto exclusivamente a la tabla `empresas` de la central. Conserva el texto del contacto anterior sin intentar dividirlo automáticamente. Si ese texto incluía apellidos, se puede separar manualmente desde **Editar ficha**. Los datos operativos y usuarios de cada empresa se conservan. Esta ampliación solo requiere el comando de migración central indicado arriba.
 
@@ -136,6 +136,20 @@ El login común consulta las cuentas de las empresas activas configuradas. Si un
 El paso a una empresa usa un pase de dos minutos enviado por POST desde el origen del login central. Se consume una sola vez y comprueba la empresa, la cuenta, sus permisos y su contraseña actual. Los tokens JWT se generan en la empresa de destino. Las sesiones usan cookies propias de cada dirección y una firma vinculada a su empresa.
 
 Django comprueba que la empresa sigue activa en cada petición. El perfil web escribe las sesiones técnicas y los pases en la central. Las transacciones de inventario, el Kardex, las comparaciones y las descargas usan la base de la empresa. Los archivos subidos se guardan en `media/<alias>/`. Los correos de recuperación aparecen en la consola de desarrollo y los envíos SMS están desactivados en esta prueba.
+
+## Carga, confirmaciones y campana del panel central
+
+El panel usa la tarjeta blanca de carga con spinner verde y fondo desenfocado. Aparece al navegar entre módulos, consultar filtros, cerrar sesión y guardar formularios. Los envíos repetidos se bloquean y los datos inválidos mantienen el formulario disponible para corregirlos. Volver por el historial restablece los botones y cierra el indicador. Las exportaciones CSV y PDF conservan su comportamiento propio.
+
+Un guardado correcto muestra una sola confirmación breve, con el mismo identificador que su aviso en la campana. Se elimina la franja verde duplicada. Consultar la campana, cambiar de módulo o volver por el historial no vuelve a anunciar ese guardado. Los errores se presentan junto al formulario y no crean notificaciones de éxito.
+
+La migración `empresas.0006_notificaciones_sistema` agrega `notificaciones_sistema` exclusivamente en la central. Cada integrante ve sus propios avisos de empresas, usuarios de empresas, cuentas del equipo y Mi cuenta. Cuando corresponde se identifica la empresa. La sesión central y CSRF protegen la consulta y las marcas de lectura; no se utilizan los JWT de los clientes. Se conservan 46 tablas en cada empresa y la central pasa a 18. Basta actualizar y ejecutar `migrate --database=central --settings=esquema_multiempresa.migracion` con el servidor detenido si las migraciones anteriores ya estaban aplicadas.
+
+El aviso se registra después del commit de la operación y apunta a la cuenta central que la realizó, incluso al gestionar usuarios de una empresa. La confirmación del guardado se mantiene si falla la escritura posterior del historial de avisos; ese fallo se registra en el servidor. No se escriben contraseñas en los avisos. La relación de borrado se limita a la central y no consulta esa tabla al eliminar un usuario de empresa con el mismo ID.
+
+La campana muestra pendientes y **Ver anteriores** permite revisar las últimas 20 notificaciones, incluidas las leídas. **Marcar todas** afecta solo a los avisos propios hasta la fecha de la consulta; un aviso que llega después permanece pendiente. Leer un aviso conserva el historial y puede abrir su ficha o módulo relacionado. La campana se actualiza al abrirla y cada 10 segundos mientras la pestaña está visible, sin mostrar un indicador de pantalla completa por esas consultas de fondo. Los estados de lectura se sincronizan en las otras pestañas con la siguiente consulta.
+
+Las notificaciones operativas de las empresas siguen en sus propias bases, separadas de las del equipo interno. La suite comprueba la pertenencia de los avisos, sesiones revocadas, CSRF, lecturas idempotentes, conservación de avisos nuevos y borrados sin cruzar las bases.
 
 ## Comprobar el aislamiento
 

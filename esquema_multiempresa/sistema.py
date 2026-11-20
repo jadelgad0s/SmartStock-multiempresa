@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -21,6 +20,7 @@ from apps.usuarios.models import Rol, Usuario
 from rest_framework.exceptions import ValidationError
 from .forms import CuentaTecnicaForm, EmpresaPanelForm, UsuarioEmpresaForm
 from .models import Empresa
+from .notificaciones import confirmar_guardado, confirmaciones_para_pagina
 from .permisos import (
     ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO, es_administrador_plataforma, es_personal_smartstock,
     es_superusuario_smartstock, nombre_perfil_personal,
@@ -42,6 +42,7 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
         'es_superusuario': es_superusuario_smartstock(request.user),
         'puede_gestionar_empresas': es_administrador_plataforma(request.user),
         'perfil_personal': nombre_perfil_personal(request.user),
+        'confirmaciones': confirmaciones_para_pagina(request),
     }
     request._modulo_consultado = titulo
     if empresa is not None and modulo not in ('cuentas', 'mi_cuenta'):
@@ -159,6 +160,7 @@ def empresas_sistema(request):
 @require_http_methods(['GET', 'POST'])
 def editar_empresa(request, codigo=None):
     empresa = empresa_del_panel(codigo) if codigo else Empresa()
+    estaba_activa = empresa.activa
     formulario = EmpresaPanelForm(request.POST or None, instance=empresa)
     if request.method == 'POST' and formulario.is_valid():
         nueva = empresa._state.adding
@@ -171,7 +173,12 @@ def editar_empresa(request, codigo=None):
         except IntegrityError:
             formulario.add_error(None, 'El RUT, el código o la base ya están vinculados a otra empresa. Revisa los datos.')
         else:
-            messages.success(request, 'Empresa guardada correctamente.')
+            titulo = 'Empresa creada' if nueva else 'Ficha de empresa actualizada'
+            if not nueva and estaba_activa != guardada.activa:
+                titulo = 'Acceso de empresa habilitado' if guardada.activa else 'Acceso de empresa suspendido'
+            confirmar_guardado(request, alias='central', titulo=titulo,
+                               mensaje=f'{guardada.nombre}: cambios guardados correctamente.',
+                               link=reverse('sistema_ficha_empresa', args=[guardada.codigo]), empresa=guardada)
             return redirect('sistema_ficha_empresa', codigo=guardada.codigo)
     contexto = contexto_sistema(request, 'empresas', 'Añadir empresa' if codigo is None else 'Editar empresa',
                                 empresa=empresa if codigo else None)
@@ -264,13 +271,20 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
             else:
                 if empresa is None and guardado.pk == request.user.pk:
                     update_session_auth_hash(request, guardado)
-                messages.success(request, 'Cuenta guardada correctamente.')
                 if propia:
                     destino = reverse('sistema_mi_cuenta')
                 elif empresa:
                     destino = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo})
                 else:
                     destino = reverse('sistema_cuentas')
+                tipo_cuenta = 'Usuario de empresa' if empresa else 'Cuenta del equipo'
+                estado = {'CREATE': 'creada', 'DEACTIVATE': 'desactivada', 'REACTIVATE': 'reactivada'}.get(accion, 'actualizada')
+                if empresa:
+                    estado = {'CREATE': 'creado', 'DEACTIVATE': 'desactivado', 'REACTIVATE': 'reactivado'}.get(accion, 'actualizado')
+                confirmar_guardado(request, alias=alias,
+                                   titulo='Mi cuenta actualizada' if propia else f'{tipo_cuenta} {estado}',
+                                   mensaje=f'{guardado.nombre_completo or guardado.email}: cambios guardados correctamente.',
+                                   link=destino, empresa=empresa)
                 return redirect(destino)
         titulo = ('Añadir usuario' if es_nueva else 'Editar usuario') if empresa else (
             'Añadir cuenta del equipo' if es_nueva else 'Editar cuenta del equipo')

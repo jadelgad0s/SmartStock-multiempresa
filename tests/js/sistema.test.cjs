@@ -7,11 +7,15 @@ const {JSDOM} = require('jsdom');
 async function pantalla(t) {
   const dom = new JSDOM(`
     <dialog id="ss-carga"><p id="ss-carga-texto"></p></dialog>
+    <div class="ss-sistema">
     <form data-ss-loading="Guardando cambios…">
       <input name="email" value="qa@example.invalid">
       <button type="submit" id="guardar">Guardar</button>
       <button type="submit" name="exportar" value="csv" id="exportar">Exportar CSV</button>
-    </form>`, {runScripts: 'outside-only', url: 'http://localhost/sistema/'});
+    </form>
+    <a id="navegar" href="/sistema/catalogo/">Catálogo</a>
+    <a id="externo" href="https://example.invalid/">Otro sitio</a>
+    </div>`, {runScripts: 'outside-only', url: 'http://localhost/sistema/'});
   t.after(() => dom.window.close());
   const {window} = dom;
   const dialogo = window.document.querySelector('dialog');
@@ -52,6 +56,34 @@ test('volver por el historial restablece los formularios y cierra la carga', asy
   assert.equal(formulario.getAttribute('aria-busy'), 'false');
   assert.equal(dialogo.open, false);
   assert.equal(enviar('guardar').defaultPrevented, false);
+});
+
+test('navegar por el panel muestra el mismo indicador sin bloquear enlaces externos o pestañas nuevas', async t => {
+  const {window, dialogo} = await pantalla(t);
+  window.document.addEventListener('click', evento => evento.preventDefault());
+  const pulsar = (id, modificadores = {}) => window.document.getElementById(id).dispatchEvent(
+    new window.MouseEvent('click', {bubbles: true, cancelable: true, button: 0, ...modificadores}));
+  pulsar('externo');
+  assert.equal(dialogo.open, false);
+  pulsar('navegar', {ctrlKey: true});
+  assert.equal(dialogo.open, false);
+  pulsar('navegar');
+  assert.equal(dialogo.open, true);
+  assert.match(dialogo.textContent, /Cargando Catálogo/);
+  window.dispatchEvent(new window.PageTransitionEvent('pageshow', {persisted: true}));
+  assert.equal(dialogo.open, false);
+});
+
+test('un formulario inválido conserva los campos y permite corregir sin abrir la carga', async t => {
+  const {dialogo, formulario, enviar} = await pantalla(t);
+  const correo = formulario.querySelector('input');
+  correo.type = 'email'; correo.required = true; correo.value = 'incorrecto';
+  assert.equal(enviar('guardar').defaultPrevented, true);
+  assert.equal(dialogo.open, false);
+  assert.equal(correo.value, 'incorrecto');
+  correo.value = 'qa@example.invalid';
+  assert.equal(enviar('guardar').defaultPrevented, false);
+  assert.equal(dialogo.open, true);
 });
 
 test('un período sin movimientos conserva el gráfico de existencias y permite cambiar el tema', async t => {

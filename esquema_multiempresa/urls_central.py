@@ -9,6 +9,7 @@ from .admin_central import sitio_sistema
 from .login import LoginCentralView, login_central
 from .recuperacion_central import SolicitarRecuperacionCentralView
 from .consultas_sistema import consulta_sistema, inventario_sistema
+from .notificaciones import leer_notificacion, leer_todas, listar_notificaciones
 from .sistema import (
     abrir_configuracion, auditoria_sistema, cuentas_sistema, editar_cuenta_tecnica,
     editar_empresa, editar_usuario_empresa, empresas_sistema, ficha_empresa, inicio_sistema, mi_cuenta, usuarios_sistema,
@@ -36,6 +37,9 @@ urlpatterns = [
     path('sistema/cuentas/nueva/', editar_cuenta_tecnica, name='sistema_nueva_cuenta'),
     path('sistema/cuentas/<int:usuario_id>/', editar_cuenta_tecnica, name='sistema_editar_cuenta'),
     path('sistema/mi-cuenta/', mi_cuenta, name='sistema_mi_cuenta'),
+    path('sistema/notificaciones/', listar_notificaciones, name='sistema_notificaciones'),
+    path('sistema/notificaciones/leer-todas/', leer_todas, name='sistema_notificaciones_leer_todas'),
+    path('sistema/notificaciones/<uuid:identificador>/leer/', leer_notificacion, name='sistema_notificacion_leer'),
     path('sistema/auditoria/', auditoria_sistema, name='sistema_auditoria'),
     path('sistema/inventario/', inventario_sistema, name='sistema_inventario'),
     path('sistema/catalogo/', consulta_sistema, {'modulo': 'catalogo'}, name='sistema_catalogo'),
