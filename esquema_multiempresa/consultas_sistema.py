@@ -34,6 +34,8 @@ def inventario_sistema(request):
         try:
             with usar_empresa(empresa), lectura_consistente():
                 contexto['dashboard'] = datos_resumen_dashboard(SimpleNamespace(query_params=request.GET, user=request.user))
+                dashboard = contexto['dashboard']
+                contexto['hay_movimientos_periodo'] = any(dashboard['chart_entradas']) or any(dashboard['chart_salidas'])
         except ValidationError:
             contexto['error_consulta'] = 'Selecciona una bodega activa y un período de 7 o 30 días.'
         except DatabaseError:

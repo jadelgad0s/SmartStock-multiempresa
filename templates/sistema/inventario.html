@@ -3,6 +3,7 @@
 {% block panel_content %}
 {% include 'sistema/selector_empresa.html' %}
 {% if dashboard %}
+{% if dashboard.bodega %}
 <form method="get" class="ss-dash-toolbar" data-ss-loading="Actualizando inventario…">
   <input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}">
   <div class="ss-dash-warehouse"><label for="bodega-resumen">Bodega</label><select id="bodega-resumen" name="bodega" class="form-select">
@@ -11,20 +12,38 @@
   <div class="ss-sistema-periodo"><label for="periodo-resumen">Período</label><select id="periodo-resumen" name="dias" class="form-select"><option value="7"{% if dashboard.dias == 7 %} selected{% endif %}>Últimos 7 días</option><option value="30"{% if dashboard.dias == 30 %} selected{% endif %}>Últimos 30 días</option></select></div>
   <button type="submit" class="btn btn-outline-secondary">Actualizar</button>
 </form>
+{% endif %}
+{% if not dashboard.bodega %}
+<section class="card ss-sistema-vacio" role="status">
+  <i class="fa-solid fa-warehouse" aria-hidden="true"></i>
+  <h2>Sin bodegas activas</h2>
+  <p>Esta empresa todavía no tiene bodegas activas configuradas. Revisa sus bodegas para continuar con la preparación del inventario.</p>
+  <a class="btn btn-outline-secondary" href="{% url 'sistema_bodegas' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver bodegas de la empresa</a>
+</section>
+{% elif not dashboard.estado_inventario.total %}
+<section class="card ss-sistema-vacio" role="status">
+  <i class="fa-solid fa-box" aria-hidden="true"></i>
+  <h2>Sin productos activos</h2>
+  <p>El catálogo de esta empresa todavía no tiene productos activos. Revisa los productos registrados y coordina su carga o reactivación con el administrador de la empresa.</p>
+  <a class="btn btn-outline-secondary" href="{% url 'sistema_catalogo' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver catálogo de la empresa</a>
+</section>
+{% else %}
 <section class="ss-dash-kpis" aria-label="Inventario de la empresa">
   <div class="card ss-dash-kpi"><span class="kpi-title">Stock en bodega</span><strong class="kpi-value" id="sistema-kpi-stock">{{ dashboard.kpi_stock }}</strong><span class="ss-dash-kpi-note">Unidades de productos activos</span></div>
   <div class="card ss-dash-kpi"><span class="kpi-title">Entradas hoy</span><strong class="kpi-value text-primary">{{ dashboard.kpi_entradas }}</strong><span class="ss-dash-kpi-note">Unidades registradas</span></div>
   <div class="card ss-dash-kpi"><span class="kpi-title">Salidas hoy</span><strong class="kpi-value">{{ dashboard.kpi_salidas }}</strong><span class="ss-dash-kpi-note">Unidades registradas</span></div>
-  <div class="card ss-dash-kpi ss-dash-kpi-danger"><span class="kpi-title">Productos agotados</span><strong class="kpi-value">{{ dashboard.kpi_alertas }}</strong><span class="ss-dash-kpi-note">Requieren reposición</span></div>
+  <div class="card ss-dash-kpi{% if dashboard.kpi_alertas %} ss-dash-kpi-danger{% endif %}"><span class="kpi-title">Productos agotados</span><strong class="kpi-value">{{ dashboard.kpi_alertas }}</strong><span class="ss-dash-kpi-note">{% if dashboard.kpi_alertas %}Requieren reposición{% else %}Sin productos agotados{% endif %}</span></div>
 </section>
 <div class="ss-sistema-graficos">
-  <section class="card"><h2 class="card-header">Unidades de entrada y salida</h2><div class="card-body"><p class="text-muted small">{{ dashboard.desde }} al {{ dashboard.hasta }} · Unidades por día</p><div class="ss-sistema-grafico"><canvas id="sistema-grafico-movimientos" aria-label="Entradas y salidas del período" role="img"></canvas></div></div></section>
+  <section class="card"><h2 class="card-header">Unidades de entrada y salida</h2><div class="card-body"><p class="text-muted small">{{ dashboard.desde }} al {{ dashboard.hasta }} · Unidades por día</p>{% if hay_movimientos_periodo %}<div class="ss-sistema-grafico"><canvas id="sistema-grafico-movimientos" aria-label="Entradas y salidas del período" role="img"></canvas></div>{% else %}<div class="ss-sistema-vacio ss-sistema-vacio-grafico" role="status"><i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i><h2>Sin movimientos en el período</h2><p>No se registraron entradas ni salidas en esta bodega durante las fechas seleccionadas. Puedes consultar otro período.</p><a href="{% url 'sistema_movimientos' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}&amp;bodega={{ dashboard.bodega.id }}&amp;desde={{ dashboard.desde }}&amp;hasta={{ dashboard.hasta }}">Consultar movimientos</a></div>{% endif %}</div></section>
   <section class="card"><h2 class="card-header">Estado del inventario</h2><div class="card-body"><div class="ss-sistema-grafico ss-sistema-grafico-estado"><canvas id="sistema-grafico-estado" aria-label="Estado de productos en la bodega" role="img"></canvas></div><ul class="ss-sistema-leyenda"><li>Stock suficiente <strong>{{ dashboard.estado_inventario.suficiente }}</strong></li><li>Stock bajo <strong>{{ dashboard.estado_inventario.bajo }}</strong></li><li>Agotados <strong>{{ dashboard.estado_inventario.agotado }}</strong></li></ul></div></section>
 </div>
 <section class="card mt-4"><h2 class="card-header">Movimientos recientes</h2><div class="table-responsive"><table class="table table-custom mb-0"><thead><tr><th>Fecha / hora</th><th>Producto</th><th>Tipo</th><th>Unidades</th><th>Responsable</th></tr></thead><tbody>
   {% for movimiento in dashboard.recientes %}<tr><td>{{ movimiento.fecha }}</td><td>{{ movimiento.producto }}</td><td>{{ movimiento.tipo }}</td><td>{{ movimiento.cantidad }}</td><td>{{ movimiento.usuario }}</td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted py-4">No hay movimientos registrados en esta bodega.</td></tr>{% endfor %}
 </tbody></table></div></section>
 {{ dashboard|json_script:'sistema-datos-dashboard' }}
+{% endif %}
+{% elif error_consulta %}<a class="btn btn-outline-secondary" href="{{ request.get_full_path }}">Reintentar consulta</a>
 {% elif not empresa_seleccionada %}<p class="text-muted">Selecciona una empresa para consultar el inventario de sus bodegas.</p>{% endif %}
 {% endblock %}
 {% block extra_scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock %}

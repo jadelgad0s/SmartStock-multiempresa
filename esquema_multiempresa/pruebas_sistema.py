@@ -5,16 +5,18 @@ from unittest.mock import patch
 
 from django.core.cache import cache
 from django.core.management import call_command
-from django.db import OperationalError
-from django.test import TestCase, override_settings
+from django.db import IntegrityError, OperationalError, connections, transaction
+from django.db.migrations.executor import MigrationExecutor
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.core.empresa import empresa_actual, usar_empresa
 from apps.core.models import Auditoria
-from apps.productos.models import Bodega, Producto, StockBodega
+from apps.productos.models import Bodega, DetalleMovimiento, Movimiento, Producto, StockBodega, TipoMovimiento
 from apps.usuarios.models import Rol, Sesion, Usuario
 from .models import Empresa
+from .forms import EmpresaPanelForm
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
@@ -283,3 +285,187 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(self.cliente.get(ruta).status_code, 403)
         self.assertEqual(self.guardar(ruta, {'post': 'yes'}).status_code, 403)
         self.assertTrue(Usuario.objects.using('central').filter(pk=90, is_superuser=True).exists())
+
+    def datos_empresa(self, **cambios):
+        return {'nombre': 'Ferretería El Roble', 'razon_social': 'El Roble Limitada',
+                'rut': '12.345.678-5', 'rubro': 'ferreteria', 'contacto_nombre': 'Responsable de prueba',
+                'contacto_email': 'contacto@example.invalid', 'contacto_telefono': '+56 9 1234 5678',
+                'direccion': 'Dirección de prueba 100', 'comuna': 'Santiago', 'region': 'Metropolitana',
+                'codigo': '', 'alias_bd': 'repuestos', 'activa': 'on', **cambios}
+
+    def test_nueva_empresa_muestra_solo_bases_libres_y_rechaza_una_asignada(self):
+        self.entrar()
+        ruta = '/sistema/empresas/nueva/'
+        pagina = self.cliente.get(ruta)
+        self.assertContains(pagina, 'No hay bases disponibles')
+        self.assertContains(pagina, 'type="submit" class="btn btn-primary" disabled')
+        self.assertEqual(list(pagina.context['formulario'].fields['alias_bd'].widget.choices),
+                         [('', 'Selecciona una base disponible')])
+        respuesta = self.guardar(ruta, self.datos_empresa())
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn('alias_bd', respuesta.context['formulario'].errors)
+        self.assertEqual(Empresa.objects.count(), 2)
+        self.assertEqual(Empresa.objects.get(codigo='punto-motor').alias_bd, 'repuestos')
+
+    def test_alta_guarda_la_ficha_en_central_normaliza_rut_y_genera_codigo(self):
+        self.entrar()
+        Empresa.objects.filter(pk=self.motor.pk).delete()
+        inventarios = {alias: StockBodega.objects.using(alias).get(producto_id=10).cantidad_total
+                       for alias in ('ferreteria', 'repuestos')}
+        respuesta = self.guardar('/sistema/empresas/nueva/', self.datos_empresa())
+        self.assertRedirects(respuesta, '/sistema/empresas/ferreteria-el-roble/', fetch_redirect_response=False)
+        empresa = Empresa.objects.using('central').get(codigo='ferreteria-el-roble')
+        self.assertEqual((empresa.rut, empresa.alias_bd), ('12345678-5', 'repuestos'))
+        self.assertEqual(empresa.contacto_email, 'contacto@example.invalid')
+        self.assertEqual(empresa.datos_pendientes, [])
+        self.assertIsNotNone(empresa.creada_en)
+        self.assertIsNotNone(empresa.actualizada_en)
+        self.assertEqual(Auditoria.objects.using('central').latest('id').objeto_id, str(empresa.pk))
+        self.assertContains(self.cliente.get(respuesta.url), 'El Roble Limitada')
+        for alias, cantidad in inventarios.items():
+            self.assertEqual(StockBodega.objects.using(alias).get(producto_id=10).cantidad_total, cantidad)
+
+    def test_alta_exige_identificacion_y_contacto_y_la_ficha_antigua_sigue_editable(self):
+        self.entrar()
+        pagina = self.guardar('/sistema/empresas/nueva/', {'nombre': 'Nueva', 'alias_bd': 'ferreteria'})
+        for campo in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_email'):
+            self.assertIn(campo, pagina.context['formulario'].errors)
+        respuesta = self.guardar('/sistema/empresas/la-fragua/editar/',
+                                 {'nombre': 'Nombre actualizado', 'codigo': 'la-fragua', 'activa': 'on'})
+        self.assertEqual(respuesta.status_code, 302)
+        self.fragua.refresh_from_db()
+        self.assertEqual(self.fragua.nombre, 'Nombre actualizado')
+        self.assertTrue(self.fragua.activa)
+        self.assertTrue(self.fragua.datos_pendientes)
+
+    def test_rut_valida_digito_normaliza_k_y_evitas_duplicados(self):
+        formulario = EmpresaPanelForm(self.datos_empresa(rut='6.123.456-k'), instance=self.fragua)
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        guardada = formulario.save()
+        self.assertEqual(guardada.rut, '6123456-K')
+        repetida = EmpresaPanelForm(self.datos_empresa(rut='6.123.456-K', codigo='punto-motor'), instance=self.motor)
+        self.assertFalse(repetida.is_valid())
+        self.assertIn('rut', repetida.errors)
+        for rut in ('12.345.678-9', 'texto', '00000000-0'):
+            invalida = EmpresaPanelForm(self.datos_empresa(rut=rut, codigo='punto-motor'), instance=self.motor)
+            self.assertFalse(invalida.is_valid(), rut)
+            self.assertIn('rut', invalida.errors)
+        with self.assertRaises(IntegrityError), transaction.atomic(using='central'):
+            Empresa.objects.using('central').create(nombre='Duplicada', codigo='duplicada', alias_bd='otra', rut='6.123.456-k')
+
+    def test_codigo_automatico_resuelve_colisiones_y_evitas_la_ruta_reservada(self):
+        Empresa.objects.filter(pk=self.motor.pk).delete()
+        colision = EmpresaPanelForm(self.datos_empresa(nombre='La Fragua'))
+        self.assertTrue(colision.is_valid(), colision.errors)
+        self.assertEqual(colision.cleaned_data['codigo'], 'la-fragua-2')
+        reservado = EmpresaPanelForm(self.datos_empresa(codigo='nueva'))
+        self.assertFalse(reservado.is_valid())
+        self.assertIn('codigo', reservado.errors)
+        automatico = EmpresaPanelForm(self.datos_empresa(nombre='Nueva'))
+        self.assertTrue(automatico.is_valid(), automatico.errors)
+        self.assertEqual(automatico.cleaned_data['codigo'], 'empresa-nueva')
+
+    def test_editar_empresa_conserva_base_ante_post_manipulado(self):
+        self.entrar()
+        pagina = self.cliente.get('/sistema/empresas/la-fragua/editar/')
+        formulario = pagina.context['formulario']
+        self.assertTrue(formulario.fields['alias_bd'].disabled)
+        self.assertNotIn(('repuestos', 'repuestos'), list(formulario.fields['alias_bd'].widget.choices))
+        respuesta = self.guardar('/sistema/empresas/la-fragua/editar/', self.datos_empresa(codigo='la-fragua', alias_bd='repuestos'))
+        self.assertEqual(respuesta.status_code, 302)
+        self.fragua.refresh_from_db()
+        self.assertEqual(self.fragua.alias_bd, 'ferreteria')
+        self.assertEqual(Empresa.objects.get(pk=self.motor.pk).alias_bd, 'repuestos')
+
+    def test_ficha_guia_al_administrador_sin_cruzar_las_empresas(self):
+        self.entrar()
+        Usuario.objects.using('ferreteria').filter(pk=90).update(activo=False)
+        pagina = self.cliente.get('/sistema/empresas/la-fragua/')
+        self.assertContains(pagina, 'Añadir administrador')
+        self.assertContains(pagina, 'Ficha pendiente de completar')
+        self.assertFalse(pagina.context['resumen']['administrador'])
+        otra = self.cliente.get('/sistema/empresas/punto-motor/')
+        self.assertTrue(otra.context['resumen']['administrador'])
+        self.assertNotContains(otra, 'Añadir administrador')
+        formulario = self.cliente.get('/sistema/empresas/la-fragua/usuarios/nuevo/?rol=administrador')
+        rol = formulario.context['formulario'].initial['rol']
+        self.assertEqual(rol.codigo, 'administrador')
+        self.assertEqual(rol._state.db, 'ferreteria')
+        anonimo = APIClient(HTTP_HOST='127.0.0.1:8000')
+        self.assertEqual(anonimo.get('/sistema/empresas/la-fragua/').status_code, 302)
+
+    def test_resumen_sin_bodegas_explicita_la_preparacion_y_oculta_graficos(self):
+        self.entrar()
+        Bodega.objects.using('ferreteria').update(activa=False)
+        pagina = self.cliente.get('/sistema/inventario/?empresa=la-fragua')
+        self.assertContains(pagina, 'Sin bodegas activas')
+        self.assertNotContains(pagina, 'id="sistema-grafico-estado"')
+        self.assertNotContains(pagina, 'id="sistema-kpi-stock"')
+        self.assertContains(pagina, '/sistema/bodegas/?empresa=la-fragua')
+        self.assertTrue(Bodega.objects.using('repuestos').get(pk=1).activa)
+
+    def test_resumen_sin_productos_activos_no_muestra_graficos_vacios(self):
+        self.entrar()
+        Producto.objects.using('ferreteria').update(activo=False)
+        pagina = self.cliente.get('/sistema/inventario/?empresa=la-fragua')
+        self.assertContains(pagina, 'Sin productos activos')
+        self.assertNotContains(pagina, 'id="sistema-grafico-movimientos"')
+        self.assertNotContains(pagina, 'id="sistema-grafico-estado"')
+        self.assertContains(pagina, '/sistema/catalogo/?empresa=la-fragua')
+        self.assertTrue(Producto.objects.using('repuestos').get(pk=10).activo)
+
+    def test_resumen_sin_movimientos_conserva_existencias_y_cambia_con_el_periodo(self):
+        self.entrar()
+        ruta = '/sistema/inventario/?empresa=la-fragua'
+        pagina = self.cliente.get(ruta)
+        self.assertContains(pagina, 'Sin movimientos en el período')
+        self.assertContains(pagina, 'id="sistema-grafico-estado"')
+        self.assertNotContains(pagina, 'id="sistema-grafico-movimientos"')
+        self.assertEqual(pagina.context['dashboard']['kpi_stock'], 15)
+        with usar_empresa(self.fragua):
+            tipo = TipoMovimiento.objects.create(nombre='ENTRADA', operacion='+')
+            movimiento = Movimiento.objects.create(tipo=tipo, bodega_id=1, usuario_id=90)
+            DetalleMovimiento.objects.create(movimiento=movimiento, producto_id=10, cantidad=2)
+            Movimiento.objects.filter(pk=movimiento.pk).update(fecha_creacion=timezone.now() - timedelta(days=15))
+        self.assertContains(self.cliente.get(ruta), 'Sin movimientos en el período')
+        periodo_largo = self.cliente.get(ruta + '&dias=30')
+        self.assertNotContains(periodo_largo, 'Sin movimientos en el período')
+        self.assertContains(periodo_largo, 'id="sistema-grafico-movimientos"')
+        otra = self.cliente.get('/sistema/inventario/?empresa=punto-motor&dias=30')
+        self.assertContains(otra, 'Sin movimientos en el período')
+
+    def test_error_de_conexion_no_se_presenta_como_inventario_vacio(self):
+        self.entrar()
+        with patch('esquema_multiempresa.consultas_sistema.datos_resumen_dashboard', side_effect=OperationalError('sin conexión')):
+            pagina = self.cliente.get('/sistema/inventario/?empresa=la-fragua')
+        self.assertContains(pagina, 'No pudimos consultar el inventario')
+        self.assertContains(pagina, 'Reintentar consulta')
+        self.assertNotContains(pagina, 'Sin productos activos')
+        self.assertNotContains(pagina, 'id="sistema-kpi-stock"')
+
+
+class MigracionFichaEmpresaTests(TransactionTestCase):
+    databases = {'central'}
+
+    def test_migracion_conserva_empresas_y_no_inventa_fechas_historicas(self):
+        conexion = connections['central']
+        anterior = [('empresas', '0002_ticket_acceso')]
+        actual = [('empresas', '0003_ficha_empresa')]
+        ejecutor = MigrationExecutor(conexion)
+        ejecutor.migrate(anterior)
+        try:
+            empresa_anterior = ejecutor.loader.project_state(anterior).apps.get_model('empresas', 'Empresa')
+            original = empresa_anterior.objects.using('central').create(
+                codigo='existente', nombre='Empresa anterior', alias_bd='ferreteria', activa=False)
+            MigrationExecutor(conexion).migrate(actual)
+            conservada = Empresa.objects.using('central').get(pk=original.pk)
+            self.assertEqual((conservada.codigo, conservada.nombre, conservada.alias_bd, conservada.activa),
+                             ('existente', 'Empresa anterior', 'ferreteria', False))
+            self.assertEqual((conservada.rut, conservada.contacto_email), ('', ''))
+            self.assertIsNone(conservada.creada_en)
+            self.assertIsNone(conservada.actualizada_en)
+            nueva = Empresa.objects.using('central').create(codigo='posterior', nombre='Alta posterior', alias_bd='repuestos')
+            self.assertIsNotNone(nueva.creada_en)
+            self.assertIsNotNone(nueva.actualizada_en)
+        finally:
+            MigrationExecutor(conexion).migrate(actual)

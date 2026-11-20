@@ -31,6 +31,8 @@
 .ss-sistema-check { display: flex; align-items: center; gap: .65rem; padding-top: 1.5rem; }
 .ss-sistema-check label { margin: 0; }
 .ss-sistema-check .form-check-input { margin: 0; flex-shrink: 0; }
+.ss-sistema-check { flex-wrap: wrap; }
+.ss-sistema-check .form-text { flex-basis: 100%; }
 .ss-sistema .errorlist { list-style: none; padding: 0; margin: .4rem 0 0; }
 .ss-sistema-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end; padding: 1rem; margin-bottom: 1.25rem; }
 .ss-sistema-filtros .ss-sistema-acciones { grid-column: 1 / -1; }
@@ -44,17 +46,41 @@
 .ss-sistema-resumen-reporte p { display: flex; flex-direction: column; margin: 0; padding: .8rem 1rem; background: var(--teal-50); border-radius: .5rem; min-width: 150px; }
 .ss-sistema-resumen-reporte span { font-size: .8rem; color: var(--slate-600); }
 .ss-sistema-resumen-reporte strong { font-size: 1.25rem; }
+.ss-sistema-grupo { min-width: 0; border: 0; padding: 0; margin: 0 0 1.5rem; }
+.ss-sistema-grupo + .ss-sistema-grupo { border-top: 1px solid var(--slate-200); padding-top: 1.5rem; }
+.ss-sistema-grupo legend { float: none; width: auto; font-size: 1rem; font-weight: 650; margin: 0 0 .4rem; }
+.ss-sistema-grupo .ss-sistema-campos { margin-bottom: 0; }
+.ss-sistema-ficha { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.ss-sistema-datos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; margin: 0; }
+.ss-sistema-datos dt { font-size: .8rem; font-weight: 500; color: var(--slate-600); }
+.ss-sistema-datos dd { margin: .25rem 0 0; font-size: .9rem; overflow-wrap: anywhere; }
+.ss-sistema-enlace-empresa { font-weight: 650; color: var(--slate-800); text-decoration: underline; text-underline-offset: .15em; }
+.ss-sistema-preparacion { list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.ss-sistema-preparacion li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .4rem 1.5rem; border-bottom: 1px solid var(--slate-200); padding: .7rem 0; font-size: .875rem; }
+.ss-sistema-preparacion strong { font-weight: 500; }
+.ss-sistema-preparacion span { color: var(--slate-600); }
+.ss-sistema-aviso { padding: .8rem 1rem; border-radius: .5rem; background: var(--teal-50); color: var(--slate-800); font-size: .875rem; }
+.ss-sistema-detalles { padding: 1rem; }
+.ss-sistema-detalles summary { cursor: pointer; font-size: .875rem; font-weight: 600; }
+.ss-sistema-detalles[open] summary { margin-bottom: 1.25rem; }
+.ss-sistema-vacio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .9rem; padding: 2.5rem 1.5rem; text-align: center; }
+.ss-sistema-vacio > i { font-size: 1.8rem; color: var(--teal-600); }
+.ss-sistema-vacio h2 { font-size: 1.05rem; }
+.ss-sistema-vacio p { max-width: 620px; margin: 0; color: var(--slate-600); font-size: .9rem; }
+.ss-sistema-vacio-grafico { min-height: 280px; padding: 1.5rem .5rem; }
 @media (max-width: 991.98px) {
   .ss-sistema > .ss-sidebar { width: min(290px, 85vw); }
   .ss-sistema-identidad { flex: 1; font-size: .8rem; }
   .ss-sistema .bg-topbar .container-fluid > .d-flex { gap: .4rem !important; }
   .ss-sistema .ss-theme-label { display: none; }
   .ss-sistema-graficos { grid-template-columns: 1fr; }
+  .ss-sistema-ficha { grid-template-columns: 1fr; }
 }
 @media (max-width: 575.98px) {
   .ss-sistema-contenido h1 { font-size: 1.3rem; }
   .ss-sistema .ss-dash-heading { flex-wrap: wrap; align-items: start; }
   .ss-sistema-campos { grid-template-columns: 1fr; }
+  .ss-sistema-datos { grid-template-columns: 1fr; }
   .ss-sistema-selector { flex-wrap: wrap; }
   .ss-sistema-selector > div { width: 100%; }
   .ss-sistema-formulario { padding: 1rem; }

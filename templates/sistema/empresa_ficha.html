@@ -1,0 +1,48 @@
+{% extends 'sistema/base.html' %}
+{% block acciones %}<a class="btn btn-primary" href="{% url 'sistema_editar_empresa' empresa_seleccionada.codigo %}">Editar ficha</a>{% endblock %}
+{% block panel_content %}
+<div class="ss-sistema-ficha">
+  <section class="card"><h2 class="card-header">Identificación de la empresa</h2><div class="card-body">
+    <dl class="ss-sistema-datos">
+      <div><dt>Nombre comercial</dt><dd>{{ empresa_seleccionada.nombre }}</dd></div>
+      <div><dt>Razón social o titular</dt><dd>{{ empresa_seleccionada.razon_social|default:'Pendiente' }}</dd></div>
+      <div><dt>RUT del cliente</dt><dd>{{ empresa_seleccionada.rut|default:'Pendiente' }}</dd></div>
+      <div><dt>Rubro</dt><dd>{{ empresa_seleccionada.get_rubro_display|default:'Pendiente' }}</dd></div>
+      <div><dt>Estado del acceso</dt><dd><span class="{% if empresa_seleccionada.activa %}badge-soft-success{% else %}badge-soft-warning{% endif %}">{% if empresa_seleccionada.activa %}Activa{% else %}Inactiva{% endif %}</span></dd></div>
+      <div><dt>Código de empresa</dt><dd>{{ empresa_seleccionada.codigo }}</dd></div>
+    </dl>
+  </div></section>
+  <section class="card"><h2 class="card-header">Contacto principal</h2><div class="card-body">
+    <dl class="ss-sistema-datos">
+      <div><dt>Nombre</dt><dd>{{ empresa_seleccionada.contacto_nombre|default:'Pendiente' }}</dd></div>
+      <div><dt>Correo electrónico</dt><dd>{{ empresa_seleccionada.contacto_email|default:'Pendiente' }}</dd></div>
+      <div><dt>Teléfono</dt><dd>{{ empresa_seleccionada.contacto_telefono|default:'Sin registrar' }}</dd></div>
+      <div><dt>Dirección</dt><dd>{{ empresa_seleccionada.direccion|default:'Sin registrar' }}</dd></div>
+      <div><dt>Comuna</dt><dd>{{ empresa_seleccionada.comuna|default:'Sin registrar' }}</dd></div>
+      <div><dt>Región</dt><dd>{{ empresa_seleccionada.region|default:'Sin registrar' }}</dd></div>
+    </dl>
+  </div></section>
+</div>
+<section class="card mt-4"><h2 class="card-header">Preparación de la empresa</h2><div class="card-body">
+  {% if empresa_seleccionada.datos_pendientes %}<p class="ss-sistema-aviso">Ficha pendiente de completar: {{ empresa_seleccionada.datos_pendientes|join:', ' }}.</p>{% else %}<p>Los datos de identificación y contacto están completos.</p>{% endif %}
+  {% if resumen.disponible %}
+    <ul class="ss-sistema-preparacion">
+      <li><strong>Conexión de la empresa</strong><span>Disponible</span></li>
+      <li><strong>Administrador de la empresa</strong><span>{% if resumen.administrador %}Cuenta activa disponible{% else %}Pendiente de crear o activar{% endif %}</span></li>
+      <li><strong>Bodegas activas</strong><span>{% if resumen.bodegas %}{{ resumen.bodegas }}{% else %}Sin bodegas activas configuradas{% endif %}</span></li>
+      <li><strong>Productos activos</strong><span>{% if resumen.productos %}{{ resumen.productos }}{% else %}Sin productos activos registrados{% endif %}</span></li>
+    </ul>
+    <div class="ss-sistema-acciones">
+      {% if not resumen.administrador %}<a class="btn btn-primary" href="{% url 'sistema_nuevo_usuario_empresa' empresa_seleccionada.codigo %}?rol=administrador">Añadir administrador</a>{% endif %}
+      <a class="btn btn-outline-secondary" href="{% url 'sistema_usuarios' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver usuarios</a>
+      <a class="btn btn-outline-secondary" href="{% url 'sistema_inventario' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver inventario</a>
+    </div>
+  {% else %}<div class="alert alert-warning mb-0" role="status">No pudimos consultar la conexión de la empresa. Reintenta la consulta antes de continuar con su preparación.</div>{% endif %}
+</div></section>
+<details class="card ss-sistema-detalles mt-4"><summary>Información del registro</summary><dl class="ss-sistema-datos">
+  <div><dt>Base asignada</dt><dd>{{ empresa_seleccionada.alias_bd }}</dd></div>
+  <div><dt>Fecha de registro</dt><dd>{{ empresa_seleccionada.creada_en|date:'d/m/Y H:i'|default:'Fecha anterior no registrada' }}</dd></div>
+  <div><dt>Última actualización</dt><dd>{{ empresa_seleccionada.actualizada_en|date:'d/m/Y H:i'|default:'Sin registrar' }}</dd></div>
+</dl></details>
+<a class="btn btn-outline-secondary mt-4" href="{% url 'sistema_empresas' %}">Volver a empresas</a>
+{% endblock %}

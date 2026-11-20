@@ -1,5 +1,4 @@
 from django import forms
-from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.db.models import Q
 
@@ -24,12 +23,31 @@ class EmpresaPanelForm(FormularioPanel, EmpresaForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['alias_bd'].label = 'Base preparada para la empresa'
-        self.fields['alias_bd'].widget = forms.Select(choices=[('', 'Selecciona una base'), *[
-            (alias, alias) for alias in settings.BASES_EMPRESA
-        ]])
-        self.fields['alias_bd'].disabled = not self.instance._state.adding
-        self.fields['codigo'].help_text = 'Código usado en la dirección de acceso de la empresa.'
+        self.fields['alias_bd'].help_text = 'Cada empresa utiliza una base exclusiva. Se muestran las disponibles.'
+        self.fields['codigo'].help_text = 'Déjalo vacío para generarlo a partir del nombre. Identifica la dirección de acceso.'
+        self.fields['rut'].widget = forms.TextInput(attrs={'placeholder': '12.345.678-5', 'maxlength': 15})
+        # Los registros anteriores pueden completar su ficha gradualmente.
+        if self.instance._state.adding:
+            for nombre in ('razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_email'):
+                self.fields[nombre].required = True
+        self.fields['contacto_nombre'].widget.attrs['autocomplete'] = 'name'
+        self.fields['contacto_email'].widget.attrs['autocomplete'] = 'email'
+        self.fields['contacto_telefono'].widget = forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'})
+        self.fields['direccion'].widget.attrs['autocomplete'] = 'street-address'
+        self.fields['activa'].help_text = 'Habilita el acceso de las cuentas de esta empresa. Su configuración se revisa por separado.'
         self.estilizar()
+
+    def secciones(self):
+        return [
+            ('Identificación de la empresa', 'Datos que identifican al cliente de SmartStock.',
+             [self[nombre] for nombre in ('nombre', 'razon_social', 'rut', 'rubro')]),
+            ('Contacto principal', 'Persona con quien coordinar la habilitación y el soporte del servicio.',
+             [self[nombre] for nombre in ('contacto_nombre', 'contacto_email', 'contacto_telefono')]),
+            ('Dirección de contacto', 'Opcional. Las direcciones de las bodegas se registran en su propio módulo.',
+             [self[nombre] for nombre in ('direccion', 'comuna', 'region')]),
+            ('Acceso a SmartStock', 'Asigna la base preparada y revisa el acceso de la empresa.',
+             [self[nombre] for nombre in ('codigo', 'alias_bd', 'activa')]),
+        ]
 
 
 class CuentaPanelForm(FormularioPanel, forms.ModelForm):

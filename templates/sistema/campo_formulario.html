@@ -1,0 +1,9 @@
+<div class="{% if campo.field.widget.input_type == 'checkbox' %}ss-sistema-check{% endif %}">
+  {% if campo.field.widget.input_type == 'checkbox' %}
+    {{ campo }}<label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+  {% else %}
+    <label for="{{ campo.id_for_label }}">{{ campo.label }}{% if campo.field.required %}<span class="text-danger" aria-hidden="true"> *</span>{% else %} <span class="text-muted">(opcional)</span>{% endif %}</label>{{ campo }}
+  {% endif %}
+  {% if campo.help_text %}<div class="form-text" id="{{ campo.id_for_label }}_helptext">{{ campo.help_text }}</div>{% endif %}
+  {% if campo.errors %}<div class="text-danger small" role="alert">{{ campo.errors }}</div>{% endif %}
+</div>

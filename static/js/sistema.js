@@ -22,7 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const contenido = document.getElementById('sistema-datos-dashboard');
   if (!contenido || typeof Chart !== 'function') return;
   const datos = JSON.parse(contenido.textContent);
-  const movimientos = new Chart(document.getElementById('sistema-grafico-movimientos'), {
+  const lienzoMovimientos = document.getElementById('sistema-grafico-movimientos');
+  const lienzoEstado = document.getElementById('sistema-grafico-estado');
+  const movimientos = lienzoMovimientos ? new Chart(lienzoMovimientos, {
     type: 'line',
     data: {
       labels: datos.chart_labels,
@@ -32,8 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
       ],
     },
     options: {responsive: true, maintainAspectRatio: false, scales: {x: {ticks: {}}, y: {beginAtZero: true, ticks: {precision: 0}}}, plugins: {legend: {labels: {}}}},
-  });
-  new Chart(document.getElementById('sistema-grafico-estado'), {
+  }) : null;
+  if (lienzoEstado) new Chart(lienzoEstado, {
     type: 'doughnut',
     data: {labels: ['Stock suficiente', 'Stock bajo', 'Agotados'], datasets: [{
       data: [datos.estado_inventario.suficiente, datos.estado_inventario.bajo, datos.estado_inventario.agotado],
@@ -42,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     options: {responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: {legend: {display: false}}},
   });
   const actualizarColores = () => {
+    if (!movimientos) return;
     const color = getComputedStyle(document.documentElement).getPropertyValue('--slate-600').trim();
     movimientos.options.scales.x.ticks.color = color;
     movimientos.options.scales.y.ticks.color = color;

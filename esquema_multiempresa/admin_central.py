@@ -11,11 +11,13 @@ from django.core.exceptions import PermissionDenied
 from django.db import connections, transaction
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import redirect
+from django.utils.text import slugify
 
 from apps.usuarios.admin_site import SmartStockAdminSite
 from apps.usuarios.models import Usuario
 from .models import Empresa
 from .permisos import es_superusuario_smartstock
+from .validadores import normalizar_rut
 
 
 class AdministracionSistema(SmartStockAdminSite):
@@ -51,10 +53,41 @@ sitio_sistema = AdministracionSistema(name='sistema_admin')
 class EmpresaForm(forms.ModelForm):
     class Meta:
         model = Empresa
-        fields = ('nombre', 'codigo', 'alias_bd', 'activa')
+        fields = ('nombre', 'razon_social', 'rut', 'rubro', 'contacto_nombre', 'contacto_email',
+                  'contacto_telefono', 'direccion', 'comuna', 'region', 'codigo', 'alias_bd', 'activa')
+        labels = {'nombre': 'Nombre comercial', 'activa': 'Empresa activa'}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['codigo'].required = False
+        ocupadas = set(Empresa.objects.using('central').exclude(pk=self.instance.pk).values_list('alias_bd', flat=True))
+        self.bases_disponibles = [alias for alias in settings.BASES_EMPRESA if alias not in ocupadas]
+        self.fields['alias_bd'].widget = forms.Select(choices=[('', 'Selecciona una base disponible'), *[
+            (alias, alias) for alias in self.bases_disponibles
+        ]])
+        self.fields['alias_bd'].disabled = not self.instance._state.adding
+
+    def clean_rut(self):
+        rut = normalizar_rut(self.cleaned_data.get('rut', ''))
+        if rut and Empresa.objects.using('central').exclude(pk=self.instance.pk).filter(rut=rut).exists():
+            raise forms.ValidationError('Ya hay una empresa registrada con este RUT.')
+        return rut
 
     def clean_codigo(self):
-        codigo = self.cleaned_data['codigo']
+        codigo = self.cleaned_data.get('codigo', '')
+        if not codigo:
+            if not self.instance._state.adding:
+                return self.instance.codigo
+            base = slugify(self.cleaned_data.get('nombre', ''))[:54] or 'empresa'
+            if base == 'nueva':
+                base = 'empresa-nueva'
+            codigo = base
+            numero = 2
+            while Empresa.objects.using('central').filter(codigo=codigo).exists():
+                codigo = f'{base}-{numero}'
+                numero += 1
+        if codigo == 'nueva':
+            raise forms.ValidationError('Este código está reservado. Usa otro identificador para la empresa.')
         if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?', codigo):
             raise forms.ValidationError('Usa letras minúsculas, números y guiones entre palabras.')
         return codigo
@@ -63,16 +96,19 @@ class EmpresaForm(forms.ModelForm):
         alias = self.cleaned_data['alias_bd']
         if alias not in settings.BASES_EMPRESA:
             raise forms.ValidationError('Selecciona una base de empresa configurada en este servidor.')
+        if Empresa.objects.using('central').exclude(pk=self.instance.pk).filter(alias_bd=alias).exists():
+            raise forms.ValidationError('Esta base ya está asignada a otra empresa. Selecciona una disponible.')
         return alias
 
 
 @admin.register(Empresa, site=sitio_sistema)
 class EmpresaAdmin(admin.ModelAdmin):
     form = EmpresaForm
-    list_display = ('nombre', 'codigo', 'activa')
+    list_display = ('nombre', 'rut', 'codigo', 'activa')
     list_filter = ('activa',)
-    search_fields = ('nombre', 'codigo')
+    search_fields = ('nombre', 'razon_social', 'rut', 'codigo', 'contacto_email')
     ordering = ('nombre',)
+    readonly_fields = ('creada_en', 'actualizada_en')
 
 
 class NuevaCuentaTecnica(UserCreationForm):

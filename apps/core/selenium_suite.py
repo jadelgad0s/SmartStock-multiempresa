@@ -6,8 +6,11 @@ python manage.py test apps.core.selenium_suite --settings=config.settings.testin
 Define SMARTSTOCK_SELENIUM_VISIBLE=1 para abrir Chrome y ver las acciones.
 """
 
+import atexit
 from io import StringIO
 from os import getenv
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import sleep
 
 from django.conf import settings
@@ -27,6 +30,14 @@ if (settings.SETTINGS_MODULE != 'config.settings.testing'
         or settings.DATABASES['default']['ENGINE'] != 'django.db.backends.sqlite3'
         or settings.DATABASES['default']['NAME'] != ':memory:'):
     raise RuntimeError('Ejecuta Selenium con config.settings.testing y SS_TEST_POSTGRES desactivado.')
+
+
+# LiveServer comparte la conexión SQLite en memoria entre el hilo de prueba
+# y las peticiones del navegador. Un archivo temporal permite conexiones
+# independientes para las lecturas de historial, bodegas y notificaciones.
+_datos_selenium = TemporaryDirectory(prefix='smartstock-selenium-')
+atexit.register(_datos_selenium.cleanup)
+settings.DATABASES['default'].setdefault('TEST', {})['NAME'] = str(Path(_datos_selenium.name) / 'pruebas.sqlite3')
 
 
 class SmartStockSeleniumTests(StaticLiveServerTestCase):
@@ -79,6 +90,13 @@ class SmartStockSeleniumTests(StaticLiveServerTestCase):
         return StockBodega.objects.create(producto=producto, bodega=bodega, cantidad_total=10)
 
     def abrir_movimiento(self, sku, tipo, cantidad):
+        # La pantalla permite reintentar una lectura de bodegas fallida.
+        # Esperamos ese estado o la carga correcta antes de utilizar el escáner.
+        self.espera.until(lambda navegador:
+            navegador.find_element(By.ID, 'inputEscaner').is_enabled()
+            or navegador.find_element(By.ID, 'reintentarBodegasMovimiento').is_displayed())
+        if self.navegador.find_element(By.ID, 'reintentarBodegasMovimiento').is_displayed():
+            self.clic('reintentarBodegasMovimiento')
         escaner = self.espera.until(EC.element_to_be_clickable((By.ID, 'inputEscaner')))
         escaner.send_keys(sku, Keys.ENTER)
         self.espera.until(EC.visibility_of_element_located((By.ID, 'modalAccionMovimiento')))

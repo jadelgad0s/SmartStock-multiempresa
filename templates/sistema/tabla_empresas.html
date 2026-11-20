@@ -5,16 +5,17 @@
       <tbody>
         {% for resumen in resumen_empresas %}
         <tr>
-          <td><strong>{{ resumen.empresa.nombre }}</strong><small class="ss-sistema-secundario">{{ resumen.empresa.codigo }}</small></td>
+          <td><a class="ss-sistema-enlace-empresa" href="{% url 'sistema_ficha_empresa' resumen.empresa.codigo %}">{{ resumen.empresa.nombre }}</a><small class="ss-sistema-secundario">{% if resumen.empresa.rut %}{{ resumen.empresa.rut }}{% else %}{{ resumen.empresa.codigo }}{% endif %}</small>{% if resumen.empresa.datos_pendientes %}<small class="ss-sistema-secundario">Ficha pendiente de completar</small>{% endif %}</td>
           <td><span class="{% if resumen.empresa.activa %}badge-soft-success{% else %}badge-soft-warning{% endif %}">{% if resumen.empresa.activa %}Activa{% else %}Inactiva{% endif %}</span></td>
           {% if resumen.disponible %}<td>{{ resumen.usuarios }}</td><td>{{ resumen.productos }}</td><td>{{ resumen.bodegas }}</td>{% else %}<td colspan="3" class="text-danger">Sin conexión con la empresa</td>{% endif %}
           <td><div class="ss-sistema-acciones">
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_ficha_empresa' resumen.empresa.codigo %}">Ver ficha</a>
             <a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_inventario' %}?empresa={{ resumen.empresa.codigo|urlencode }}">Ver inventario</a>
             <a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_usuarios' %}?empresa={{ resumen.empresa.codigo|urlencode }}">Usuarios</a>
             <a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_editar_empresa' resumen.empresa.codigo %}">Editar</a>
           </div></td>
         </tr>
-        {% empty %}<tr><td colspan="6" class="text-center text-muted py-4">No hay empresas que coincidan con la búsqueda.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="6" class="text-center text-muted py-4">{% if request.GET.search %}No hay empresas que coincidan con la búsqueda.{% else %}Todavía no hay empresas registradas. Usa Añadir empresa para comenzar.{% endif %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

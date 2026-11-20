@@ -1,5 +1,8 @@
 """Prueba de dos empresas en pestañas del mismo navegador con bases SQLite desechables."""
+import atexit
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -20,6 +23,14 @@ from esquema_multiempresa.models import Empresa
 if (settings.SETTINGS_MODULE != 'esquema_multiempresa.testing'
         or settings.DATABASES['central']['ENGINE'] != 'django.db.backends.sqlite3'):
     raise RuntimeError('Ejecuta esta suite con esquema_multiempresa.testing y SS_TEST_POSTGRES desactivado.')
+
+
+# Cada alias utiliza su propio archivo desechable para que las peticiones
+# simultáneas de las dos pestañas tengan conexiones SQLite independientes.
+_datos_selenium = TemporaryDirectory(prefix='smartstock-empresas-selenium-')
+atexit.register(_datos_selenium.cleanup)
+for _alias in ('central', 'ferreteria', 'repuestos'):
+    settings.DATABASES[_alias].setdefault('TEST', {})['NAME'] = str(Path(_datos_selenium.name) / f'{_alias}.sqlite3')
 
 
 class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
@@ -114,3 +125,41 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         navegador.find_element(By.CSS_SELECTOR, '.ss-menu-toggle').click()
         espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+
+        navegador.get(self.live_server_url + '/sistema/empresas/nueva/')
+        self.assertIn('No hay bases disponibles', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertFalse(navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').is_enabled())
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+        navegador.get(self.live_server_url + '/sistema/empresas/la-fragua/editar/')
+        for campo, valor in (('razon_social', 'Ferretería La Fragua Limitada'), ('rut', '12.345.678-5'),
+                             ('contacto_nombre', 'Contacto de prueba'), ('contacto_email', 'contacto@example.invalid'),
+                             ('contacto_telefono', '+56 9 1234 5678'), ('direccion', 'Dirección de prueba 100'),
+                             ('comuna', 'Santiago'), ('region', 'Metropolitana')):
+            elemento = navegador.find_element(By.ID, 'id_' + campo)
+            elemento.clear()
+            elemento.send_keys(valor)
+        Select(navegador.find_element(By.ID, 'id_rubro')).select_by_value('ferreteria')
+        guardar = navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]')
+        navegador.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", guardar)
+        espera.until(lambda d: d.execute_script(
+            'const r = arguments[0].getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight;', guardar))
+        guardar.click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/empresas/la-fragua/')
+        self.assertIn('12345678-5', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('contacto@example.invalid', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+        navegador.set_window_size(1440, 1000)
+        Bodega.objects.using('ferreteria').update(activa=False)
+        navegador.get(self.live_server_url + '/sistema/inventario/?empresa=la-fragua')
+        self.assertIn('Sin bodegas activas', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertFalse(navegador.find_elements(By.ID, 'sistema-grafico-estado'))
+        Bodega.objects.using('ferreteria').update(activa=True)
+        Producto.objects.using('ferreteria').update(activo=False)
+        navegador.refresh()
+        self.assertIn('Sin productos activos', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertFalse(navegador.find_elements(By.ID, 'sistema-grafico-estado'))
+        Producto.objects.using('ferreteria').update(activo=True)
+        navegador.refresh()
+        self.assertIn('Sin movimientos en el período', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertTrue(navegador.find_elements(By.ID, 'sistema-grafico-estado'))
+        self.assertFalse(navegador.find_elements(By.ID, 'sistema-grafico-movimientos'))

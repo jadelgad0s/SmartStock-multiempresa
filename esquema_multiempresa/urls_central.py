@@ -11,7 +11,7 @@ from .recuperacion_central import SolicitarRecuperacionCentralView
 from .consultas_sistema import consulta_sistema, inventario_sistema
 from .sistema import (
     abrir_configuracion, auditoria_sistema, cuentas_sistema, editar_cuenta_tecnica,
-    editar_empresa, editar_usuario_empresa, empresas_sistema, inicio_sistema, usuarios_sistema,
+    editar_empresa, editar_usuario_empresa, empresas_sistema, ficha_empresa, inicio_sistema, usuarios_sistema,
 )
 
 
@@ -27,6 +27,7 @@ urlpatterns = [
     path('sistema/', inicio_sistema, name='sistema_inicio'),
     path('sistema/empresas/', empresas_sistema, name='sistema_empresas'),
     path('sistema/empresas/nueva/', editar_empresa, name='sistema_nueva_empresa'),
+    path('sistema/empresas/<slug:codigo>/', ficha_empresa, name='sistema_ficha_empresa'),
     path('sistema/empresas/<slug:codigo>/editar/', editar_empresa, name='sistema_editar_empresa'),
     path('sistema/usuarios/', usuarios_sistema, name='sistema_usuarios'),
     path('sistema/empresas/<slug:codigo>/usuarios/nuevo/', editar_usuario_empresa, name='sistema_nuevo_usuario_empresa'),

@@ -73,6 +73,26 @@ Las cuentas centrales con `is_staff=True` representan al personal técnico. El s
 
 Para registrar una empresa adicional, su base y conexión deben estar preparadas en el servidor. Las empresas inactivas siguen disponibles en el panel de soporte y su acceso operativo queda bloqueado.
 
+## Ficha de empresa y actualización de instalaciones existentes
+
+La ficha central incluye nombre comercial, razón social o nombre del titular, RUT, rubro, contacto principal, correo, teléfono y dirección de contacto (dirección, comuna y región). En un alta nueva se requieren los datos de identificación y el nombre y correo del contacto. El teléfono y la dirección son opcionales. Las empresas registradas antes de esta ampliación conservan sus accesos y pueden completar su información gradualmente. Los datos faltantes se indican en **Ver ficha**.
+
+Después de actualizar el código, aplica esta migración en la base central antes de iniciar el servidor.
+
+```bat
+python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
+```
+
+La migración `empresas.0003_ficha_empresa` amplía la tabla `empresas`. Conserva los códigos, las bases asignadas y el estado de acceso. Las fechas de registro de las empresas anteriores quedan sin dato porque no se conocen. Las nuevas altas y las actualizaciones guardan sus fechas automáticamente. Se mantienen 17 tablas en la central y 46 en cada empresa.
+
+El RUT admite puntos y un verificador K en minúscula o mayúscula. Se valida el dígito verificador y se guarda sin puntos y con K mayúscula. Un RUT informado pertenece a una sola ficha. El código de acceso se genera a partir del nombre cuando se deja vacío.
+
+**Añadir empresa** ofrece únicamente las bases configuradas que todavía no tienen empresa asignada. Si todas están ocupadas, muestra el motivo y deshabilita **Crear empresa**. El servidor también rechaza un envío manual que intente utilizar una base ocupada. Al editar una empresa, su base se conserva aunque el envío intente cambiarla.
+
+Al guardar se abre **Ver ficha**, que reúne el contacto, la identificación y la preparación operativa. La conexión, la existencia de un administrador activo, las bodegas y los productos se revisan por separado del estado activo/inactivo del servicio. Desde una ficha sin administrador, **Añadir administrador** abre el formulario de usuario de esa empresa con el rol Administrador seleccionado. El registro usa una base ya preparada y la creación de usuarios sigue siendo un paso explícito.
+
+El resumen por empresa distingue **Sin bodegas activas**, **Sin productos activos**, **Sin movimientos en el período** y un error de consulta. Los primeros dos estados muestran una explicación y el acceso al módulo correspondiente. Un período sin movimientos conserva las existencias y su gráfico. Un error de conexión ofrece reintentar y no se presenta como stock cero.
+
 Las cuentas de prueba pueden conservar `admin@smartstock.cl` en ambas empresas con contraseñas diferentes. Si el mismo correo y contraseña dan acceso a varias empresas, el formulario muestra esos destinos después de autenticarse. La opción **¿Olvidaste tu contraseña?** envía los enlaces de recuperación correspondientes al correo ingresado.
 
 El login común consulta las cuentas de las empresas activas configuradas. Si una base está inaccesible, devuelve un error temporal y permite reintentar. Este recorrido está pensado para el ensayo actual de dos empresas. Las cuentas técnicas centrales pueden autenticarse independientemente de la disponibilidad de las bases de clientes.
