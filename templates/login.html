@@ -3,9 +3,9 @@
 {% block title %}Iniciar sesión - SmartStock{% endblock %}
 {% block acceso_content %}
 <h1 id="titulo-acceso">Bienvenido de vuelta</h1>
-<p class="ss-auth-intro">Ingresa tu correo y contraseña para acceder a SmartStock.</p>
+<p class="ss-auth-intro">{% if request.empresa %}Ingresa tu correo y contraseña para acceder a <strong>{{ request.empresa.nombre }}</strong>.{% else %}Ingresa tu correo y contraseña para acceder a SmartStock.{% endif %}</p>
 <div id="alert-box" class="alert alert-danger ss-auth-error" role="alert" tabindex="-1" hidden></div>
-<form id="login-form" method="post" action="{% url 'login_web' %}" aria-busy="false">
+<form id="login-form" method="post" action="{% url 'login_web' %}" aria-busy="false" data-dominio-empresas="{{ dominio_empresas }}">
   {% csrf_token %}
   <div class="ss-auth-field">
     <label for="email" class="form-label">Correo electrónico</label>
@@ -23,8 +23,13 @@
   </div>
   <button id="login-submit" type="submit" class="btn btn-primary">Iniciar sesión</button>
 </form>
+<div id="opciones-acceso" hidden>
+  <p class="ss-auth-intro">Tus credenciales dan acceso a varias empresas. Elige dónde ingresar.</p>
+  <div id="destinos-acceso" class="d-grid gap-2"></div>
+  <button type="button" id="cambiar-cuenta" class="btn btn-link mt-3">Usar otra cuenta</button>
+</div>
 <footer>
   <a href="{% url 'contacto_page' %}" class="ss-auth-secondary">Contacto</a>
 </footer>
 {% endblock %}
-{% block acceso_scripts %}<script src="{% static 'js/login.js' %}?v=roles-2" defer></script>{% endblock %}
+{% block acceso_scripts %}<script src="{% static 'js/login.js' %}?v=multiempresa-3" defer></script>{% endblock %}

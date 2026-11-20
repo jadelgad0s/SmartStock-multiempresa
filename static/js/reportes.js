@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.SmartStockNavegacion && !await window.SmartStockNavegacion.lista) return;
     if (!localStorage.getItem('access_token')) { window.location.replace('/'); return; }
     const api = window.SmartStockReportes, el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const crear = (tag, clase = '', texto) => { const n = document.createElement(tag); n.className = clase; if (texto !== undefined) n.textContent = String(texto ?? ''); return n; };
     let usuario = {}; try { usuario = JSON.parse(localStorage.getItem('usuario') || '{}') || {}; } catch (_) {}
     el('user-name-sidebar').textContent = usuario.nombre_completo || 'Usuario';
@@ -16,8 +17,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const form = el('filtrosReportes'), tabla = el('filasReporte');
     let bodegas = [], permisos = {ver: false, exportar: false}, lista = false, pagina = 1, total = 0;
     let version = 0, temporizador, exportando = false, consultaAplicada = null, opcionesListas = false;
-    let paginaProductos = 1, totalProductos = 0, versionProductos = 0, timerProductos;
-    const bodegaInicial = new URLSearchParams(location.search).get('bodega');
+    const anteriorProductos = el('productosReporteAnterior'), siguienteProductos = el('productosReporteSiguiente');
+    let paginaProductos = 1, paginasProductos = 1, versionProductos = 0, timerProductos;
+    const inicial = new URLSearchParams(location.search);
+    const bodegaInicial = inicial.get('bodega');
+    const idInicial = inicial.get('producto') || '';
+    const kardexInicial = inicial.get('informe') === 'kardex';
+    let productoInicial = kardexInicial && /^[1-9][0-9]{0,18}$/.test(idInicial) ? idInicial : '';
+    if (kardexInicial) el('informeReporte').value = 'kardex';
     const actual = () => el('informeReporte').value;
     const esStock = () => ['existencias', 'critico'].includes(actual());
     const error = mensaje => { el('errorReportes').textContent = mensaje || ''; el('errorReportes').hidden = !mensaje; };
@@ -56,7 +63,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const anterior = bodegaPreferida || el('bodegaReporte').value;
         el('bodegaReporte').replaceChildren(...(!stock && !kardex ? [new Option('Todas las bodegas', '')] : []), ...bodegas.map(b => new Option(b.nombre + (b.activa ? '' : ' (inactiva)'), String(b.id))));
         const defecto = bodegas.find(b => b.activa && b.nombre === 'Bodega Central') || bodegas.find(b => b.activa) || bodegas[0];
-        el('bodegaReporte').value = bodegas.some(b => String(b.id) === anterior) ? anterior : stock || kardex ? String(defecto?.id || '') : '';
+        const bodegaEncontrada = bodegas.some(b => String(b.id) === anterior);
+        const bodegaNoDisponible = kardex && bodegaPreferida && !bodegaEncontrada;
+        if (bodegaNoDisponible) el('bodegaReporte').prepend(new Option('Selecciona una bodega', ''));
+        el('bodegaReporte').value = bodegaEncontrada ? anterior : (stock || kardex) && !bodegaNoDisponible ? String(defecto?.id || '') : '';
         el('bodegaReporte').disabled = !bodegas.length;
         if (kardex) { el('productoReporte').value = ''; cargarProductos(); }
     }
@@ -95,7 +105,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (json.results.length) tabla.replaceChildren(...json.results.map(item => {
             const tr = crear('tr');
             for (const c of meta.columnas) {
-                const td = crear('td', c.numero ? 'ss-report-number' : '', item[c.campo]); td.dataset.label = c.etiqueta; td.dataset.campo = c.campo; tr.appendChild(td);
+                const td = crear('td', c.numero ? 'ss-report-number' : '', item[c.campo]);
+                td.dataset.label = c.etiqueta; td.dataset.campo = c.campo;
+                if (c.campo === 'referencia' && meta.informe === 'kardex' && Number.isSafeInteger(item.transferencia_id) && item.transferencia_id > 0) {
+                    const referencia = crear('div', '', item.referencia);
+                    const enlace = crear('a', 'd-block mt-1', 'Ver detalle del traslado');
+                    enlace.href = '/transferencias/?' + new URLSearchParams({transferencia: item.transferencia_id});
+                    enlace.setAttribute('aria-label', 'Ver detalle del traslado #' + item.transferencia_id);
+                    referencia.appendChild(enlace);
+                    td.replaceChildren(referencia);
+                }
+                tr.appendChild(td);
             }
             return tr;
         })); else mensajeTabla('No hay registros para estos filtros.');
@@ -110,7 +130,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         clearTimeout(temporizador); invalidar(); const v = version; error('');
         el('reintentarReportes').hidden = true;
         if (!opcionesListas) return;
-        if ((esStock() || actual() === 'kardex') && !el('bodegaReporte').value) { mensajeTabla('No hay bodegas disponibles para este reporte.'); return; }
+        if ((esStock() || actual() === 'kardex') && !el('bodegaReporte').value) {
+            mensajeTabla(bodegas.length ? 'Selecciona una bodega para consultar el reporte.' : 'No hay bodegas disponibles para este reporte.');
+            return;
+        }
         if (actual() === 'kardex' && !el('productoReporte').value) { mensajeTabla('Selecciona un producto para consultar su Kardex.'); return; }
         if (!esStock() && el('desdeReporte').value && el('hastaReporte').value && el('desdeReporte').value > el('hastaReporte').value) { error('La fecha inicial no puede ser posterior a la final.'); mensajeTabla('Revisa el rango de fechas.'); return; }
         const p = parametros(), aplicados = p.toString(); p.set('page', ultima ? 'last' : String(pagina));
@@ -126,29 +149,57 @@ document.addEventListener('DOMContentLoaded', async () => {
             error(e.message); mensajeTabla('No se pudo cargar el reporte.'); el('reintentarReportes').hidden = false;
         } finally { if (v === version) { tabla.setAttribute('aria-busy', 'false'); botonesExportar(); } }
     }
+    function prepararCargaProductos() {
+        el('productoReporte').disabled = true;
+        anteriorProductos.disabled = siguienteProductos.disabled = true;
+        el('estadoProductosReporte').textContent = 'Cargando productos…';
+        el('reintentarProductosReporte').hidden = true;
+    }
+    function opcionProducto(p) {
+        return new Option(p.sku + ' · ' + p.nombre + (p.activo ? '' : ' (inactivo)'), String(p.id));
+    }
     async function cargarProductos({ultima = false} = {}) {
         clearTimeout(timerProductos); const v = ++versionProductos;
-        const select = el('productoReporte'), anterior = select.value;
-        select.disabled = true; el('estadoProductosReporte').textContent = 'Cargando productos…';
-        el('reintentarProductosReporte').hidden = true;
-        el('productosReporteAnterior').disabled = el('productosReporteSiguiente').disabled = true;
+        const select = el('productoReporte'), seleccionAnterior = select.value ? select.selectedOptions[0] : null;
+        prepararCargaProductos();
         try {
             const p = new URLSearchParams({page: ultima ? 'last' : String(paginaProductos), search: el('buscarProductoReporte').value.trim()});
+            if (productoInicial) p.set('seleccion', productoInicial);
             const json = await api.json('/api/v1/reportes/productos/?' + p);
             if (v !== versionProductos) return;
-            if (!Array.isArray(json.results) || !Number.isInteger(json.count)) throw new Error('No se pudo leer la lista de productos.');
-            totalProductos = json.count;
-            if (ultima) paginaProductos = Math.max(1, Math.ceil(totalProductos / 25));
-            select.replaceChildren(new Option('Selecciona un producto', ''), ...json.results.map(p => new Option(p.sku + ' · ' + p.nombre + (p.activo ? '' : ' (inactivo)'), String(p.id))));
-            if (json.results.some(p => String(p.id) === anterior)) select.value = anterior;
+            if (!Array.isArray(json.results) || !Number.isInteger(json.count) || json.count < 0) throw new Error('No se pudo leer la lista de productos.');
+            paginasProductos = Math.max(1, Math.ceil(json.count / 25));
+            if (ultima) paginaProductos = paginasProductos;
+            const opciones = json.results.map(opcionProducto);
+            const seleccionado = productoInicial || seleccionAnterior?.value || '';
+            const enPagina = opciones.some(opcion => opcion.value === seleccionado);
+            const respaldo = productoInicial && String(json.seleccion?.id) === productoInicial
+                ? opcionProducto(json.seleccion) : seleccionAnterior;
+            const conservarSeleccion = respaldo?.value === seleccionado;
+            const sinSeleccion = new Option('Selecciona un producto', '');
+            select.replaceChildren(sinSeleccion, ...opciones);
+            if (!enPagina && conservarSeleccion) {
+                const grupo = crear('optgroup');
+                grupo.label = 'Producto seleccionado';
+                grupo.append(respaldo);
+                sinSeleccion.after(grupo);
+            }
+            select.value = enPagina || conservarSeleccion ? seleccionado : '';
             select.disabled = false;
-            el('estadoProductosReporte').textContent = json.count ? 'Página ' + paginaProductos + ' de ' + Math.ceil(json.count / 25) + ' · ' + json.count + ' productos' : 'No se encontraron productos.';
-            el('productosReporteAnterior').disabled = paginaProductos <= 1; el('productosReporteSiguiente').disabled = paginaProductos >= Math.ceil(totalProductos / 25);
+            el('estadoProductosReporte').textContent = json.count ? 'Página ' + paginaProductos + ' de ' + paginasProductos + ' · ' + json.count + ' productos' : 'No se encontraron productos.';
+            anteriorProductos.disabled = paginaProductos <= 1;
+            siguienteProductos.disabled = paginaProductos >= paginasProductos;
+            if (productoInicial) {
+                productoInicial = '';
+                if (select.value) { pagina = 1; cargar(); }
+                else mensajeTabla('El producto del enlace ya no está disponible. Selecciona otro producto.');
+            }
         } catch (e) {
             if (v !== versionProductos) return;
             if (e.status === 404 && paginaProductos > 1 && !ultima) return cargarProductos({ultima: true});
-            select.replaceChildren(new Option('No se pudieron cargar los productos', ''));
+            if (!seleccionAnterior) select.replaceChildren(new Option('No se pudieron cargar los productos', ''));
             el('estadoProductosReporte').textContent = e.message; el('reintentarProductosReporte').hidden = false;
+            if (productoInicial) mensajeTabla('Reintenta la carga del producto para consultar su Kardex.');
         }
     }
     async function iniciar() {
@@ -165,22 +216,29 @@ document.addEventListener('DOMContentLoaded', async () => {
                 el('menu-config').hidden = !r.data.menu.configuracion;
                 el('menu-sistema-title').hidden = el('menu-usuarios').hidden && el('menu-config').hidden;
             }
-            form.hidden = false; configurarTipo(bodegaInicial); await cargar();
+            form.hidden = false;
+            configurarTipo(bodegaInicial);
+            if (productoInicial) mensajeTabla('Cargando producto para el Kardex…');
+            else await cargar();
         } catch (e) { error(e.message); el('reintentarReportes').hidden = false; }
     }
-    el('informeReporte').addEventListener('change', () => { ++versionProductos; pagina = 1; configurarTipo(); cargar(); });
+    el('informeReporte').addEventListener('change', () => { ++versionProductos; productoInicial = ''; pagina = paginaProductos = 1; configurarTipo(); cargar(); });
     for (const id of ['bodegaReporte', 'estadoProductoReporte', 'tipoReporte', 'desdeReporte', 'hastaReporte', 'productoReporte']) el(id).addEventListener('change', () => { pagina = 1; cargar(); });
     el('buscarReporte').addEventListener('input', () => { clearTimeout(temporizador); invalidar(); pagina = 1; temporizador = setTimeout(cargar, 300); });
-    form.addEventListener('submit', e => { e.preventDefault(); pagina = 1; cargar(); });
-    el('limpiarReporte').addEventListener('click', () => { const tipo = actual(); form.reset(); el('informeReporte').value = tipo; pagina = paginaProductos = 1; configurarTipo(); cargar(); });
+    form.addEventListener('submit', e => { e.preventDefault(); pagina = 1; conCarga('Cargando reporte…', cargar); });
+    el('limpiarReporte').addEventListener('click', () => { const tipo = actual(); form.reset(); el('informeReporte').value = tipo; productoInicial = ''; pagina = paginaProductos = 1; configurarTipo(); cargar(); });
     el('reintentarReportes').addEventListener('click', () => opcionesListas ? cargar() : iniciar());
     el('buscarProductoReporte').addEventListener('input', () => {
-        clearTimeout(timerProductos); ++versionProductos; el('productoReporte').value = ''; el('productoReporte').disabled = true;
+        clearTimeout(timerProductos); ++versionProductos; productoInicial = ''; el('productoReporte').value = '';
+        prepararCargaProductos();
         pagina = paginaProductos = 1; cargar(); timerProductos = setTimeout(cargarProductos, 300);
     });
     el('reintentarProductosReporte').addEventListener('click', cargarProductos);
-    for (const [id, delta] of [['productosReporteAnterior', -1], ['productosReporteSiguiente', 1]]) el(id).addEventListener('click', () => {
-        paginaProductos += delta; el('productoReporte').value = ''; pagina = 1; cargar(); cargarProductos();
+    for (const [boton, delta] of [[anteriorProductos, -1], [siguienteProductos, 1]]) boton.addEventListener('click', () => {
+        const destino = paginaProductos + delta;
+        if (boton.disabled || destino < 1 || destino > paginasProductos) return;
+        paginaProductos = destino;
+        cargarProductos();
     });
     el('paginasReporte').addEventListener('click', e => {
         const b = e.target.closest('button[data-page]'); if (!b || b.disabled) return;
@@ -220,5 +278,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     el('exportarReporte').addEventListener('click', () => exportar('csv'));
     el('imprimirReporte').addEventListener('click', () => exportar('html'));
-    iniciar();
+    conCarga('Cargando reportes…', iniciar);
 });

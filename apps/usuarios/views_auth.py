@@ -11,18 +11,31 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 
 from apps.core.responses import success_response, error_response
 from apps.core.utils import registrar_auditoria
+from .tokens import RenovacionEmpresa
 from .navegacion import cuenta_habilitada, inicio_usuario, modulos_usuario
 from .serializers import (
     CustomTokenObtainPairSerializer,
+    RenovarTokenSerializer,
     CambioPasswordSerializer,
     UsuarioDetailSerializer,
 )
+
+
+def abrir_sesion_web(request, usuario):
+    django_login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
+    request.session.set_expiry(api_settings.REFRESH_TOKEN_LIFETIME)
+
+
+def auditar_login(usuario):
+    registrar_auditoria(
+        accion='LOGIN', modelo='Usuario', objeto_id=usuario.pk,
+        descripcion=f'Inicio de sesión: {usuario.email}', usuario_override=usuario,
+    )
 
 
 class LoginView(TokenObtainPairView):
@@ -64,17 +77,9 @@ class LoginView(TokenObtainPairView):
         usuario_login = serializer.user
 
         if self.abrir_sesion_web:
-            django_login(request._request, usuario_login, backend='django.contrib.auth.backends.ModelBackend')
-            request.session.set_expiry(api_settings.REFRESH_TOKEN_LIFETIME)
+            abrir_sesion_web(request._request, usuario_login)
 
-        # Registrar auditoría del login exitoso
-        registrar_auditoria(
-            accion='LOGIN',
-            modelo='Usuario',
-            objeto_id=data['usuario']['id'],
-            descripcion=f'Inicio de sesión: {data["usuario"]["email"]}',
-            usuario_override=usuario_login
-        )
+        auditar_login(usuario_login)
 
         return success_response(
             data=data,
@@ -88,7 +93,7 @@ class LoginWebView(LoginView):
 
 
 def invalidar_refresh(usuario, refresh):
-    token = RefreshToken(refresh)
+    token = RenovacionEmpresa(refresh)
     if str(token.get(api_settings.USER_ID_CLAIM)) != str(usuario.pk):
         raise TokenError('El token pertenece a otra cuenta.')
     token.blacklist()
@@ -228,6 +233,7 @@ def cambiar_password_view(request):
 
 class CustomTokenRefreshView(TokenRefreshView):
     """Refresh de token JWT con respuesta estandarizada."""
+    serializer_class = RenovarTokenSerializer
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)

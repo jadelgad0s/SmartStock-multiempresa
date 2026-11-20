@@ -8,6 +8,11 @@
     const estado = document.getElementById('ss-acceso-estado');
     const texto = document.getElementById('ss-acceso-texto');
     const reintentar = document.getElementById('ss-acceso-reintentar');
+    const conCarga = window.SmartStockCarga || ((mensaje, tarea) => {
+        estado.hidden = false;
+        texto.textContent = mensaje;
+        return tarea();
+    });
     const ruta = location.pathname.replace(/\/?$/, '/');
     reintentar.addEventListener('click', () => location.reload());
 
@@ -46,11 +51,11 @@
             return null;
         }
 
-        estado.hidden = false;
-        texto.textContent = 'Comprobando tu acceso a SmartStock…';
+        estado.hidden = true;
         reintentar.hidden = true;
         try {
-            const {data} = await window.SmartStockReportes.json('/api/v1/auth/navegacion/');
+            const {data} = await conCarga('Comprobando tu acceso a SmartStock…', () =>
+                window.SmartStockReportes.json('/api/v1/auth/navegacion/'));
             if (!Array.isArray(data?.modulos) || !data.usuario?.id ||
                 data.inicio !== '/' && (!/^\/[a-z-]+\/$/.test(data.inicio) || !data.modulos.includes(data.inicio))) {
                 throw new Error('No se pudo leer la configuración de tu cuenta.');
@@ -74,6 +79,7 @@
                 ? 'Tu cuenta necesita un rol activo. Contacta al administrador.'
                 : 'No pudimos comprobar tu acceso. Vuelve a intentarlo.';
             reintentar.hidden = error.status === 403;
+            estado.hidden = false;
             return null;
         }
     }

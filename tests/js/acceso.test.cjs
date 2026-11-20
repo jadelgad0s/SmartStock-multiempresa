@@ -13,6 +13,7 @@ async function pantalla(t,tipo='login'){
  if(tipo==='login'){
   const login=w.document.getElementById('login-form');
   login.action='/api/v1/auth/login-web/';
+  login.dataset.dominioEmpresas='localhost';
   const csrf=w.document.createElement('input');
   Object.assign(csrf,{type:'hidden',name:'csrfmiddlewaretoken',value:'csrf-prueba'});
   login.appendChild(csrf);
@@ -58,6 +59,33 @@ test('errores 429 y 503 explican cómo reintentar sin mostrar detalles internos'
 });
 test('inicio exitoso guarda la sesión y conserva el bloqueo mientras navega',async t=>{
  const c=await pantalla(t);c.completar();c.enviar();await c.responder(exito());assert.equal(c.w.localStorage.getItem('access_token'),'access-prueba');assert.equal(JSON.parse(c.w.localStorage.getItem('usuario')).id,7);assert.equal(c.w.localStorage.getItem('password'),null);assert.match(c.el('login-submit').textContent,/Abriendo SmartStock/);assert.equal(c.el('login-submit').disabled,true);c.enviar();assert.equal(c.requests.length,1);
+});
+test('el login común entrega la sesión por POST a la empresa sin guardar credenciales en el portal',async t=>{
+ const c=await pantalla(t),entregas=[];
+ c.w.HTMLFormElement.prototype.submit=function(){entregas.push({url:this.action,method:this.method,datos:[...new c.w.FormData(this)]});};
+ c.completar();c.enviar();await c.responder({success:true,data:{destinos:[{nombre:'La Fragua',url:'http://la-fragua.localhost/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'}]}});
+ assert.equal(entregas.length,1);assert.equal(entregas[0].method,'post');assert.equal(entregas[0].url,'http://la-fragua.localhost/acceder/');
+ assert.deepEqual(JSON.parse(JSON.stringify(entregas[0].datos)),[['ticket','a8111111-1111-4111-a111-111111111111']]);
+ assert.equal(c.w.localStorage.getItem('access_token'),null);assert.equal(c.el('password').value,'');assert.equal(c.el('login-submit').disabled,true);
+});
+test('las credenciales con varios accesos permiten elegir la empresa después de autenticarse',async t=>{
+ const c=await pantalla(t),entregas=[];
+ c.w.HTMLFormElement.prototype.submit=function(){entregas.push(this.action);};
+ c.completar();c.enviar();await c.responder({success:true,data:{destinos:[
+  {nombre:'La Fragua',url:'http://la-fragua.localhost/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'},
+  {nombre:'Punto Motor',url:'http://punto-motor.localhost/acceder/',ticket:'b8111111-1111-4111-a111-111111111111'},
+ ]}});
+ assert.equal(c.form.hidden,true);assert.equal(c.el('opciones-acceso').hidden,false);assert.equal(entregas.length,0);
+ const botones=c.el('destinos-acceso').querySelectorAll('button');assert.equal(botones.length,2);botones[1].click();botones[1].click();
+ assert.deepEqual(entregas,['http://punto-motor.localhost/acceder/']);
+ c.w.dispatchEvent(new c.w.PageTransitionEvent('pageshow',{persisted:true}));assert.equal(c.form.hidden,false);assert.equal(c.el('opciones-acceso').hidden,true);
+});
+test('el acceso técnico abre su panel y un destino externo se rechaza',async t=>{
+ const tecnico=await pantalla(t);tecnico.completar();tecnico.enviar();await tecnico.responder({success:true,data:{sistema:true,inicio:'/sistema/'}});
+ assert.equal(tecnico.el('login-submit').disabled,true);assert.equal(tecnico.w.localStorage.getItem('access_token'),null);
+ const c=await pantalla(t);let enviado=false;c.w.HTMLFormElement.prototype.submit=function(){enviado=true;};
+ c.completar();c.enviar();await c.responder({success:true,data:{destinos:[{url:'http://otra.example.com/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'}]}});
+ assert.equal(enviado,false);assert.equal(c.el('login-submit').disabled,false);assert.equal(c.el('alert-box').hidden,false);
 });
 test('fallar al guardar la sesión limpia tokens parciales y conserva el tema',async t=>{
  const c=await pantalla(t);c.w.localStorage.setItem('smartstock-theme','dark');const original=c.w.Storage.prototype.setItem;

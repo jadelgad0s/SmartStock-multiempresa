@@ -171,7 +171,11 @@
     <div class="modal-header"><h5 class="modal-title" id="tituloDetalleProducto">Detalle del producto</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
     <div class="modal-body"><p id="estadoDetalleProducto" role="status">Cargando producto...</p><button type="button" id="reintentarDetalleProducto" class="btn btn-outline-secondary mb-3" hidden>Reintentar</button>
         <div id="datosDetalleProducto" hidden><h6 id="detalleProductoNombre" class="fw-bold"></h6><dl class="ss-product-detail"><dt>SKU</dt><dd id="detalleProductoSku"></dd><dt>Estado</dt><dd id="detalleProductoEstado"></dd><dt>Precio de referencia</dt><dd id="detalleProductoPrecio"></dd><dt>Creación</dt><dd id="detalleProductoCreado"></dd><dt>Última modificación</dt><dd id="detalleProductoModificado"></dd></dl><h6>Descripción</h6><p id="detalleProductoDescripcion" class="ss-product-description"></p><p id="detalleProductoFuente" class="small text-muted" hidden></p><h6>Códigos asociados</h6><ul id="detalleProductoCodigos" class="ss-product-codes-detail"></ul><h6>Existencias en bodegas activas</h6><p class="text-muted small">Un producto sin registro de stock en una bodega se muestra con 0 unidades.</p><div class="table-responsive"><table class="table table-sm ss-product-stock-detail"><thead><tr><th>Bodega</th><th>Stock</th><th>Mínimo</th><th>Disponibilidad</th></tr></thead><tbody id="detalleProductoStock"></tbody></table></div></div>
-    </div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+    </div>
+    <div class="modal-footer">
+        <a id="verHistorialProducto" class="btn btn-outline-primary" hidden>Ver historial</a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+    </div>
 </div></div></div>
 <div class="modal fade ss-product-modal" id="modalStockMinimo" tabindex="-1" aria-labelledby="tituloStockMinimo" aria-hidden="true" data-bs-backdrop="static"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h5 class="modal-title" id="tituloStockMinimo">Configurar mínimo de stock</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
@@ -211,6 +215,6 @@
 {% endblock %}
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
-<script src="{% static 'js/productos.js' %}?v=sesion-1" defer></script>
+<script src="{% static 'js/productos.js' %}?v=carga-1" defer></script>
 <script src="{% static 'js/escaneo_camara.js' %}?v=camara-5" defer></script>
 {% endblock %}

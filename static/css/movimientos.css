@@ -27,10 +27,10 @@
 #tablaMovimientos .ss-mov-sku { display: block; margin-top: .2rem; font-size: .75rem; color: var(--bs-secondary-color, #64748b); overflow-wrap: anywhere; }
 #tablaMovimientos .ss-mov-date span { display: block; }
 #tablaMovimientos .ss-mov-date-time { font-size: .75rem; color: var(--bs-secondary-color, #64748b); }
-#tablaMovimientos .ss-mov-quantity { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+#tablaMovimientos .ss-mov-operation { display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap; }
+#tablaMovimientos .ss-mov-quantity { font-weight: 600; font-variant-numeric: tabular-nums; }
 #tablaMovimientos .ss-mov-user { overflow-wrap: anywhere; }
 #tablaMovimientos .ss-mov-actions .btn { white-space: nowrap; min-height: 40px; }
-#tablaMovimientos .ss-mov-units { display: none; }
 .ss-mov-detail { display: grid; grid-template-columns: 35% minmax(0, 1fr); gap: .75rem; margin-bottom: 0; }
 .ss-mov-detail dt { color: var(--bs-secondary-color, #64748b); font-size: .8rem; }
 .ss-mov-detail dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -87,13 +87,11 @@
         font-size: .8rem;
     }
     .ss-main #tablaMovimientos tbody tr.ss-mov-row > td::before { display: none; }
-    .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-product { grid-column: 1; grid-row: 1; font-size: .9rem; line-height: 1.4; }
-    .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-type { grid-column: 2; grid-row: 1; text-align: right; }
+    .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-product { grid-column: 1 / -1; grid-row: 1; font-size: .9rem; line-height: 1.4; }
+    .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-type { grid-column: 2; grid-row: 2; text-align: right; }
     .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-date { grid-column: 1; grid-row: 2; }
     .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-date span { display: inline; }
     .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-date .ss-mov-date-time { margin-left: .4rem; }
-    .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-quantity { grid-column: 2; grid-row: 2; text-align: right; font-size: 1.1rem; }
-    #tablaMovimientos .ss-mov-units { display: inline; font-size: .7rem; font-weight: 400; }
     .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-user { grid-column: 1; grid-row: 3; color: var(--bs-secondary-color, #64748b); }
     .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-user::before { content: 'Operador: '; display: inline; font-size: inherit; font-weight: 400; text-transform: none; letter-spacing: normal; }
     .ss-main #tablaMovimientos tbody tr.ss-mov-row > .ss-mov-actions { grid-column: 2; grid-row: 3; }
@@ -105,8 +103,6 @@
 :root[data-bs-theme="dark"] .ss-app-layout #tablaMovimientos .ss-mov-row > td { background: transparent !important; }
 :root[data-bs-theme="dark"] .ss-mov-footer { border-color: var(--ss-dark-line); }
 :root[data-bs-theme="dark"] #modalAccionMovimiento .modal-body { background: var(--ss-dark-panel) !important; }
-:root[data-bs-theme="dark"] #tablaMovimientos .ss-mov-quantity.text-success { color: #75e3b0 !important; }
-:root[data-bs-theme="dark"] #tablaMovimientos .ss-mov-quantity.text-danger { color: #ff9292 !important; }
 :root[data-bs-theme="dark"] :is(#mostrarFiltrosMovimientos, #limpiarFiltrosMovimientos, .ss-mov-actions .btn) {
     color: var(--ss-dark-ink);
     border-color: var(--ss-dark-subtle);

@@ -3,7 +3,7 @@
 {% block title %}Dashboard - SmartStock{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=carga-1">
 {% endblock %}
 
 {% block content %}
@@ -117,6 +117,77 @@
                         <span class="kpi-title">Productos agotados</span><strong class="kpi-value" id="kpi-alertas">—</strong><span class="ss-dash-kpi-note" id="dashboardAlertaNota">Consultando stock...</span>
                     </div>
                 </section>
+                <details id="dashboardCompararProductos" class="card ss-dash-comparacion mb-4">
+                    <summary class="card-header">Comparar productos</summary>
+                    <div class="card-body">
+                        <p class="text-muted small">Unidades de salida operativa por día.</p>
+                        <form id="formCompararProductos" class="ss-dash-compare-form">
+                            <div>
+                                <label for="compararSkuA">Producto 1</label>
+                                <div class="input-group">
+                                    <input id="compararSkuA" class="form-control" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Nombre o SKU" required>
+                                    <button type="button" class="btn dropdown-toggle dropdown-toggle-split ss-dash-picker-toggle" data-bs-toggle="dropdown" data-bs-reference="parent" data-bs-auto-close="outside" aria-expanded="false" aria-controls="compararOpcionesA" aria-label="Ver catálogo para Producto 1" disabled></button>
+                                    <div id="compararOpcionesA" class="dropdown-menu ss-dash-picker-menu">
+                                        <p class="small text-muted mb-0 px-3 py-2" data-estado role="status" hidden></p>
+                                        <div class="ss-dash-picker-list"></div>
+                                        <div class="ss-dash-picker-pages" hidden>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-anterior>Anterior</button>
+                                            <span class="small text-muted" data-pagina aria-live="polite"></span>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-siguiente>Siguiente</button>
+                                        </div>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm mx-3 mb-2" data-reintentar hidden>Reintentar</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="compararSkuB">Producto 2</label>
+                                <div class="input-group">
+                                    <input id="compararSkuB" class="form-control" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Nombre o SKU" required>
+                                    <button type="button" class="btn dropdown-toggle dropdown-toggle-split ss-dash-picker-toggle" data-bs-toggle="dropdown" data-bs-reference="parent" data-bs-auto-close="outside" aria-expanded="false" aria-controls="compararOpcionesB" aria-label="Ver catálogo para Producto 2" disabled></button>
+                                    <div id="compararOpcionesB" class="dropdown-menu ss-dash-picker-menu">
+                                        <p class="small text-muted mb-0 px-3 py-2" data-estado role="status" hidden></p>
+                                        <div class="ss-dash-picker-list"></div>
+                                        <div class="ss-dash-picker-pages" hidden>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-anterior>Anterior</button>
+                                            <span class="small text-muted" data-pagina aria-live="polite"></span>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-siguiente>Siguiente</button>
+                                        </div>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm mx-3 mb-2" data-reintentar hidden>Reintentar</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="compararBodega">Bodega</label>
+                                <select id="compararBodega" class="form-select" required disabled><option value="">Cargando bodegas…</option></select>
+                            </div>
+                            <div>
+                                <label for="compararDias">Período</label>
+                                <select id="compararDias" class="form-select"><option value="7">Últimos 7 días</option><option value="30" selected>Últimos 30 días</option></select>
+                            </div>
+                            <button type="submit" id="compararEnviar" class="btn btn-primary" disabled>Comparar</button>
+                        </form>
+                        <p id="compararEstado" class="small text-muted mt-3 mb-0" role="status" hidden></p>
+                        <div id="compararError" class="alert alert-danger mt-3 mb-0" role="alert" hidden></div>
+                        <div id="compararResultados" class="mt-3" hidden>
+                            <p id="compararPeriodo" class="text-muted small mb-2"></p>
+                            <div id="compararTotales" class="ss-dash-compare-totals"></div>
+                            <div id="compararContenedorGrafico" class="ss-dash-chart">
+                                <canvas id="compararGrafico" role="img" aria-label="Unidades de salida por día de los dos productos"></canvas>
+                            </div>
+                            <p id="compararGraficoError" class="text-muted small mb-0" hidden>El gráfico no está disponible. Los valores están en «Ver datos diarios».</p>
+                            <details id="compararDatos" class="ss-dash-chart-data">
+                                <summary>Ver datos diarios</summary>
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0">
+                                        <caption class="visually-hidden">Unidades de salida operativa por día</caption>
+                                        <thead><tr><th scope="col">Fecha</th><th scope="col" id="compararColumnaA"></th><th scope="col" id="compararColumnaB"></th></tr></thead>
+                                        <tbody id="compararFilas"></tbody>
+                                    </table>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </details>
                 <div class="ss-dash-grid">
                     <section class="card ss-dash-volume" aria-labelledby="dashboardTituloVolumen">
                         <div class="card-header ss-dash-section-header">
@@ -196,5 +267,5 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
-<script src="{% static 'js/dashboard.js' %}?v=sesion-1" defer></script>
+<script src="{% static 'js/dashboard.js' %}?v=carga-1" defer></script>
 {% endblock %}

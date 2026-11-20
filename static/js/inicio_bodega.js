@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!sesion) return;
 
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const selector = el('inicioBodegaSelector');
     const estado = el('inicioBodegaEstado');
     const error = el('inicioBodegaError');
@@ -99,5 +100,5 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     selector.addEventListener('change', cargar);
     reintentar.addEventListener('click', cargar);
-    cargar();
+    conCarga('Cargando existencias…', cargar);
 });

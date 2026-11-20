@@ -1,5 +1,4 @@
 """API para registrar y consultar mermas de inventario por bodega."""
-from django.db import transaction
 from django.db.models import Q, OuterRef, Subquery, IntegerField, Value, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -9,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import serializers
 from rest_framework.pagination import PageNumberPagination
 
+from apps.core.empresa import transaccion_operativa
 from apps.core.responses import error_response, success_response
 from apps.core.utils import registrar_auditoria
 from .models import Merma, MotivoMerma, Producto, StockBodega
@@ -171,7 +171,7 @@ def mermas_api(request):
 
     info = serializer.validated_data
     # Una sola transacción: descuento, registro y auditoría deben tener éxito juntos.
-    with transaction.atomic():
+    with transaccion_operativa():
         # Mismo orden de bloqueo que Movimientos; no_key permite conservar
         # referencias al producto mientras se serializan sus cambios de stock.
         producto = Producto.objects.select_for_update(no_key=True).filter(pk=info['producto_id'], activo=True).first()

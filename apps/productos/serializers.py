@@ -2,8 +2,8 @@
 Serializers del módulo de productos.
 """
 from rest_framework import serializers
-from django.db import transaction
 from django.core.validators import RegexValidator
+from apps.core.empresa import transaccion_operativa
 from .models import Producto, CodigoBarra, FichaProductoExterna
 from .consulta_codigos import interpretar_codigo, procedencia, productos_registrados
 from .stock import estado_stock, existencias_producto
@@ -141,7 +141,7 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'codigos_barra': 'Conserva el código consultado para asociar esta ficha externa.'})
         return attrs
 
-    @transaction.atomic
+    @transaccion_operativa()
     def create(self, validated_data):
         codigos_data = validated_data.pop('codigos_barra', [])
         ficha = validated_data.get('ficha_externa')
@@ -160,7 +160,7 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
 
         return producto
 
-    @transaction.atomic
+    @transaccion_operativa()
     def update(self, instance, validated_data):
         codigos_data = validated_data.pop('codigos_barra', None)
 

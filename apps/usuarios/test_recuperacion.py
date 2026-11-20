@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.usuarios.models import Rol, Usuario
+from apps.usuarios.tokens import token_recuperacion
 
 
 @override_settings(
@@ -140,8 +141,8 @@ class RecuperacionClaveTests(TestCase):
         self._solicitar(self.user.email)
         url, uidb64, token = self._enlace()
         fecha_futura = timezone.now().replace(tzinfo=None) + timedelta(hours=2)
-        with patch.object(default_token_generator, '_now', return_value=fecha_futura):
-            self.assertFalse(default_token_generator.check_token(self.user, token))
+        with patch.object(token_recuperacion, '_now', return_value=fecha_futura):
+            self.assertFalse(token_recuperacion.check_token(self.user, token))
             self.assertContains(self.client.get(url), 'Enlace inválido o vencido')
 
     def test_formulario_rechaza_passwords_diferentes(self):

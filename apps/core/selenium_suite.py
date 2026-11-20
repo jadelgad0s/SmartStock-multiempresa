@@ -135,13 +135,17 @@ class SmartStockSeleniumTests(StaticLiveServerTestCase):
         usuario = self.iniciar_sesion('operador')
         self.esperar_modulo('/movimientos/')
 
-        for tipo, cantidad, saldo, signo in (('ENTRADA', 24, 34, '+'), ('SALIDA', 3, 31, '−')):
+        for tipo, cantidad, saldo in (('ENTRADA', 24, 34), ('SALIDA', 3, 31)):
             with self.subTest(tipo=tipo):
                 self.abrir_movimiento(stock.producto.sku, tipo, cantidad)
                 self.espera.until(EC.text_to_be_present_in_element((By.ID, 'movResumenConfirmacion'), f'{saldo} unidades'))
                 self.clic('confirmarMovimiento')
                 self.espera.until(EC.invisibility_of_element_located((By.ID, 'modalAccionMovimiento')))
-                self.espera.until(EC.text_to_be_present_in_element((By.ID, 'listaMovimientos'), f'{signo}{cantidad}'))
+                resumen = f'{tipo.capitalize()} · {cantidad} unid.'
+                self.espera.until(lambda navegador: any(
+                    fila.get_property('textContent') == resumen
+                    for fila in navegador.find_elements(By.CSS_SELECTOR, '#listaMovimientos .ss-mov-operation')
+                ))
                 stock.refresh_from_db()
                 self.assertEqual(stock.cantidad_total, saldo)
                 self.pausa_demostracion()

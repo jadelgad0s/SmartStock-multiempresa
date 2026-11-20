@@ -3,7 +3,6 @@ import re
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
-from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -17,6 +16,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from twilio.request_validator import RequestValidator
 
+from apps.core.empresa import transaccion_operativa
 from apps.core.responses import error_response, success_response
 from apps.core.utils import registrar_auditoria
 from apps.usuarios.permissions import EsAdministrador
@@ -133,7 +133,7 @@ class DatosProcesamiento(serializers.Serializer):
         return datos
 
 
-@transaction.atomic
+@transaccion_operativa()
 def registrar_solicitud_sms(request, seleccion):
     ids = ', '.join(str(e.pk) for e in seleccion)
     registrar_auditoria(accion='UPDATE', modelo='EnvioAlertaSMS', usuario_override=request.user,
@@ -246,7 +246,7 @@ def procesar_sms(request):
 @never_cache
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, AdministradorSMS])
-@transaction.atomic
+@transaccion_operativa()
 def cancelar_sms(request, envio_id):
     if request.data:
         return error_response('Esta operación no permite cambiar el mensaje ni el estado manualmente.')
@@ -281,7 +281,7 @@ def estado_twilio(request, envio_id):
     destino = ESTADOS_TWILIO.get(request.POST.get('MessageStatus', ''))
     if not re.fullmatch(r'SM[0-9a-fA-F]{32}', sid) or destino is None:
         return HttpResponse(status=400)
-    with transaction.atomic():
+    with transaccion_operativa():
         envio = EnvioAlertaSMS.objects.select_for_update().filter(pk=envio_id).first()
         if envio is None:
             return HttpResponse(status=404)

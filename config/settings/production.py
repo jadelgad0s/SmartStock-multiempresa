@@ -9,10 +9,6 @@ import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 from decouple import config
 from .base import *
-from dotenv import load_dotenv
-from urllib.parse import urlparse, parse_qsl
-
-load_dotenv()
 
 # === SEGURIDAD ===
 DEBUG = False
@@ -63,19 +59,12 @@ if not DATABASE_URL:
         "Falta configurar DATABASE_URL en producción."
     )
 
-# Replace the DATABASES section of your settings.py with this
-tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
-
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': tmpPostgres.path.replace('/', ''),
-        'USER': tmpPostgres.username,
-        'PASSWORD': tmpPostgres.password,
-        'HOST': tmpPostgres.hostname,
-        'PORT': 5432,
-        'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
-    }
+    "default": dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=0,
+        ssl_require=True,
+    )
 }
 
 # === ARCHIVOS ESTÁTICOS ===

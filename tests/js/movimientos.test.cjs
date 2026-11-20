@@ -135,15 +135,18 @@ test('página eliminada recupera last y termina si el servidor sigue respondiend
     assert.equal(c.el('listaMovimientos').getAttribute('aria-busy'), 'false');
 });
 
-test('los nombres del historial se insertan como texto y el detalle muestra datos del servidor', async t => {
+test('el historial muestra el tipo y las unidades sin signo, con nombres insertados como texto', async t => {
     const c = await pantalla(t);
-    const mov = {...movimiento(), producto: '<img src=x onerror=alert(1)>'};
-    await c.responder(0, {count: 1, results: [mov]});
+    const mov = {...movimiento(), tipo: 'SALIDA', cantidad: 5, producto: '<img src=x onerror=alert(1)>'};
+    await c.responder(0, {count: 2, results: [mov, movimiento(2)]});
     assert.equal(c.el('listaMovimientos').querySelector('img'), null);
+    assert.deepEqual([...c.el('listaMovimientos').querySelectorAll('.ss-mov-operation')].map(el => el.textContent),
+        ['Salida · 5 unid.', 'Entrada · 24 unid.']);
     c.el('listaMovimientos').querySelector('button[data-detalle]').click();
     assert.equal(c.requests[1].url.pathname, '/api/v1/productos/movimientos/1/');
     await c.responder(1, {data: mov});
     assert.equal(c.el('detalleMovProducto').textContent, mov.producto);
+    assert.equal(c.el('detalleMovCantidad').textContent, '5 unid.');
     assert.equal(c.el('detalleMovReferencia').textContent, 'Guía 123');
 });
 

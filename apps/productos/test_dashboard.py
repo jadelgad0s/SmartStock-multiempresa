@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from apps.usuarios.models import Permiso, Rol, Usuario
-from .models import Bodega, DetalleMovimiento, Movimiento, Producto, StockBodega, StockMinimo, TipoMovimiento
+from .models import Bodega, DetalleMovimiento, Merma, MotivoMerma, Movimiento, Producto, StockBodega, StockMinimo, TipoMovimiento
 
 ROOT = '/api/v1/productos/'
 AHORA = datetime(2026, 10, 28, 2, 30, tzinfo=dt_timezone.utc)  # 27/10, 23:30 en Chile.
@@ -50,8 +50,8 @@ class DashboardTests(TestCase):
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
         return respuesta.data['data']
 
-    def movimiento(self, fecha, cantidad, entrada=True, bodega=None, producto=None):
-        mov = Movimiento.objects.create(tipo=self.entrada if entrada else self.salida, bodega=bodega or self.central, usuario=self.usuario)
+    def movimiento(self, fecha, cantidad, entrada=True, bodega=None, producto=None, tipo=None):
+        mov = Movimiento.objects.create(tipo=tipo or (self.entrada if entrada else self.salida), bodega=bodega or self.central, usuario=self.usuario)
         Movimiento.objects.filter(pk=mov.pk).update(fecha_creacion=fecha)
         return DetalleMovimiento.objects.create(movimiento=mov, producto=producto or self.productos['SUF'], cantidad=cantidad)
 
@@ -119,6 +119,61 @@ class DashboardTests(TestCase):
         self.assertEqual(mes['chart_entradas'][0], 20)
         self.assertEqual(sum(mes['chart_entradas']), 24)
         self.assertEqual(mes['chart_entradas'][-1], 0)
+
+    def test_comparacion_suma_salidas_operativas_por_sku_dia_y_bodega(self):
+        inicio = datetime(2026, 9, 28, 3, tzinfo=dt_timezone.utc)
+        salida_a, salida_b = self.productos['SUF'], self.productos['BAJO']
+        self.movimiento(inicio, 4, entrada=False, producto=salida_a)
+        self.movimiento(AHORA, 3, entrada=False, producto=salida_a)
+        self.movimiento(AHORA, 5, entrada=False, producto=salida_a)
+        self.movimiento(AHORA - timedelta(days=4), 2, entrada=False, producto=salida_b)
+        self.movimiento(AHORA, 6, entrada=False, producto=salida_b)
+        self.movimiento(inicio - timedelta(seconds=1), 99, entrada=False, producto=salida_a)
+        self.movimiento(datetime(2026, 10, 28, 3, tzinfo=dt_timezone.utc), 99, entrada=False, producto=salida_a)
+        self.movimiento(AHORA, 20, entrada=False, bodega=self.otra, producto=salida_a)
+        self.movimiento(AHORA, 25, producto=salida_b)
+        traslado = TipoMovimiento.objects.create(nombre='TRANSFERENCIA_SALIDA', operacion='-')
+        self.movimiento(AHORA, 30, producto=salida_a, tipo=traslado)
+        motivo = MotivoMerma.objects.create(descripcion='Daño')
+        merma = Merma.objects.create(producto=salida_a, bodega=self.central, usuario=self.usuario, motivo=motivo, cantidad=15)
+        Merma.objects.filter(pk=merma.pk).update(fecha_creacion=AHORA)
+
+        params = {'sku_a': ' suf ', 'sku_b': 'BAJO', 'bodega': self.central.pk, 'dias': '30'}
+        with patch('apps.productos.views_dashboard.timezone.now', return_value=AHORA):
+            respuesta = self.client.get(ROOT + 'dashboard-comparacion/', params)
+            otra = self.client.get(ROOT + 'dashboard-comparacion/', {**params, 'bodega': self.otra.pk, 'dias': '7'})
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertIn('no-store', respuesta['Cache-Control'])
+        datos = respuesta.data['data']
+        self.assertEqual(datos['bodega']['id'], self.central.pk)
+        self.assertEqual(datos['fechas'][0], '2026-09-28')
+        self.assertEqual(datos['fechas'][-1], '2026-10-27')
+        a, b = datos['productos']
+        self.assertEqual((a['sku'], b['sku']), ('SUF', 'BAJO'))
+        self.assertEqual((a['stock_actual'], b['stock_actual']), (11, 3))
+        self.assertEqual(a['salidas'], [4] + [0] * 28 + [8])
+        self.assertEqual(b['salidas'], [0] * 25 + [2, 0, 0, 0, 6])
+        self.assertEqual((a['total_salidas'], b['total_salidas']), (12, 8))
+        self.assertEqual(otra.status_code, 200, otra.data)
+        a, b = otra.data['data']['productos']
+        self.assertEqual((a['stock_actual'], b['stock_actual']), (100, 0))
+        self.assertEqual(a['salidas'], [0] * 6 + [20])
+        self.assertEqual(b['salidas'], [0] * 7)
+
+    def test_comparacion_valida_filtros_y_requiere_acceso_al_dashboard(self):
+        ruta = ROOT + 'dashboard-comparacion/'
+        filtros = {'sku_a': 'SUF', 'sku_b': 'BAJO', 'bodega': self.central.pk}
+        for valores in ({'sku_b': 'suf'}, {'sku_b': 'ausente'}, {'sku_a': ''},
+                        {'bodega': self.inactiva.pk}, {'bodega': 99999}, {'dias': '90'}):
+            with self.subTest(valores=valores):
+                self.assertEqual(self.client.get(ruta, {**filtros, **valores}).status_code, 400)
+        self.assertEqual(self.client.post(ruta, filtros, format='json').status_code, 405)
+        rol = Rol.objects.create(codigo='encargado_bodega', nombre='Encargado de bodega')
+        encargado = Usuario.objects.create_user(email='bodega@example.com', rol=rol)
+        self.client.force_authenticate(encargado)
+        self.assertEqual(self.client.get(ruta, filtros).status_code, 403)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(ruta, filtros).status_code, 401)
 
     def test_cambio_horario_chile_conserva_fechas_locales(self):
         zona = ZoneInfo('America/Santiago')

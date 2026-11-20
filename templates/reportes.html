@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}Reportes de inventario - SmartStock{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/reportes.css' %}?v=1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/reportes.css' %}?v=2">{% endblock %}
 {% block content %}
 <div class="d-flex ss-app-layout" style="min-height: 100vh;">
     <!-- SIDEBAR CORPORATIVA -->
@@ -87,10 +87,19 @@
                 <div class="ss-report-product" id="grupoProductoKardex" hidden>
                     <div class="ss-report-product-fields">
                         <div><label for="buscarProductoReporte" class="form-label">Buscar producto para el Kardex</label><input type="search" id="buscarProductoReporte" class="form-control" maxlength="200" placeholder="Nombre o SKU"></div>
-                        <div><label for="productoReporte" class="form-label">Producto</label><select id="productoReporte" class="form-select" disabled><option value="">Selecciona un producto</option></select></div>
+                        <div>
+                            <label for="productoReporte" class="form-label">Producto</label>
+                            <select id="productoReporte" class="form-select" aria-describedby="estadoProductosReporte" disabled>
+                                <option value="">Selecciona un producto</option>
+                            </select>
+                            <div class="ss-report-product-pages" role="group" aria-label="Páginas del selector de productos">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="productosReporteAnterior" aria-controls="productoReporte" disabled>Anterior</button>
+                                <span id="estadoProductosReporte" class="small" role="status"></span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="productosReporteSiguiente" aria-controls="productoReporte" disabled>Siguiente</button>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="reintentarProductosReporte" hidden>Reintentar productos</button>
+                        </div>
                     </div>
-                    <div class="ss-report-product-pages"><button type="button" class="btn btn-sm btn-outline-secondary" id="productosReporteAnterior" disabled>Anterior</button><span id="estadoProductosReporte" class="small" role="status"></span><button type="button" class="btn btn-sm btn-outline-secondary" id="productosReporteSiguiente" disabled>Siguiente</button></div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="reintentarProductosReporte" hidden>Reintentar productos</button>
                 </div>
                 <div class="d-flex align-items-end gap-2"><button type="submit" class="btn btn-primary">Actualizar reporte</button><button type="button" class="btn btn-outline-secondary" id="limpiarReporte">Limpiar filtros</button></div>
                 <p id="ayudaFechasReporte" class="small text-muted mb-0 ss-report-product">Las existencias y el stock crítico muestran el estado actual.</p>
@@ -106,4 +115,4 @@
     </main>
 </div>
 {% endblock %}
-{% block extra_scripts %}<script src="{% static 'js/reportes.js' %}?v=sesion-1" defer></script>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/reportes.js' %}?v=carga-1" defer></script>{% endblock %}

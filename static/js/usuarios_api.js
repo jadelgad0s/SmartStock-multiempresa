@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.replace('/dashboard/'); return;
     }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const nodo = (tag, clase, texto) => {
         const n = document.createElement(tag);
         if (clase) n.className = clase;
@@ -216,14 +217,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (estado === crear) {
             el('inputRol').disabled = ocupado || !opcionesListas;
             estado.boton.disabled = ocupado || !opcionesListas || ![...roles.values()].some(r => r.activo);
-            estado.boton.textContent = estado.enviando ? 'Creando usuario...' : estado.guardado ? 'Usuario creado' : 'Crear usuario';
+            estado.boton.textContent = estado.enviando ? 'Creando usuario…' : 'Crear usuario';
         } else if (estado === editar) {
             el('editRol').disabled = ocupado || estado.cargando || !opcionesListas || !estado.usuario || protegida(estado.usuario);
             estado.boton.disabled = ocupado || estado.cargando || !estado.usuario || !opcionesListas;
-            estado.boton.textContent = estado.enviando ? 'Guardando...' : estado.guardado ? 'Cambios guardados' : 'Guardar cambios';
+            estado.boton.textContent = estado.enviando ? 'Guardando…' : 'Guardar cambios';
         } else {
             estado.boton.disabled = ocupado || estado.cargando || !estado.usuario;
-            estado.boton.textContent = estado.enviando ? 'Procesando...' : estado.guardado ? 'Acción completada' : estado.texto || 'Confirmar';
+            estado.boton.textContent = estado.enviando ? 'Procesando…' : estado.texto || 'Confirmar';
         }
     }
     function limpiarErrores(estado) {
@@ -306,7 +307,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         else if (!protegida(estado.usuario) && el('editRol').value !== String(rolId(estado.usuario) || '')) payload.rol_id = el('editRol').value ? Number(el('editRol').value) : null;
         estado.enviando = true; controles(estado);
         try {
-            const json = await apiFetch('/api/v1/usuarios/' + (estado === crear ? '' : estado.usuario.id + '/'), {method: estado === crear ? 'POST' : 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+            const ruta = '/api/v1/usuarios/' + (estado === crear ? '' : estado.usuario.id + '/');
+            const json = await conCarga('Guardando usuario…', () =>
+                apiFetch(ruta, {method: estado === crear ? 'POST' : 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)}));
             if (!Number.isInteger(json.data?.id)) throw new Error('La operación respondió sin identificar al usuario. Revisa la lista antes de reintentar.');
             actualizarSesion(json.data); estado.guardado = true; estado.enviando = false; controles(estado);
             window.dispatchEvent(new Event('smartstock:notifications-changed'));
@@ -371,7 +374,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.preventDefault(); if (accion.enviando || accion.guardado || accion.cargando || !accion.usuario) return;
         accion.enviando = true; controles(accion); aviso(accion.errorId, ''); const config = acciones[accion.tipo];
         try {
-            await apiFetch('/api/v1/usuarios/' + accion.usuario.id + '/' + config.sufijo, {method: config.metodo});
+            await conCarga('Actualizando usuario…', () =>
+                apiFetch('/api/v1/usuarios/' + accion.usuario.id + '/' + config.sufijo, {method: config.metodo}));
             accion.guardado = true; accion.enviando = false; controles(accion);
             window.dispatchEvent(new Event('smartstock:notifications-changed')); accion.modal.hide(); cargarUsuarios();
         } catch (error) { aviso(accion.errorId, error.message); if (error.incierto) cargarUsuarios(); }
@@ -384,5 +388,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         else if (b.dataset.accion === 'editar') abrirEditar(id, b);
         else abrirAccion(b.dataset.accion, id, b);
     });
-    controles(crear); controles(editar); controles(accion); cargarUsuarios(); cargarOpciones();
+    controles(crear); controles(editar); controles(accion);
+    conCarga('Cargando usuarios…', () => Promise.all([cargarUsuarios(), cargarOpciones()]));
 });

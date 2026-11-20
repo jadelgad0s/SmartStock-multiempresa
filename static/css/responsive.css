@@ -298,10 +298,9 @@
     text-transform: uppercase;
   }
   #tablaMovimientos tbody td:nth-child(1)::before { content: "Fecha / Hora"; }
-  #tablaMovimientos tbody td:nth-child(2)::before { content: "Tipo"; }
+  #tablaMovimientos tbody td:nth-child(2)::before { content: "Movimiento"; }
   #tablaMovimientos tbody td:nth-child(3)::before { content: "Producto"; }
-  #tablaMovimientos tbody td:nth-child(4)::before { content: "Cantidad"; }
-  #tablaMovimientos tbody td:nth-child(5)::before { content: "Operador"; }
+  #tablaMovimientos tbody td:nth-child(4)::before { content: "Operador"; }
   #tablaMovimientos tbody td:nth-child(3) {
     order: -1;
     display: block;

@@ -1,7 +1,6 @@
 """Transferencias inmediatas usando las tablas de inventario existentes."""
 import json
 
-from django.db import transaction
 from django.db.models import IntegerField, OuterRef, Prefetch, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -11,6 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 
+from apps.core.empresa import transaccion_operativa
 from apps.core.responses import error_response, success_response
 from apps.core.utils import registrar_auditoria
 from apps.usuarios.models import Usuario
@@ -242,7 +242,7 @@ def registrar_asiento(transferencia, producto, bodega, cantidad, entrada, contra
 
 
 def guardar_transferencia(request, info):
-    with transaction.atomic():
+    with transaccion_operativa():
         # no_key permite las referencias FK de otros movimientos/notificaciones.
         usuario = Usuario.objects.select_for_update(no_key=True).filter(pk=request.user.pk).first()
         if usuario is None or not puede_transferir(usuario):

@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.SmartStockNavegacion && !await window.SmartStockNavegacion.lista) return;
     if (!localStorage.getItem('access_token')) { window.location.replace('/'); return; }
     const el = id => document.getElementById(id);
+    const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const nodo = (tag, clase, texto) => { const n = document.createElement(tag); if (clase) n.className = clase; if (texto !== undefined) n.textContent = String(texto ?? ''); return n; };
     const aviso = (id, texto = '') => { el(id).textContent = texto; el(id).hidden = !texto; };
     const textoError = v => Array.isArray(v) ? v.map(textoError).join(' ') : v && typeof v === 'object' ? Object.values(v).map(textoError).join(' ') : String(v ?? '');
@@ -180,8 +181,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         ++generacion;++lista.version;lista.pagina=1;el('soloUbicacion').checked=false;resetDesde(0);actualizarURL();
         el('estadoBodegaUbicaciones').textContent=!bodegaId()?'Crea una bodega para organizar sus ubicaciones.':!bodegaActual().activa?'Bodega inactiva: consulta disponible, edición deshabilitada.':opciones.permisos.gestionar?'Puedes organizar la estructura y asignar productos.':'Consulta de ubicaciones. Solicita al encargado los cambios de estructura.';
         if(!bodegaId()){mensajeTabla('No hay bodegas disponibles.');return;}
-        const epoca = generacion; cargarAsignaciones(); await cargarPaso(0);
+        const epoca = generacion, asignaciones = cargarAsignaciones();
+        await cargarPaso(0);
         if (epoca === generacion && marca === interaccion) abrirPaso(primerPendiente());
+        return asignaciones;
     }
     async function iniciar() {
         aviso('errorUbicaciones');el('reintentarUbicaciones').hidden=true;
@@ -202,7 +205,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if(!paginaValida(p)||p.results.length!==1||String(p.results[0].id)!==productoId)throw new Error('El producto solicitado no está disponible. Puedes quitar el filtro para consultar los demás.');
                 productoContexto=p.results[0];el('contextoProducto').textContent=productoContexto.nombre+' · SKU '+productoContexto.sku+(productoContexto.activo?'':' · Inactivo: reactívalo antes de asignar.');
             }
-            cambiarBodega();
+            return cambiarBodega();
         }catch(e){aviso('errorUbicaciones',e.message);el('reintentarUbicaciones').hidden=false;}
     }
     recursos.forEach((r,i)=>{
@@ -232,7 +235,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function guardar(contexto, errorId, operacion, despues) {
         if(guardando||!contexto||contexto.generacion!==generacion)return;
         guardando=true;actualizarEstado();aviso(errorId);
-        try{const r=await operacion();window.dispatchEvent(new Event('smartstock:notifications-changed'));guardando=false;actualizarEstado();if(contexto.generacion===generacion)despues(r);}
+        try {
+            const r = await conCarga('Guardando ubicación…', operacion);
+            window.dispatchEvent(new Event('smartstock:notifications-changed'));
+            guardando = false; actualizarEstado();
+            if (contexto.generacion === generacion) despues(r);
+        }
         catch(e){if(contexto.generacion===generacion)aviso(errorId,e.message);}
         finally{guardando=false;actualizarEstado();}
     }
@@ -286,5 +294,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     el('modalRetirarUbicacion').addEventListener('hidden.bs.modal',()=>{retirarContexto=null;});
     document.addEventListener('click',e=>document.querySelectorAll('.ss-location-manage[open]').forEach(m=>{if(!m.contains(e.target))m.open=false;}));
     document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.ss-location-manage[open]').forEach(m=>{m.open=false;m.querySelector('summary').focus();});});
-    iniciar();
+    conCarga('Cargando ubicaciones…', iniciar);
 });

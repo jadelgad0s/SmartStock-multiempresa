@@ -1,5 +1,4 @@
 """Registro de stock e historial paginado del módulo de Movimientos."""
-from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import serializers, status
@@ -7,6 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 
+from apps.core.empresa import transaccion_operativa
 from apps.core.responses import error_response, success_response
 from apps.core.utils import registrar_auditoria
 from apps.usuarios.navegacion import es_administrador
@@ -167,7 +167,7 @@ def registrar_movimiento(request):
     if not request.user.tiene_permiso(permiso):
         return error_response('No tienes permiso para registrar este tipo de movimiento.', status_code=status.HTTP_403_FORBIDDEN)
 
-    with transaction.atomic():
+    with transaccion_operativa():
         # Serializar operaciones del mismo producto, incluso si aún no tiene
         # fila de stock. Mermas también bloquea la fila de StockBodega.
         producto = Producto.objects.select_for_update(no_key=True).filter(pk=info['producto_id'], activo=True).first()

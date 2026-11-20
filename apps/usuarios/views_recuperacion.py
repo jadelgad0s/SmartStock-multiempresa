@@ -10,6 +10,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 
 from .models import Usuario
+from .tokens import token_recuperacion
 
 
 class RecuperacionClaveForm(PasswordResetForm):
@@ -21,6 +22,7 @@ class RecuperacionClaveForm(PasswordResetForm):
 
 
 class SolicitarRecuperacionView(PasswordResetView):
+    token_generator = token_recuperacion
     template_name = 'usuarios/recuperar_clave.html'
     email_template_name = 'usuarios/correo_recuperacion.txt'
     html_email_template_name = 'usuarios/correo_recuperacion.html'
@@ -43,6 +45,7 @@ class RecuperacionEnviadaView(PasswordResetDoneView):
 
 
 class EstablecerNuevaClaveView(PasswordResetConfirmView):
+    token_generator = token_recuperacion
     template_name = 'usuarios/nueva_clave.html'
     success_url = reverse_lazy('clave_actualizada')
 
