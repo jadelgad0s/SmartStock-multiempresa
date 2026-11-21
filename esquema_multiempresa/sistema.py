@@ -1,6 +1,7 @@
 """Panel web del equipo de SmartStock y gestión de las cuentas de cada empresa."""
 from types import SimpleNamespace
 from urllib.parse import urlencode
+from smtplib import SMTPException
 
 from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
@@ -20,6 +21,10 @@ from apps.usuarios.models import Rol, Usuario
 from rest_framework.exceptions import ValidationError
 from .forms import CuentaTecnicaForm, EmpresaPanelForm, UsuarioEmpresaForm
 from .models import Empresa
+from .models import AtencionSoporte, AccesoSoporte, BuzonContacto
+from .autorizacion_soporte import (acceso_para, accesos_vigentes, alcances_actuales, atenciones_visibles,
+    auditar_soporte, empresas_visibles, empresa_para_consulta, parametros_atencion)
+from .cuentas_empresa import enviar_enlace, puede_invitar_inicial
 from .notificaciones import confirmar_guardado, confirmaciones_para_pagina
 from .permisos import (
     CONTACTO, CORREO_CONTACTO, es_administrador_plataforma, es_cuenta_interna,
@@ -29,38 +34,51 @@ from .permisos import (
 )
 
 
-def empresa_del_panel(codigo):
-    return get_object_or_404(Empresa, codigo=codigo, alias_bd__in=settings.BASES_EMPRESA)
+def empresa_del_panel(codigo, request=None):
+    consulta = empresas_visibles(request.user) if request else Empresa.objects.filter(alias_bd__in=settings.BASES_EMPRESA)
+    return get_object_or_404(consulta, codigo=codigo)
 
 
 def contexto_sistema(request, modulo, titulo, empresa=None):
     if empresa is None and request.GET.get('empresa'):
-        empresa = empresa_del_panel(request.GET['empresa'])
+        empresa = empresa_del_panel(request.GET['empresa'], request)
+    gestor = es_administrador_plataforma(request.user)
+    alcances = alcances_actuales(request)
+    acceso = getattr(request, '_acceso_soporte', None)
     contexto = {
         'titulo': titulo, 'modulo': modulo, 'empresa_seleccionada': empresa,
-        'empresas_disponibles': list(Empresa.objects.order_by('nombre', 'id')),
+        'empresas_disponibles': list(empresas_visibles(request.user).order_by('nombre', 'id')),
         'es_superusuario': es_superusuario_smartstock(request.user),
         'puede_gestionar_empresas': es_administrador_plataforma(request.user),
         'perfil_personal': nombre_perfil_personal(request.user),
         'confirmaciones': confirmaciones_para_pagina(request),
+        'es_gestor': gestor, 'acceso_soporte': acceso, 'alcances_soporte': alcances,
+        'puede_gestionar_usuarios': 'gestionar_usuarios' in alcances,
+        'puede_exportar': gestor and 'exportar' in alcances,
+        'puede_recuperar_acceso': 'recuperar_acceso' in alcances,
     }
     request._modulo_consultado = titulo
     if empresa is not None and modulo not in ('cuentas', 'mi_cuenta'):
         registrar_empresa_consultada(request, empresa)
     secciones = [
         ('Visión general', [('inicio', 'Dashboard', 'chart-line', 'sistema_inicio')]),
-        ('Gestión', [('empresas', 'Empresas', 'building', 'sistema_empresas'),
-                     ('usuarios', 'Usuarios de empresas', 'users', 'sistema_usuarios')]),
-        ('Inventario', [('inventario', 'Resumen por empresa', 'chart-pie', 'sistema_inventario'),
+        ('Gestión', [('empresas', 'Empresas' if gestor else 'Empresas asignadas', 'building', 'sistema_empresas'),
+                     ('usuarios', 'Usuarios de empresas', 'users', 'sistema_usuarios'),
+                     ('atenciones', 'Atenciones de soporte', 'headset', 'sistema_atenciones')]),
+        ('Consulta autorizada', [('inventario', 'Resumen por empresa', 'chart-pie', 'sistema_inventario'),
                         ('catalogo', 'Catálogo', 'box', 'sistema_catalogo'),
                         ('bodegas', 'Bodegas', 'warehouse', 'sistema_bodegas'),
-                        ('reportes', 'Reportes', 'file-lines', 'sistema_reportes')]),
-        ('Operaciones', [('movimientos', 'Movimientos', 'box-open', 'sistema_movimientos'),
+                        ('reportes', 'Reportes', 'file-lines', 'sistema_reportes'),
+                        ('movimientos', 'Movimientos', 'box-open', 'sistema_movimientos'),
                          ('transferencias', 'Transferencias', 'right-left', 'sistema_transferencias'),
-                         ('mermas', 'Mermas y bajas', 'triangle-exclamation', 'sistema_mermas')]),
-        ('Sistema', [('sms', 'Alertas SMS', 'comment-sms', 'sistema_sms'),
+                         ('mermas', 'Mermas y bajas', 'triangle-exclamation', 'sistema_mermas'),
+                         ('sms', 'Diagnóstico de SMS', 'comment-sms', 'sistema_sms')]),
+        ('Sistema', [('diagnostico', 'Diagnóstico', 'heart-pulse', 'sistema_diagnostico'),
                      ('auditoria', 'Auditoría', 'clipboard-list', 'sistema_auditoria')]),
     ]
+    secciones = [(nombre, [enlace for enlace in enlaces if (
+        nombre != 'Consulta autorizada' or enlace[0] in alcances) and (
+        gestor or enlace[0] != 'usuarios' or 'usuarios' in alcances)]) for nombre, enlaces in secciones]
     if contexto['es_superusuario']:
         secciones[-1][1].insert(0, ('cuentas', 'Equipo de SmartStock', 'user-gear', 'sistema_cuentas'))
         secciones[-1][1].insert(1, ('contacto', 'Cuenta de contacto', 'envelope', 'sistema_cuenta_contacto'))
@@ -68,11 +86,11 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
     contexto['secciones_menu'] = [
         {'nombre': nombre, 'enlaces': [
             {'nombre': texto, 'icono': icono, 'activo': clave == modulo,
-             'url': reverse(ruta) + ('?' + urlencode({'empresa': empresa.codigo})
+            'url': reverse(ruta) + ('?' + urlencode({'empresa': empresa.codigo, **parametros_atencion(request)})
                                      if empresa and clave not in ('inicio', 'empresas', 'cuentas', 'configuracion', 'mi_cuenta') else '')}
             for clave, texto, icono, ruta in enlaces
         ]}
-        for nombre, enlaces in secciones
+        for nombre, enlaces in secciones if enlaces
     ]
     return contexto
 
@@ -109,14 +127,19 @@ def resumen_empresa(empresa, request=None):
     if request is not None:
         registrar_empresa_consultada(request, empresa)
     datos = {'empresa': empresa, 'disponible': True}
+    if request is not None and not es_administrador_plataforma(request.user):
+        # La ficha asignada procede del directorio central; consultar las
+        # cuentas del cliente requiere su autorización específica.
+        return datos
     if empresa.alias_bd not in settings.BASES_EMPRESA:
         datos['disponible'] = False
         return datos
     try:
         with usar_empresa(empresa):
             datos.update(usuarios=Usuario.objects.filter(is_superuser=False).count(),
-                         productos=Producto.objects.filter(activo=True).count(),
-                         bodegas=Bodega.objects.filter(activa=True).count())
+                administrador=Usuario.objects.filter(activo=True, rol__codigo='administrador', rol__activo=True)
+                    .exclude(password__startswith='!').exclude(password='').exists(),
+                puede_invitar=puede_invitar_inicial(empresa))
     except DatabaseError:
         datos['disponible'] = False
     return datos
@@ -127,16 +150,23 @@ def resumen_empresa(empresa, request=None):
 def inicio_sistema(request):
     contexto = contexto_sistema(request, 'inicio', 'Resumen de SmartStock')
     empresas = contexto['empresas_disponibles']
-    resumenes = [resumen_empresa(empresa, request) for empresa in empresas]
+    gestor = es_administrador_plataforma(request.user)
+    resumenes = [resumen_empresa(empresa, request) for empresa in empresas] if gestor else []
     disponibles = all(fila['disponible'] for fila in resumenes)
     contexto.update(
         resumen_empresas=resumenes,
+        atenciones=list(atenciones_visibles(request.user)[:8]),
         kpis=[
             ('Empresas registradas', len(empresas)),
             ('Empresas activas', sum(empresa.activa for empresa in empresas)),
             ('Usuarios de empresas', sum(fila.get('usuarios', 0) for fila in resumenes) if disponibles else None),
             ('Personal activo de SmartStock', sum(es_cuenta_interna(cuenta) for cuenta in
                 Usuario.objects.using('central').filter(is_staff=True, activo=True).select_related('rol'))),
+        ] if gestor else [
+            ('Atenciones abiertas', atenciones_visibles(request.user).filter(estado='abierta').count()),
+            ('Empresas asignadas', len(empresas)),
+            ('Solicitudes pendientes', AccesoSoporte.objects.using('central').filter(tecnico=request.user, estado='pendiente').count()),
+            ('Accesos vigentes', accesos_vigentes(request.user).count()),
         ],
     )
     return render(request, 'sistema/inicio.html', contexto)
@@ -146,7 +176,7 @@ def inicio_sistema(request):
 @require_http_methods(['GET'])
 def empresas_sistema(request):
     contexto = contexto_sistema(request, 'empresas', 'Empresas')
-    consulta = Empresa.objects.order_by('nombre', 'id')
+    consulta = empresas_visibles(request.user).order_by('nombre', 'id')
     texto = request.GET.get('search', '').strip()[:200]
     if texto:
         consulta = consulta.filter(Q(nombre__icontains=texto) | Q(codigo__icontains=texto)
@@ -159,7 +189,7 @@ def empresas_sistema(request):
 @requiere_administrador_plataforma
 @require_http_methods(['GET', 'POST'])
 def editar_empresa(request, codigo=None):
-    empresa = empresa_del_panel(codigo) if codigo else Empresa()
+    empresa = empresa_del_panel(codigo, request) if codigo else Empresa()
     estaba_activa = empresa.activa
     formulario = EmpresaPanelForm(request.POST or None, instance=empresa)
     if request.method == 'POST' and formulario.is_valid():
@@ -168,6 +198,9 @@ def editar_empresa(request, codigo=None):
             with transaction.atomic(using='central'):
                 guardada = formulario.save(commit=False)
                 guardada.save(using='central')
+                if not guardada.activa:
+                    AccesoSoporte.objects.using('central').filter(atencion__empresa=guardada,
+                        estado__in=['pendiente', 'aprobado']).update(estado='revocado')
                 auditar_gestion(request, 'central', 'CREATE' if nueva else 'UPDATE', 'Empresa', guardada,
                                 f'Empresa guardada · {guardada.nombre}')
         except IntegrityError:
@@ -191,17 +224,17 @@ def editar_empresa(request, codigo=None):
 @requiere_personal
 @require_http_methods(['GET'])
 def ficha_empresa(request, codigo):
-    empresa = empresa_del_panel(codigo)
-    contexto = contexto_sistema(request, 'empresas', 'Ficha de empresa', empresa=empresa)
+    empresa = empresa_del_panel(codigo, request)
     resumen = resumen_empresa(empresa, request)
     if resumen['disponible']:
         try:
             with usar_empresa(empresa):
-                resumen['administrador'] = Usuario.objects.filter(
-                    activo=True, is_superuser=False, rol__codigo='administrador', rol__activo=True,
-                ).exists()
+                if acceso_para(request, empresa, 'inventario', exigir=False):
+                    resumen.update(productos=Producto.objects.filter(activo=True).count(),
+                                   bodegas=Bodega.objects.filter(activa=True).count(), inventario_autorizado=True)
         except DatabaseError:
             resumen['disponible'] = False
+    contexto = contexto_sistema(request, 'empresas', 'Ficha de empresa', empresa=empresa)
     contexto['resumen'] = resumen
     return render(request, 'sistema/empresa_ficha.html', contexto)
 
@@ -212,8 +245,14 @@ def usuarios_sistema(request):
     contexto = contexto_sistema(request, 'usuarios', 'Usuarios de empresas')
     empresa = contexto['empresa_seleccionada']
     if empresa is not None:
+        if not es_administrador_plataforma(request.user):
+            acceso_para(request, empresa, 'usuarios')
+        else:
+            acceso_para(request, empresa, 'usuarios', exigir=False)
+        contexto = contexto_sistema(request, 'usuarios', 'Usuarios de empresas', empresa)
         try:
             with usar_empresa(empresa):
+                contexto['puede_invitar_administrador'] = es_administrador_plataforma(request.user) and puede_invitar_inicial(empresa)
                 consulta = Usuario.objects.filter(is_superuser=False).select_related('rol').order_by('nombres', 'apellidos', 'id')
                 texto = request.GET.get('search', '').strip()[:200]
                 if texto:
@@ -244,7 +283,8 @@ def cuentas_sistema(request):
 def formulario_cuenta(request, empresa, usuario_id, propia=False):
     es_nueva = usuario_id is None
     alias = empresa.alias_bd if empresa else 'central'
-    consulta = Usuario.objects.using(alias).filter(is_superuser=False) if empresa else Usuario.objects.using(alias).filter(is_staff=True)
+    consulta = Usuario.objects.using(alias).select_related('rol')
+    consulta = consulta.filter(is_superuser=False) if empresa else consulta.filter(is_staff=True)
     usuario = get_object_or_404(consulta, pk=usuario_id) if usuario_id else Usuario()
     if empresa is None and usuario.pk and (usuario.email.lower() == CORREO_CONTACTO or usuario.rol_id and usuario.rol.codigo == CONTACTO):
         return redirect('sistema_cuenta_contacto')
@@ -253,6 +293,7 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
     opciones = {'alias': alias} if empresa else {'actor': request.user}
     clase = UsuarioEmpresaForm if empresa else CuentaTecnicaForm
     estaba_activo = usuario.activo
+    era_admin_empresa = bool(empresa and usuario.pk and usuario.activo and usuario.rol_id and usuario.rol.codigo == 'administrador')
     with usar_empresa(empresa):
         iniciales = {}
         if empresa and es_nueva and request.GET.get('rol') == 'administrador':
@@ -261,6 +302,15 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
         if request.method == 'POST' and formulario.is_valid():
             try:
                 with transaction.atomic(using=alias):
+                    if empresa:
+                        Rol.objects.using(alias).select_for_update().filter(codigo='administrador').first()
+                        datos = formulario.cleaned_data
+                        if era_admin_empresa and (not datos.get('activo') or datos['rol'].codigo != 'administrador') and not (
+                                Usuario.objects.using(alias).exclude(pk=usuario.pk).filter(activo=True, rol__codigo='administrador',
+                                    rol__activo=True).exclude(password__startswith='!').exclude(password='').exists()):
+                            formulario.add_error(None, 'La empresa debe conservar al menos un administrador activo con acceso.')
+                            raise ValidationError('Debe conservarse un administrador activo.')
+                        auditar_soporte(request, request._atencion_soporte, 'UPDATE', 'Gestión autorizada de una cuenta de empresa')
                     guardado = formulario.save()
                     accion = 'CREATE' if es_nueva else 'UPDATE'
                     if not es_nueva and estaba_activo != guardado.activo:
@@ -271,22 +321,31 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
                     auditar_gestion(request, alias, accion, 'Usuario', guardado, detalle)
             except IntegrityError:
                 formulario.add_error(None, 'Ya existe una cuenta con esos datos. Revisa el correo electrónico.')
+            except ValidationError:
+                pass
             else:
                 if empresa is None and guardado.pk == request.user.pk:
                     update_session_auth_hash(request, guardado)
                 if propia:
                     destino = reverse('sistema_mi_cuenta')
                 elif empresa:
-                    destino = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo})
+                    destino = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo, **parametros_atencion(request)})
                 else:
                     destino = reverse('sistema_cuentas')
                 tipo_cuenta = 'Usuario de empresa' if empresa else 'Cuenta del equipo'
                 estado = {'CREATE': 'creada', 'DEACTIVATE': 'desactivada', 'REACTIVATE': 'reactivada'}.get(accion, 'actualizada')
                 if empresa:
                     estado = {'CREATE': 'creado', 'DEACTIVATE': 'desactivado', 'REACTIVATE': 'reactivado'}.get(accion, 'actualizado')
+                mensaje_guardado = f'{guardado.nombre_completo or guardado.email}: cambios guardados correctamente.'
+                if empresa and es_nueva:
+                    try:
+                        enviar_enlace(request, empresa, guardado)
+                        mensaje_guardado = 'La cuenta fue creada y se envió una invitación para establecer su contraseña.'
+                    except (SMTPException, OSError):
+                        mensaje_guardado = 'La cuenta fue creada. No pudimos enviar la invitación; utiliza Enviar recuperación para reintentar.'
                 confirmar_guardado(request, alias=alias,
                                    titulo='Mi cuenta actualizada' if propia else f'{tipo_cuenta} {estado}',
-                                   mensaje=f'{guardado.nombre_completo or guardado.email}: cambios guardados correctamente.',
+                                   mensaje=mensaje_guardado,
                                    link=destino, empresa=empresa)
                 return redirect(destino)
         titulo = ('Añadir usuario' if es_nueva else 'Editar usuario') if empresa else (
@@ -296,7 +355,7 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
         contexto = contexto_sistema(request, 'mi_cuenta' if propia else 'usuarios' if empresa else 'cuentas', titulo, empresa=empresa)
         volver = reverse('sistema_inicio') if propia else reverse('sistema_cuentas')
         if empresa:
-            volver = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo})
+            volver = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo, **parametros_atencion(request)})
         contexto.update(formulario=formulario, volver=volver)
         return render(request, 'sistema/formulario.html', contexto)
 
@@ -304,7 +363,9 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
 @requiere_administrador_plataforma
 @require_http_methods(['GET', 'POST'])
 def editar_usuario_empresa(request, codigo, usuario_id=None):
-    return formulario_cuenta(request, empresa_del_panel(codigo), usuario_id)
+    empresa = empresa_del_panel(codigo, request)
+    acceso_para(request, empresa, 'gestionar_usuarios')
+    return formulario_cuenta(request, empresa, usuario_id)
 
 
 @requiere_superusuario
@@ -322,14 +383,16 @@ def mi_cuenta(request):
 @requiere_personal
 @require_http_methods(['GET'])
 def auditoria_sistema(request):
-    contexto = contexto_sistema(request, 'auditoria', 'Auditoría')
-    empresa = contexto['empresa_seleccionada']
-    if empresa is None and not es_administrador_plataforma(request.user):
-        contexto['requiere_empresa'] = True
-        return render(request, 'sistema/auditoria.html', contexto)
+    empresa = empresa_para_consulta(request, 'auditoria')
+    contexto = contexto_sistema(request, 'auditoria', 'Auditoría', empresa)
     try:
         with usar_empresa(empresa):
             consulta, _ = consulta_filtrada(SimpleNamespace(query_params=parametros_consulta(request)))
+            if empresa is None and not es_superusuario_smartstock(request.user):
+                propias = Q(usuario=request.user) | Q(modelo='AtencionSoporte', objeto_id__in=[str(pk) for pk in atenciones_visibles(request.user).values_list('pk', flat=True)])
+                if es_administrador_plataforma(request.user):
+                    propias |= Q(modelo='Empresa')
+                consulta = consulta.filter(propias)
             contexto['eventos'] = [datos_evento(evento) for evento in paginar(request, contexto, consulta)]
     except ValidationError:
         contexto['error_consulta'] = 'Revisa las fechas y los filtros de la consulta.'
@@ -343,3 +406,17 @@ def abrir_configuracion(request):
     if not es_superusuario_smartstock(request.user):
         raise PermissionDenied
     return redirect('sistema_admin:index')
+
+
+@requiere_personal
+@require_http_methods(['GET'])
+def diagnostico_sistema(request):
+    contexto = contexto_sistema(request, 'diagnostico', 'Diagnóstico de SmartStock')
+    # Estado del servicio, sin tokens, destinatarios ni contenido del buzón.
+    if es_administrador_plataforma(request.user):
+        buzon = BuzonContacto.objects.using('central').only('conexion_estado', 'comprobado_en').first()
+        contexto.update(estado_correo=buzon.get_conexion_estado_display() if buzon else 'Pendiente de conexión',
+            comprobacion_correo=buzon.comprobado_en if buzon else None,
+            sms_activo=bool(getattr(settings, 'SMS_ALERTAS_ACTIVAS', False)))
+    contexto['atenciones'] = list(atenciones_visibles(request.user).filter(estado='abierta')[:20])
+    return render(request, 'sistema/diagnostico.html', contexto)

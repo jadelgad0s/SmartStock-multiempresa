@@ -161,6 +161,14 @@ class EmpresaAdmin(admin.ModelAdmin):
     ordering = ('nombre',)
     readonly_fields = ('creada_en', 'actualizada_en')
 
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic(using='central'):
+            super().save_model(request, obj, form, change)
+            if not obj.activa:
+                from .models import AccesoSoporte
+                AccesoSoporte.objects.using('central').filter(atencion__empresa=obj,
+                    estado__in=['pendiente', 'aprobado']).update(estado='revocado')
+
 
 class PerfilCuentaCentralForm:
     def __init__(self, *args, **kwargs):

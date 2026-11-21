@@ -92,7 +92,7 @@ class PantallasIntegradasTests(SimpleTestCase):
     def test_plantilla_carga_version_actualizada_de_notificaciones(self):
         html = render_to_string('base.html')
         self.assertIn('notificaciones.js', html)
-        self.assertIn('js/notificaciones.js?v=roles-1', html)
+        self.assertIn('js/notificaciones.js?v=soporte-2', html)
 
     def test_login_distingue_logo_en_escritorio_y_conserva_el_mobile(self):
         html = render_to_string('login.html')

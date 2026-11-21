@@ -43,7 +43,7 @@ Comprueba el esquema de las tres bases.
 python manage.py plan_esquema --settings=esquema_multiempresa.settings
 ```
 
-Con el esquema actual deben aparecer 22 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica, pases de acceso y notificaciones del equipo.
+Con el esquema actual deben aparecer 24 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica, pases de acceso y notificaciones del equipo.
 
 ```bat
 python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
@@ -67,27 +67,31 @@ El comando `createsuperuser` prepara el superusuario en la central y solicita un
 
 Abre [el inicio de sesión local](http://127.0.0.1:8000/) e ingresa tu correo y contraseña. Una cuenta de empresa accede a su propia dirección automáticamente y llega a la vista de su rol. El personal de SmartStock accede al panel `/sistema/`, con el diseño, menú lateral, tema y carga de los módulos de la aplicación.
 
-El panel incluye Dashboard, Empresas, Usuarios de empresas y Auditoría. Al seleccionar una empresa se consultan su resumen de inventario, catálogo, bodegas, movimientos, transferencias, mermas, alertas SMS y reportes. Los reportes usan los cálculos del Kardex y las existencias de la empresa. Los formularios de usuarios guardan en la base de la empresa elegida y registran al responsable de SmartStock en la descripción de auditoría.
+El panel interno tiene un dashboard propio, un directorio de empresas, atenciones de soporte y diagnóstico. Las consultas operativas aparecen únicamente durante una autorización vigente del cliente. Las cuentas del equipo nunca reciben una sesión operativa de una empresa.
 
 ## Perfiles del equipo de SmartStock
 
 | Función | Superusuario técnico | Administrador de plataforma | Soporte técnico |
 | --- | --- | --- | --- |
-| Consultar empresas, usuarios e inventarios | Sí | Sí | Sí |
+| Directorio y ficha de empresas | Todas | Todas | Solo asignadas a una atención abierta |
 | Crear o editar empresas y activar su servicio | Sí | Sí | No |
-| Crear, editar o desactivar usuarios de empresas | Sí | Sí | No |
-| Consultar reportes y auditoría de una empresa | Sí | Sí | Sí |
-| Exportar reportes CSV o imprimir/PDF | Sí | Sí | No |
-| Consultar la auditoría central de SmartStock | Sí | Sí | No |
-| Gestionar las cuentas y perfiles del equipo | Sí | No | No |
-| Abrir Configuración (Django Admin) | Sí | No | No |
-| Actualizar datos y contraseña en Mi cuenta | Sí | Sí | Sí |
+| Invitar al primer administrador | Sí, al contacto registrado | Sí, al contacto registrado | No |
+| Ver usuarios y estado de acceso | Sí | Sí | Con permiso del cliente |
+| Gestionar usuarios de una empresa | Con permiso específico | Con permiso específico | No |
+| Consultar inventario, reportes y auditoría del cliente | Con permiso específico | Con permiso específico | Con permiso específico |
+| Enviar recuperación al correo actual | Con permiso específico | Con permiso específico | Con permiso específico |
+| Exportar reportes CSV o PDF | Con permiso adicional | Con permiso adicional | No |
+| Registrar movimientos, transferencias o mermas | No | No | No |
+| Auditoría central | Completa | Empresas, atenciones y actividad propia | Atenciones asignadas y actividad propia |
+| Equipo interno, Django y conexión de integraciones | Sí | No | No |
+| Leer el buzón de contacto | No | No | No |
+| Mi cuenta y notificaciones propias | Sí | Sí | Sí |
 
 Las cuentas centrales requieren `is_staff=True`, estar activas y tener uno de los perfiles internos activos en la tabla `roles` de la central. El superusuario utiliza además `is_superuser=True` y no necesita un rol de negocio. Los códigos internos son `administrador_plataforma` y `soporte_tecnico`. Los cambios de perfil y su desactivación se comprueban en cada solicitud, incluso en una sesión abierta. Un campo agregado manualmente al formulario no permite modificar el propio perfil ni gestionar otras cuentas.
 
 **Equipo de SmartStock** y **Configuración** solo aparecen para el superusuario. Las URLs y los envíos POST también aplican estas restricciones. Al pulsar el nombre o avatar del usuario, en la parte inferior del menú, se abre **Mi cuenta**. Allí cada integrante puede actualizar sus datos y contraseña; conserva su perfil y no puede desactivar la cuenta propia. El bloque del usuario se resalta mientras esa página está abierta. Un alta nueva propone **Soporte técnico**. El superusuario puede asignar cualquiera de los tres perfiles.
 
-Cada solicitud GET que consulta información de una empresa desde el panel registra un evento **CONSULTA** en la auditoría central, con el responsable, la empresa, el módulo, fecha e IP. Una página que resume varias empresas registra una consulta por empresa. El evento identifica la solicitud; si una base no responde, la pantalla conserva su mensaje de error. El registro no contiene contraseñas ni copia los datos consultados al historial de la empresa. Soporte debe seleccionar una empresa para consultar su auditoría y no accede a los eventos de la central.
+Cada solicitud GET que consulta información de una empresa desde el panel registra un evento **CONSULTA** en la auditoría central, con el responsable, la empresa, el módulo, fecha e IP. Una página que resume varias empresas registra una consulta por empresa. El evento identifica la solicitud; si una base no responde, la pantalla conserva su mensaje de error. El registro no contiene contraseñas ni copia los datos consultados al historial de la empresa. La consulta operativa incluye la atención y el motivo autorizado. La auditoría interna limita los eventos visibles según el perfil.
 
 Para actualizar una instalación anterior, detén el servidor y aplica las migraciones en los tres alias antes de volver a iniciarlo:
 
@@ -101,7 +105,9 @@ La migración `empresas.0004_perfiles_equipo` crea los dos roles internos exclus
 
 Los roles de las empresas siguen siendo **Administrador**, **Encargado de bodega** y **Operador**, almacenados en sus propias bases. Sus permisos no cambian en esta actualización. La cuenta de soporte consulta los datos mediante el panel central; no recibe una sesión operativa de la empresa. El panel central de inventario sigue siendo de consulta para los tres perfiles internos.
 
-Para registrar una empresa adicional, su base y conexión deben estar preparadas en el servidor. Las empresas inactivas siguen disponibles en el panel de soporte y su acceso operativo queda bloqueado.
+Para registrar una empresa adicional, su base y conexión deben estar preparadas en el servidor. Las empresas inactivas siguen disponibles para gestión y en las atenciones asignadas, pero su acceso operativo queda bloqueado. Suspender el servicio revoca todos sus permisos de soporte; reactivarlo no los restablece.
+
+La migración `empresas.0009_soporte_temporal` añade las dos tablas centrales de atenciones y autorizaciones. Una instalación que ya tenía las migraciones hasta `0008` solo necesita migrar la central para este cambio. No se modifican las 46 tablas de cada empresa. Consulta el [procedimiento de soporte y permisos](permisos-soporte.md).
 
 ## Ficha de empresa y actualización de instalaciones existentes
 
@@ -164,7 +170,7 @@ python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.prue
 
 Para ejecutar la misma suite con PostgreSQL local o en CI, configura las variables `SS_TEST_DB_USER`, `SS_TEST_DB_PASSWORD`, `SS_TEST_DB_HOST` y `SS_TEST_DB_PORT` con un usuario de pruebas que pueda crear bases y establece `SS_TEST_POSTGRES=true`. El perfil de pruebas usa nombres de base reservados para QA.
 
-La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome y comprueba sus saldos y sesiones independientes. En el panel central crea las cuentas de Administrador de plataforma y Soporte técnico, verifica sus menús y las URLs restringidas, registra un usuario de empresa con el administrador, comprueba las consultas de soporte y prueba el menú móvil. También edita los nombres y apellidos del contacto, cambia entre Maule y Metropolitana, verifica que las comunas cambian y comprueba la selección guardada al reabrir la ficha. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
+La prueba de navegador inicia sesión desde el formulario común en dos pestañas de Chrome y comprueba sus saldos y sesiones independientes. En el panel central crea las cuentas de Administrador de plataforma y Soporte técnico, verifica sus menús y las URLs restringidas, registra un usuario de empresa mediante una autorización explícita, comprueba las consultas de soporte y prueba el menú móvil. También edita los nombres y apellidos del contacto, cambia entre Maule y Metropolitana, verifica que las comunas cambian y comprueba la selección guardada al reabrir la ficha. Incluye una atención real en dos pestañas: el técnico solicita permisos, el administrador del cliente los aprueba desde el menú móvil y después los revoca, bloqueando la siguiente consulta. Con Chrome instalado y el entorno de pruebas SQLite seleccionado puedes ejecutarla en CMD.
 
 ```bat
 set "SS_TEST_POSTGRES="

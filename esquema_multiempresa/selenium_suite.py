@@ -1,5 +1,6 @@
 """Prueba de dos empresas en pestañas del mismo navegador con bases SQLite desechables."""
 import atexit
+from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,7 +22,7 @@ from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
 from apps.core.models import Auditoria
 from apps.usuarios.models import Usuario
-from esquema_multiempresa.models import BuzonContacto, Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
+from esquema_multiempresa.models import AccesoSoporte, AtencionSoporte, BuzonContacto, Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
 from esquema_multiempresa.permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
 from esquema_multiempresa.permisos import CONTACTO, CORREO_CONTACTO
 from apps.usuarios.models import Rol
@@ -144,6 +145,20 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
             navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').click()
             espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/cuentas/')
             self.assertIn(correo, navegador.find_element(By.TAG_NAME, 'body').text)
+        # Accesos aprobados explícitos del cliente para las comprobaciones
+        # históricas de consulta. El flujo de aprobación se prueba por separado.
+        from .autorizacion_soporte import ALCANCES, LECTURAS
+        for correo in ('gestion-qa@example.invalid', 'soporte-qa@example.invalid'):
+            tecnico = Usuario.objects.using('central').get(email=correo)
+            for empresa in Empresa.objects.all():
+                caso = AtencionSoporte.objects.using('central').create(empresa=empresa, tecnico=tecnico,
+                    asunto='Consulta autorizada de prueba', motivo='Revisión solicitada por el cliente')
+                ahora = timezone.now()
+                AccesoSoporte.objects.using('central').create(atencion=caso, tecnico=tecnico,
+                    alcances=list(ALCANCES if correo.startswith('gestion') else LECTURAS),
+                    motivo='Autorización explícita para la prueba', estado='aprobado',
+                    decidido_en=ahora, expira_en=ahora + timedelta(minutes=60), aprobador_id=1,
+                    aprobador_email='admin@smartstock.cl')
         espera.until(lambda d: d.find_element(By.ID, 'sistema-notificaciones-total').text == '2')
         self.assertTrue(navegador.find_element(By.ID, 'sistema-confirmacion').is_displayed())
         self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.alert.alert-success'))
@@ -169,8 +184,7 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertEqual(estado_configuracion, 403)
         navegador.get(self.live_server_url + '/sistema/usuarios/?empresa=la-fragua')
         navegador.find_element(By.LINK_TEXT, 'Añadir usuario').click()
-        for campo, valor in (('nombres', 'Operador'), ('apellidos', 'QA'), ('email', 'operador-qa@example.invalid'),
-                             ('password1', 'Cuenta-operador-fixture-2626!'), ('password2', 'Cuenta-operador-fixture-2626!')):
+        for campo, valor in (('nombres', 'Operador'), ('apellidos', 'QA'), ('email', 'operador-qa@example.invalid')):
             navegador.find_element(By.ID, 'id_' + campo).send_keys(valor)
         Select(navegador.find_element(By.ID, 'id_rol')).select_by_visible_text('Operador')
         navegador.find_element(By.CSS_SELECTOR, 'form.ss-sistema-formulario button[type="submit"]').click()
@@ -313,6 +327,109 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertTrue(Auditoria.objects.using('central').filter(usuario=soporte, accion='CONSULTA',
                                                                objeto_id=str(Empresa.objects.get(codigo='la-fragua').pk)).exists())
         self.assertEqual(StockBodega.objects.using('repuestos').get(producto__sku='QA-001').cantidad_total, 4)
+
+
+class SoporteEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+
+    def pulsar(self, navegador, selector):
+        espera = WebDriverWait(navegador, 20)
+        elemento = espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+        navegador.execute_script('arguments[0].scrollIntoView({block:"center",behavior:"instant"});', elemento)
+        espera.until(lambda d: d.execute_script('''
+            const e=arguments[0],r=e.getBoundingClientRect();
+            const superior=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+            return r.top>=0 && r.bottom<=innerHeight && superior && (superior===e || e.contains(superior));
+        ''', elemento))
+        elemento.click()
+
+    def test_cliente_autoriza_y_revoca_lectura_en_dos_pestanas_y_menu_movil(self):
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        empresa = Empresa.objects.get(codigo='la-fragua')
+        call_command('seed_empresa', empresa.codigo, sin_admin=True, stdout=StringIO())
+        with usar_empresa(empresa):
+            Usuario.objects.create_user(pk=90, email='cliente-qa@example.invalid', password='Cliente-qa-fixture-2026!',
+                nombres='Cliente', apellidos='QA', rol=Rol.objects.get(codigo='administrador'))
+            bodega = Bodega.objects.create(nombre='Central')
+            producto = Producto.objects.create(sku='QA-AUTORIZADO', nombre='Producto autorizado del cliente')
+            StockBodega.objects.create(producto=producto, bodega=bodega, cantidad_total=15)
+        rol, _ = Rol.objects.using('central').get_or_create(codigo=SOPORTE_TECNICO, defaults={'nombre': 'Soporte técnico'})
+        tecnico = Usuario.objects.db_manager('central').create_user(email='soporte-temporal@example.invalid',
+            password='Soporte-qa-fixture-2026!', nombres='Soporte', apellidos='QA', is_staff=True, rol=rol)
+        caso = AtencionSoporte.objects.using('central').create(empresa=empresa, tecnico=tecnico,
+            asunto='Revisión de stock solicitada', motivo='El cliente necesita revisar sus existencias')
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys(tecnico.email)
+        navegador.find_element(By.ID, 'password').send_keys('Soporte-qa-fixture-2026!')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/sistema/'))
+        pestana_tecnico = navegador.current_window_handle
+        navegador.get(self.live_server_url + f'/sistema/atenciones/{caso.pk}/')
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.ss-sidebar-links a[href*="/catalogo/"]'))
+        self.pulsar(navegador, 'input[name="alcances"][value="catalogo"]')
+        Select(navegador.find_element(By.ID, 'id_minutos')).select_by_value('15')
+        navegador.find_element(By.ID, 'id_motivo').send_keys('Comprobar las existencias indicadas por el cliente')
+        self.pulsar(navegador, 'button[name="accion"][value="solicitar"]')
+        espera.until(lambda d: AccesoSoporte.objects.using('central').filter(atencion=caso, estado='pendiente').exists())
+        espera.until(lambda d: 'Pendiente de autorización' in d.find_element(By.TAG_NAME, 'body').text)
+        acceso = AccesoSoporte.objects.using('central').get(atencion=caso)
+        ruta = f'/sistema/catalogo/?empresa=la-fragua&atencion={caso.pk}'
+        self.assertEqual(navegador.execute_async_script(
+            'const listo=arguments[arguments.length-1];fetch(arguments[0]).then(r=>listo(r.status));', ruta), 403)
+
+        navegador.switch_to.new_window('tab')
+        pestana_cliente = navegador.current_window_handle
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys('cliente-qa@example.invalid')
+        navegador.find_element(By.ID, 'password').send_keys('Cliente-qa-fixture-2026!')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/dashboard/'))
+        espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == '15')
+        soporte_link = espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a[href="/soporte/"]')))
+        soporte_link.click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/soporte/')
+        espera.until(lambda d: d.find_element(By.CSS_SELECTOR, '.ss-app-layout').get_attribute('data-ss-autorizado') is not None)
+        espera.until(lambda d: d.find_element(By.ID, 'user-name').text == 'Cliente QA')
+        self.assertIn('Consultar catálogo y stock', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('15 minutos', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, 'a[href*="/sistema/configuracion/"]'))
+        navegador.set_window_size(390, 844)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        self.pulsar(navegador, 'button[name="accion"][value="aprobar"]')
+        espera.until(lambda d: AccesoSoporte.objects.using('central').get(pk=acceso.pk).estado == 'aprobado')
+        espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'button[value="revocar"]')))
+
+        navegador.switch_to.window(pestana_tecnico)
+        navegador.set_window_size(1440, 1000)
+        navegador.refresh()
+        espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a[href*="/sistema/catalogo/"]')))
+        self.pulsar(navegador, '.ss-sidebar-links a[href*="/catalogo/"]')
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/catalogo/')
+        self.assertIn('Producto autorizado del cliente', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('Acceso temporal autorizado hasta', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.set_window_size(390, 844)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        self.pulsar(navegador, '.ss-menu-toggle')
+        espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
+        self.assertTrue(navegador.find_element(By.CSS_SELECTOR, '.ss-sidebar-links a[href*="/catalogo/"]').is_displayed())
+        self.assertFalse(navegador.find_elements(By.LINK_TEXT, 'Movimientos'))
+        self.pulsar(navegador, '.ss-sidebar-close')
+
+        navegador.switch_to.window(pestana_cliente)
+        self.pulsar(navegador, 'button[name="accion"][value="revocar"]')
+        espera.until(lambda d: AccesoSoporte.objects.using('central').get(pk=acceso.pk).estado == 'revocado')
+        espera.until(lambda d: 'Revocado' in d.find_element(By.TAG_NAME, 'body').text)
+        navegador.switch_to.window(pestana_tecnico)
+        self.assertEqual(navegador.execute_async_script(
+            'const listo=arguments[arguments.length-1];fetch(arguments[0]).then(r=>listo(r.status));', ruta), 403)
+        navegador.get(self.live_server_url + f'/sistema/atenciones/{caso.pk}/')
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.ss-sidebar-links a[href*="/catalogo/"]'))
 
 
 class ContactoEnChromeTests(StaticLiveServerTestCase):

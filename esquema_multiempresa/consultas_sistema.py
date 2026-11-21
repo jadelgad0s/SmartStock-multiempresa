@@ -20,6 +20,7 @@ from apps.productos.views_reportes import archivo_reporte, documento_reporte
 from .forms import ConsultaInventarioForm
 from .permisos import es_administrador_plataforma, requiere_personal
 from .sistema import contexto_sistema, paginar, parametros_consulta
+from .autorizacion_soporte import acceso_para, alcances_actuales, empresa_para_consulta, parametros_atencion, auditar_soporte
 
 
 TITULOS = {'catalogo': 'Catálogo', 'bodegas': 'Bodegas', 'movimientos': 'Movimientos',
@@ -29,8 +30,8 @@ TITULOS = {'catalogo': 'Catálogo', 'bodegas': 'Bodegas', 'movimientos': 'Movimi
 @requiere_personal
 @require_GET
 def inventario_sistema(request):
-    contexto = contexto_sistema(request, 'inventario', 'Resumen de inventario')
-    empresa = contexto['empresa_seleccionada']
+    empresa = empresa_para_consulta(request, 'inventario')
+    contexto = contexto_sistema(request, 'inventario', 'Resumen de inventario', empresa)
     if empresa is not None:
         try:
             with usar_empresa(empresa), lectura_consistente():
@@ -55,10 +56,13 @@ def tabla_catalogo(request, contexto, datos):
     contexto['filas'] = [{
         'celdas': [producto.sku, producto.nombre, producto.stock_calculado, 'Activo' if producto.activo else 'Inactivo'],
         'url': reverse('sistema_reportes') + '?' + urlencode({
-            'empresa': empresa.codigo, 'informe': 'kardex', 'producto': producto.pk,
+            'empresa': empresa.codigo, 'informe': 'kardex', 'producto': producto.pk, **parametros_atencion(request),
             **({'bodega': bodega.pk} if bodega else {}),
         }), 'accion': 'Ver historial',
     } for producto in paginar(request, contexto, consulta)]
+    if 'reportes' not in alcances_actuales(request):
+        for fila in contexto['filas']:
+            fila.pop('url', None)
 
 
 def tabla_bodegas(request, contexto, datos):
@@ -108,18 +112,19 @@ def tabla_sms(request, contexto, datos):
     contexto['columnas'] = ['Fecha / hora', 'SKU', 'Producto', 'Bodega', 'Destinatario', 'Estado', 'Intentos']
     contexto['filas'] = [{'celdas': [
         timezone.localtime(envio.fecha_creacion).strftime('%d/%m/%Y %H:%M'), envio.sku,
-        envio.producto_nombre, envio.bodega_nombre, envio.destinatario, envio.get_estado_display(), envio.intentos,
+        envio.producto_nombre, envio.bodega_nombre, '••••' + envio.destinatario[-4:], envio.get_estado_display(), envio.intentos,
     ]} for envio in paginar(request, contexto, consulta)]
 
 
 @requiere_personal
 @require_GET
 def consulta_sistema(request, modulo):
-    if (modulo == 'reportes' and request.GET.get('exportar') in ('csv', 'pdf')
-            and not es_administrador_plataforma(request.user)):
-        raise PermissionDenied
-    contexto = contexto_sistema(request, modulo, TITULOS[modulo])
-    empresa = contexto['empresa_seleccionada']
+    empresa = empresa_para_consulta(request, modulo)
+    if request.GET.get('exportar'):
+        if modulo != 'reportes' or not empresa or request.GET['exportar'] not in ('csv', 'pdf'):
+            raise PermissionDenied
+        acceso_para(request, empresa, 'exportar')
+    contexto = contexto_sistema(request, modulo, TITULOS[modulo], empresa)
     if empresa is not None:
         try:
             with usar_empresa(empresa):
@@ -141,6 +146,8 @@ def consulta_sistema(request, modulo):
                 contexto['formulario_consulta'] = formulario
                 if formulario.is_valid():
                     if modulo == 'reportes' and request.GET.get('exportar') in ('csv', 'pdf'):
+                        auditar_soporte(request, request._atencion_soporte, 'CONSULTA',
+                            f'Exportación {request.GET["exportar"]}; reporte {parametros.get("informe")}')
                         exportador = archivo_reporte if request.GET['exportar'] == 'csv' else documento_reporte
                         return exportador(parametros, request.user.email, empresa.nombre)
                     consultas = {'catalogo': tabla_catalogo, 'bodegas': tabla_bodegas,
@@ -149,6 +156,7 @@ def consulta_sistema(request, modulo):
                         consultas[modulo](request, contexto, formulario.cleaned_data)
                     else:
                         tabla_reporte(request, contexto, parametros)
+                    contexto['hay_acciones'] = any(fila.get('url') for fila in contexto.get('filas', []))
         except ValidationError as error:
             detalles = error.detail.values() if isinstance(error.detail, dict) else error.detail
             contexto['error_consulta'] = ' '.join(

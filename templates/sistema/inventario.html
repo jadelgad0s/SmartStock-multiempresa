@@ -6,6 +6,7 @@
 {% if dashboard.bodega %}
 <form method="get" class="ss-dash-toolbar" data-ss-loading="Actualizando inventario…">
   <input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}">
+  {% include 'soporte/campo_contexto.html' %}
   <div class="ss-dash-warehouse"><label for="bodega-resumen">Bodega</label><select id="bodega-resumen" name="bodega" class="form-select">
     {% for bodega in dashboard.bodegas %}<option value="{{ bodega.id }}"{% if bodega.id == dashboard.bodega.id %} selected{% endif %}>{{ bodega.nombre }}</option>{% empty %}<option value="">Sin bodegas activas</option>{% endfor %}
   </select></div>

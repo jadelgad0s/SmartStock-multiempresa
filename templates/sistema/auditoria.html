@@ -4,6 +4,7 @@
 {% if requiere_empresa %}<p class="text-muted">Selecciona una empresa para consultar su auditoría.</p>{% else %}
 <form method="get" class="card ss-sistema-filtros" data-ss-loading="Consultando auditoría…">
   {% if empresa_seleccionada %}<input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}">{% endif %}
+  {% include 'soporte/campo_contexto.html' %}
   <div><label for="buscar-evento">Buscar evento</label><input id="buscar-evento" type="search" name="search" maxlength="200" value="{{ request.GET.search }}" class="form-control" placeholder="Usuario o descripción"></div>
   <div><label for="auditoria-desde">Desde</label><input id="auditoria-desde" type="date" name="desde" value="{{ request.GET.desde }}" class="form-control"></div>
   <div><label for="auditoria-hasta">Hasta</label><input id="auditoria-hasta" type="date" name="hasta" value="{{ request.GET.hasta }}" class="form-control"></div>

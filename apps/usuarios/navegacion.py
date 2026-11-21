@@ -63,6 +63,9 @@ def modulos_usuario(usuario):
         rutas.append(INICIO_BODEGA)
     if admin:
         rutas.extend([DASHBOARD, '/auditoria/', '/usuarios/', '/alertas-sms/'])
+        from apps.core.empresa import empresa_actual
+        if empresa_actual() is not None:
+            rutas.append('/soporte/')
     if puede_acceder_admin(usuario):
         rutas.append('/admin/')
     return rutas

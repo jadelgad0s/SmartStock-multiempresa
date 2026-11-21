@@ -1,7 +1,7 @@
-<form method="get" class="card ss-sistema-selector" data-ss-loading="Consultando empresa…">
+{% if acceso_soporte %}<p class="form-text">Empresa de la atención: <strong>{{ acceso_soporte.atencion.empresa.nombre }}</strong>. Para consultar otra empresa, abre su propia atención.</p>{% else %}<form method="get" class="card ss-sistema-selector" data-ss-loading="Consultando empresa…">
   <div><label for="empresa-panel">Empresa</label><select id="empresa-panel" name="empresa" class="form-select">
     <option value="">{% if modulo == 'auditoria' %}SmartStock{% else %}Selecciona una empresa{% endif %}</option>
     {% for empresa in empresas_disponibles %}<option value="{{ empresa.codigo }}"{% if empresa.pk == empresa_seleccionada.pk %} selected{% endif %}>{{ empresa.nombre }}{% if not empresa.activa %} · Inactiva{% endif %}</option>{% endfor %}
   </select></div>
   <button type="submit" class="btn btn-primary">Consultar</button>
-</form>
+</form>{% endif %}

@@ -174,3 +174,13 @@ test('los cambios de otra pestaña recargan la bandeja y se cierra el canal al s
 test('sin sesión no se instala la campana ni se solicitan notificaciones', async t => {
     const c = await campana(t, {sinSesion: true}); assert.equal(c.el('ss-notif-btn'), null); assert.equal(c.requests.length, 0);
 });
+
+
+test('la campana funciona en soporte y permite abrir el permiso del cliente', async t => {
+    const c = await campana(t, {url: 'http://localhost/soporte/'});
+    await c.responder(0, datos([noticia(1, {link: '/soporte/#solicitudes'})]));
+    c.el('ss-notif-list').querySelector('button').click();
+    await c.responder(1, {success: true}); await c.responder(2);
+    assert.equal(c.w.location.hash, '#solicitudes');
+    assert.deepEqual(c.errores, []);
+});

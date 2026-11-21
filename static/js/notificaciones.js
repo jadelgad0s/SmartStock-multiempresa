@@ -61,7 +61,7 @@
     document.body.append(avisos);
     const toast = bootstrap.Toast.getOrCreateInstance(aviso, {delay: 6000, autohide: true});
 
-    const allowedRoutes = new Set(['/inicio-bodega/', '/movimientos/', '/mermas/', '/productos/', '/bodegas/', '/ubicaciones/', '/alertas-sms/', '/transferencias/', '/usuarios/', '/auditoria/']);
+    const allowedRoutes = new Set(['/inicio-bodega/', '/movimientos/', '/mermas/', '/productos/', '/bodegas/', '/ubicaciones/', '/alertas-sms/', '/transferencias/', '/usuarios/', '/auditoria/', '/soporte/']);
     const auth = () => ({Authorization: 'Bearer ' + (localStorage.getItem('access_token') || '')});
     const text = (tag, content, cls) => {
       const el = document.createElement(tag);

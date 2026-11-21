@@ -64,7 +64,7 @@
     <script>
       // Aplicar la preferencia antes del primer pintado de los módulos.
       try {
-        if ((/^\/(dashboard|inicio-bodega|productos|bodegas|ubicaciones|alertas-sms|movimientos|transferencias|mermas|auditoria|usuarios|reportes)\/?$/.test(window.location.pathname) || /^\/(sistema|contacto)\//.test(window.location.pathname))
+        if ((/^\/(dashboard|inicio-bodega|productos|bodegas|ubicaciones|alertas-sms|movimientos|transferencias|mermas|auditoria|usuarios|reportes|soporte)\/?$/.test(window.location.pathname) || /^\/(sistema|contacto)\//.test(window.location.pathname))
             && localStorage.getItem('smartstock-theme') === 'dark') {
           document.documentElement.setAttribute('data-bs-theme', 'dark');
         }
@@ -99,7 +99,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{% static 'js/theme.js' %}?v=1" defer></script>
     <script src="{% static 'js/responsive.js' %}?v=2" defer></script>
-    <script src="{% static 'js/notificaciones.js' %}?v=roles-1" defer></script>
+    <script src="{% static 'js/notificaciones.js' %}?v=soporte-2" defer></script>
     <script src="{% static 'js/reportes_base.js' %}?v=roles-1" defer></script>
     <script src="{% static 'js/sms_base.js' %}?v=roles-1" defer></script>
     <script src="{% static 'js/carga.js' %}" defer></script>

@@ -1,0 +1,4 @@
+<div class="card table-responsive"><table class="table table-custom mb-0"><thead><tr><th>Atención</th><th>Empresa</th><th>Responsable</th><th>Estado</th></tr></thead><tbody>
+{% for atencion in atenciones %}<tr><td><a href="{% url 'sistema_atencion' atencion.pk %}" data-ss-loading="Abriendo atención…">{{ atencion.asunto }}</a></td><td>{{ atencion.empresa.nombre }}</td><td>{{ atencion.tecnico.nombre_completo|default:'Pendiente de asignar' }}</td><td>{{ atencion.get_estado_display }}</td></tr>
+{% empty %}<tr><td colspan="4" class="text-muted text-center py-4">No hay atenciones en esta vista.</td></tr>{% endfor %}
+</tbody></table></div>

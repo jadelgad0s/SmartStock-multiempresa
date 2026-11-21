@@ -1,0 +1,9 @@
+<article class="card p-3 mb-3"><div class="d-flex justify-content-between gap-2 flex-wrap"><strong>{{ solicitud.estado_visible }}</strong><span>{{ solicitud.minutos }} minutos</span></div>
+<p class="mb-1">Responsable: {{ solicitud.tecnico.nombre_completo|default:'Cuenta técnica no disponible' }}</p><p>{{ solicitud.motivo }}</p>
+<ul>{% for permiso in solicitud.permisos_visibles %}<li>{{ permiso }}</li>{% endfor %}</ul>
+{% if solicitud.expira_en %}<p class="form-text">Vencimiento: {{ solicitud.expira_en|date:'d/m/Y H:i' }}.</p>{% endif %}
+{% if solicitud.aprobador_email %}<p class="form-text">Decisión de {{ solicitud.aprobador_email }} · {{ solicitud.decidido_en|date:'d/m/Y H:i' }}.</p>{% endif %}
+{% if cliente and solicitud.estado == 'pendiente' %}<form method="post" class="d-flex gap-2 flex-wrap" data-ss-loading="Registrando decisión…">{% csrf_token %}<input type="hidden" name="acceso" value="{{ solicitud.pk }}"><button name="accion" value="aprobar" class="btn btn-primary">Autorizar estos permisos</button><button name="accion" value="rechazar" class="btn btn-outline-secondary">Rechazar</button></form>
+{% elif cliente and solicitud.vigente %}<form method="post" data-ss-loading="Revocando acceso…">{% csrf_token %}<input type="hidden" name="acceso" value="{{ solicitud.pk }}"><button name="accion" value="revocar" class="btn btn-outline-danger">Revocar acceso ahora</button></form>
+{% elif not cliente and solicitud.estado == 'pendiente' or not cliente and solicitud.vigente %}<form method="post" data-ss-loading="Retirando acceso…">{% csrf_token %}<input type="hidden" name="acceso" value="{{ solicitud.pk }}"><button name="accion" value="retirar" class="btn btn-outline-secondary">Retirar solicitud o acceso</button></form>{% endif %}
+</article>

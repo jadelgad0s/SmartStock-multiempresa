@@ -112,12 +112,27 @@ class UsuarioEmpresaForm(CuentaPanelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields.pop('password1')
+        self.fields.pop('password2')
+        if self.instance.pk:
+            self.fields['email'].disabled = True
+            self.fields['email'].help_text = 'La recuperación se envía al correo registrado. Soporte no cambia la identidad del usuario.'
         self.fields['rol'].required = True
         self.fields['rol'].queryset = Rol.objects.using(self.alias).filter(
             Q(activo=True) | Q(pk=self.instance.rol_id),
         ).order_by('nombre')
         self.fields['rol'].label_from_instance = lambda rol: rol.nombre
         self.order_fields(('nombres', 'apellidos', 'email', 'telefono', 'rol', 'activo', 'password1', 'password2'))
+
+    def save(self, commit=True):
+        nueva = self.instance._state.adding
+        usuario = super().save(commit=False)
+        usuario.is_staff = usuario.is_superuser = False
+        if nueva:
+            usuario.set_unusable_password()
+        if commit:
+            usuario.save(using=self.alias)
+        return usuario
 
 
 class CuentaTecnicaForm(CuentaPanelForm):

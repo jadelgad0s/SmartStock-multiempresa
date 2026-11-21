@@ -1,0 +1,15 @@
+{% extends 'dashboard.html' %}
+{% load static %}
+{% block title %}Soporte de SmartStock{% endblock %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/sistema.css' %}?v=soporte-6">{% endblock %}
+{% block panel_empresa %}<div class="ss-soporte-contenido">
+<h1 class="h4 fw-bold">Soporte de SmartStock</h1><p>Revisa las solicitudes del equipo para <strong>{{ request.empresa.nombre }}</strong>. Tú decides qué permisos autorizar y puedes revocarlos antes de su vencimiento.</p>
+{% for mensaje in messages %}<div class="ss-sistema-aviso mb-3" role="status">{{ mensaje }}</div>{% endfor %}
+{% if error_consulta %}<div class="alert alert-danger" role="alert">{{ error_consulta }}</div>{% endif %}
+<div class="ss-sistema-ficha"><section><h2 class="h5 mb-3">Atenciones de tu empresa</h2>
+{% for atencion in atenciones %}<section class="card p-3 mb-4"><h3 class="h6 fw-bold">{{ atencion.asunto }}</h3><p>{{ atencion.motivo|linebreaksbr }}</p><p class="form-text">{{ atencion.get_estado_display }} · Responsable: {{ atencion.tecnico.nombre_completo|default:'Pendiente de asignar' }}</p>
+{% for solicitud in atencion.accesos.all %}{% include 'soporte/solicitud.html' with cliente=True %}{% empty %}<p class="text-muted small">El equipo todavía no ha solicitado permisos para esta atención.</p>{% endfor %}
+{% if atencion.estado == 'abierta' %}<form method="post" data-ss-loading="Cerrando atención…">{% csrf_token %}<input type="hidden" name="atencion" value="{{ atencion.pk }}"><button name="accion" value="cerrar" class="btn btn-outline-secondary">Cerrar atención y revocar sus accesos</button></form>{% else %}<p class="small">{{ atencion.resolucion }}</p>{% endif %}</section>
+{% empty %}<section class="card p-4 text-muted">No tienes atenciones registradas. Puedes enviar una consulta al equipo desde este apartado.</section>{% endfor %}</section>
+<section><form method="post" class="card ss-sistema-formulario" data-ss-loading="Registrando consulta…">{% csrf_token %}<h2 class="h5 mb-3">Solicitar ayuda</h2>{% include 'contacto/campos.html' with form=formulario %}<p class="form-text">Describe la incidencia. No incluyas contraseñas ni códigos de recuperación.</p><button name="accion" value="nueva" class="btn btn-primary">Enviar consulta a SmartStock</button></form></section></div></div>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/sistema.js' %}?v=carga-5" defer></script><script src="{% static 'js/soporte_empresa.js' %}" defer></script>{% endblock %}

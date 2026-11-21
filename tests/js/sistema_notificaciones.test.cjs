@@ -127,3 +127,19 @@ test('fallar la consulta inicial retira el estado de carga y permite reintentar 
   assert.equal(c.el('notificaciones-error').hidden, true);
   assert.match(c.el('notificaciones-lista').textContent, /No tienes notificaciones nuevas/);
 });
+
+
+test('un aviso de soporte abre solo la atención interna con UUID válido', async t => {
+  const destino = '/sistema/atenciones/55b26dc0-67be-4e50-9cf6-92c0c6c57c63/';
+  const c = await campana(t);
+  await c.responder(0, datos([noticia({link: destino})]));
+  c.el('notificaciones-lista').querySelector('button').click();
+  await c.responder(1, {success: true}); await c.responder(2);
+  // jsdom señala el intento de navegar; un destino rechazado no lo intenta.
+  assert.equal(c.errores.filter(e => e.includes('navigation')).length, 1);
+  const bloqueado = await campana(t);
+  await bloqueado.responder(0, datos([noticia({link: '/sistema/atenciones/invalida/'})]));
+  bloqueado.el('notificaciones-lista').querySelector('button').click();
+  await bloqueado.responder(1, {success: true}); await bloqueado.responder(2);
+  assert.deepEqual(bloqueado.errores, []);
+});

@@ -1,20 +1,21 @@
 {% extends 'sistema/base.html' %}
-{% block acciones %}{% if empresa_seleccionada and puede_gestionar_empresas %}<a class="btn btn-primary" href="{% url 'sistema_nuevo_usuario_empresa' empresa_seleccionada.codigo %}"><i class="fa-solid fa-plus me-2" aria-hidden="true"></i>Añadir usuario</a>{% endif %}{% endblock %}
+{% block acciones %}{% if empresa_seleccionada and puede_gestionar_usuarios %}<a class="btn btn-primary" href="{% url 'sistema_nuevo_usuario_empresa' empresa_seleccionada.codigo %}?atencion={{ acceso_soporte.atencion_id }}"><i class="fa-solid fa-plus me-2" aria-hidden="true"></i>Añadir usuario</a>{% elif puede_invitar_administrador %}<a class="btn btn-primary" href="{% url 'sistema_invitar_administrador' empresa_seleccionada.codigo %}">Invitar administrador inicial</a>{% endif %}{% endblock %}
 {% block panel_content %}
 {% include 'sistema/selector_empresa.html' %}
 {% if empresa_seleccionada %}
 <form method="get" class="ss-sistema-busqueda" role="search" data-ss-loading="Buscando usuarios…">
   <input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}">
+  {% include 'soporte/campo_contexto.html' %}
   <label for="buscar-usuario">Buscar usuario</label><div class="d-flex gap-2"><input id="buscar-usuario" type="search" name="search" value="{{ request.GET.search }}" maxlength="200" class="form-control" placeholder="Nombre o correo"><button type="submit" class="btn btn-outline-secondary">Buscar</button></div>
 </form>
 <div class="card"><div class="table-responsive"><table class="table table-custom mb-0">
-  <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último acceso</th>{% if puede_gestionar_empresas %}<th>Acciones</th>{% endif %}</tr></thead>
+  <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último acceso</th>{% if puede_gestionar_usuarios or puede_recuperar_acceso %}<th>Acciones</th>{% endif %}</tr></thead>
   <tbody>{% for usuario in usuarios_empresa %}<tr>
     <td><strong>{{ usuario.nombre_completo|default:usuario.email }}</strong><small class="ss-sistema-secundario">{{ usuario.email }}</small></td>
     <td>{{ usuario.rol.nombre|default:'Sin rol' }}</td>
     <td><span class="{% if usuario.activo %}badge-soft-success{% else %}badge-soft-warning{% endif %}">{% if usuario.activo %}Activo{% else %}Inactivo{% endif %}</span></td>
     <td>{{ usuario.ultimo_login|date:'d/m/Y H:i'|default:'Sin registros' }}</td>
-    {% if puede_gestionar_empresas %}<td><a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_editar_usuario_empresa' empresa_seleccionada.codigo usuario.pk %}">Editar</a></td>{% endif %}
+    {% if puede_gestionar_usuarios or puede_recuperar_acceso %}<td><div class="ss-sistema-acciones">{% if puede_gestionar_usuarios %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_editar_usuario_empresa' empresa_seleccionada.codigo usuario.pk %}?atencion={{ acceso_soporte.atencion_id }}">Editar</a>{% endif %}{% if puede_recuperar_acceso and usuario.activo %}<form method="post" action="{% url 'sistema_recuperar_usuario' empresa_seleccionada.codigo usuario.pk %}" data-ss-loading="Solicitando recuperación…">{% csrf_token %}{% include 'soporte/campo_contexto.html' %}<button class="btn btn-sm btn-outline-secondary">Enviar recuperación</button></form>{% endif %}</div></td>{% endif %}
   </tr>{% empty %}<tr><td colspan="5" class="text-center text-muted py-4">No hay usuarios para esta consulta.</td></tr>{% endfor %}</tbody>
 </table></div>{% include 'sistema/paginacion.html' %}</div>
 {% else %}<p class="text-muted">Selecciona una empresa para consultar sus usuarios.</p>{% endif %}

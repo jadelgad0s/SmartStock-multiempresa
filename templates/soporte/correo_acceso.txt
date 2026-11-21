@@ -1,0 +1,11 @@
+Hola, {{ user.nombres }}:
+
+{% if invitacion %}Te invitaron a utilizar SmartStock para {{ empresa.nombre }}. Establece tu propia contraseña para activar el acceso.{% else %}Se solicitó un enlace para recuperar tu acceso a SmartStock en {{ empresa.nombre }}.{% endif %}
+
+{{ protocol }}://{{ domain }}{% url 'establecer_nueva_clave' uidb64=uid token=token %}
+
+El enlace vence en una hora y deja de funcionar después de establecer la contraseña. No compartas este enlace ni tu contraseña con el equipo de soporte.
+
+Si no reconoces la solicitud, ignora este correo y avisa al administrador de tu empresa.
+
+Equipo SmartStock
