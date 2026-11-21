@@ -38,6 +38,7 @@
 .ss-contacto-notas article { border-top:1px solid var(--slate-200); margin-top:1rem; padding-top:1rem; }
 .ss-contacto-notas p { margin:.3rem 0 0; }
 .ss-menu-contador { margin-left:auto; min-width:1.6rem; padding:.1rem .4rem; border-radius:1rem; font-size:.7rem; text-align:center; background:var(--slate-100); font-variant-numeric:tabular-nums; }
+.ss-sistema .nav-link.ss-menu-con-contador { grid-template-columns:1.25rem minmax(0,1fr) auto; gap:.4rem; }
 .ss-contacto-herramientas { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
 .ss-contacto-herramientas .ss-contacto-busqueda { margin-bottom:0; width:min(100%,600px); }
 .ss-contacto-resultados { color:var(--slate-600); font-size:.875rem; margin:0 0 .6rem; white-space:nowrap; }
