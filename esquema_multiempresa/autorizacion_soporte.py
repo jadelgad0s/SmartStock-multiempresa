@@ -62,7 +62,6 @@ def acceso_para(request, empresa, alcance, *, exigir=True):
         if exigir:
             raise PermissionDenied('Tu perfil no permite esta acción.')
         return None
-    consulta = accesos_vigentes(request.user, empresa)
     codigo = request.GET.get('atencion') or request.POST.get('atencion')
     if not codigo and getattr(request, '_atencion_soporte', None):
         codigo = str(request._atencion_soporte.pk)
@@ -71,9 +70,20 @@ def acceso_para(request, empresa, alcance, *, exigir=True):
             codigo = UUID(codigo)
         except (ValueError, AttributeError, TypeError):
             raise PermissionDenied('Selecciona una atención válida.') from None
-        consulta = consulta.filter(atencion_id=codigo)
+    if request.method == 'GET':
+        # Se reutiliza solamente dentro de esta petición. La siguiente vuelve
+        # a Neon para comprobar revocaciones, empresa, rol y asignación.
+        leidos = getattr(request, '_lecturas_acceso', {})
+        if empresa.pk not in leidos:
+            leidos[empresa.pk] = list(accesos_vigentes(request.user, empresa))
+            request._lecturas_acceso = leidos
+        consulta = leidos[empresa.pk]
+    else:
+        consulta = accesos_vigentes(request.user, empresa)
+    if codigo:
+        consulta = [acceso for acceso in consulta if acceso.atencion_id == codigo]
     for acceso in consulta:
-        if isinstance(acceso.alcances, list) and alcance in acceso.alcances:
+        if acceso.vigente and isinstance(acceso.alcances, list) and alcance in acceso.alcances:
             request._acceso_soporte = acceso
             request._atencion_soporte = acceso.atencion
             return acceso

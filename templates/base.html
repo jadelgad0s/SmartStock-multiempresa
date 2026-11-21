@@ -103,7 +103,8 @@
     <script src="{% static 'js/reportes_base.js' %}?v=roles-1" defer></script>
     <script src="{% static 'js/sms_base.js' %}?v=roles-1" defer></script>
     <script src="{% static 'js/carga.js' %}" defer></script>
-    <script src="{% static 'js/navegacion.js' %}?v=3" defer></script>
+    {% if request.navegacion_verificada %}{{ request.navegacion_verificada|json_script:'ss-navegacion-inicial' }}{% endif %}
+    <script src="{% static 'js/navegacion.js' %}?v=neon-4" defer></script>
     {% endblock %}
     {% block extra_scripts %}{% endblock %}
 </body>

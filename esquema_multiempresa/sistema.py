@@ -8,7 +8,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import DatabaseError, IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -35,8 +35,20 @@ from .permisos import (
 
 
 def empresa_del_panel(codigo, request=None):
+    if request is not None:
+        empresa = next((e for e in empresas_del_menu(request) if e.codigo == codigo), None)
+        if empresa is None:
+            from django.http import Http404
+            raise Http404
+        return empresa
     consulta = empresas_visibles(request.user) if request else Empresa.objects.filter(alias_bd__in=settings.BASES_EMPRESA)
     return get_object_or_404(consulta, codigo=codigo)
+
+
+def empresas_del_menu(request):
+    if not hasattr(request, '_empresas_menu'):
+        request._empresas_menu = list(empresas_visibles(request.user).order_by('nombre', 'id'))
+    return request._empresas_menu
 
 
 def contexto_sistema(request, modulo, titulo, empresa=None):
@@ -47,7 +59,7 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
     acceso = getattr(request, '_acceso_soporte', None)
     contexto = {
         'titulo': titulo, 'modulo': modulo, 'empresa_seleccionada': empresa,
-        'empresas_disponibles': list(empresas_visibles(request.user).order_by('nombre', 'id')),
+        'empresas_disponibles': empresas_del_menu(request),
         'es_superusuario': es_superusuario_smartstock(request.user),
         'puede_gestionar_empresas': es_administrador_plataforma(request.user),
         'perfil_personal': nombre_perfil_personal(request.user),
@@ -136,10 +148,13 @@ def resumen_empresa(empresa, request=None):
         return datos
     try:
         with usar_empresa(empresa):
-            datos.update(usuarios=Usuario.objects.filter(is_superuser=False).count(),
-                administrador=Usuario.objects.filter(activo=True, rol__codigo='administrador', rol__activo=True)
-                    .exclude(password__startswith='!').exclude(password='').exists(),
-                puede_invitar=puede_invitar_inicial(empresa))
+            clave_usable = ~Q(password__startswith='!') & ~Q(password='')
+            conteos = Usuario.objects.aggregate(
+                usuarios=Count('pk', filter=Q(is_superuser=False)),
+                administradores=Count('pk', filter=Q(activo=True, rol__codigo='administrador', rol__activo=True) & clave_usable),
+                con_acceso=Count('pk', filter=clave_usable))
+            datos.update(usuarios=conteos['usuarios'], administrador=bool(conteos['administradores']),
+                         puede_invitar=not conteos['con_acceso'])
     except DatabaseError:
         datos['disponible'] = False
     return datos

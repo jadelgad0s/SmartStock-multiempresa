@@ -263,7 +263,7 @@ class PanelSmartStockTests(TestCase):
 
     def test_un_error_de_empresa_muestra_un_estado_y_el_panel_sigue_disponible(self):
         self.entrar()
-        with patch('esquema_multiempresa.sistema.Usuario.objects.filter', side_effect=OperationalError('base indisponible')):
+        with patch('esquema_multiempresa.sistema.Usuario.objects.aggregate', side_effect=OperationalError('base indisponible')):
             pagina = self.cliente.get('/sistema/')
         self.assertContains(pagina, 'Sin conexión con la empresa')
         self.assertEqual(self.cliente.get('/sistema/mi-cuenta/').status_code, 200)

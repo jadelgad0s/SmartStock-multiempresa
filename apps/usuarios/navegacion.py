@@ -69,3 +69,13 @@ def modulos_usuario(usuario):
     if puede_acceder_admin(usuario):
         rutas.append('/admin/')
     return rutas
+
+
+def datos_navegacion(usuario, modulos=None):
+    modulos = modulos_usuario(usuario) if modulos is None else modulos
+    return {'inicio': inicio_usuario(usuario, modulos), 'modulos': modulos,
+            'usuario': {'id': usuario.pk, 'email': usuario.email,
+                'nombre_completo': usuario.nombre_completo,
+                'rol': usuario.rol.codigo if usuario.rol_id else None,
+                'rol_nombre': usuario.rol.nombre if usuario.rol_id else None,
+                'is_superuser': usuario.is_superuser}}

@@ -6,7 +6,13 @@
     <article class="card ss-contacto-tarjeta">
       <div class="ss-contacto-remitente"><div><strong>{{ mensaje.remitente_nombre|default:'Remitente' }}</strong><span class="d-block">{{ mensaje.remitente_email|default:'Dirección no disponible' }}</span></div><time>{{ mensaje.recibido_en|date:'d/m/Y H:i' }}</time></div>
       <p class="ss-contacto-ayuda">Para: contacto@smartstockchile.cl</p>
-      {% if mensaje.contenido_cargado %}<div class="ss-contacto-texto">{{ mensaje.contenido|default:'Este correo no contiene texto.' }}</div>{% else %}<div class="alert alert-warning">Se muestra el resumen del correo. El contenido completo se cargará cuando Zoho esté disponible.</div><div class="ss-contacto-texto">{{ mensaje.resumen }}</div>{% endif %}
+      {% if mensaje.contenido_cargado %}<div class="ss-contacto-texto">{{ mensaje.contenido|default:'Este correo no contiene texto.' }}</div>{% else %}
+      <div id="contacto-contenido" data-url="{% url 'contacto_contenido' mensaje.pk %}" data-usuario="{{ request.user.pk }}" data-mensaje="{{ mensaje.pk }}" data-conectado="{% if zoho_configurado %}1{% else %}0{% endif %}">
+        <p class="ss-contacto-ayuda" data-contenido-estado role="status">{% if zoho_configurado %}Cargando contenido del correo…{% else %}Conecta Zoho Mail para consultar el contenido completo.{% endif %}</p>
+        <div class="ss-contacto-texto" data-contenido-texto>{{ mensaje.resumen|default:'Sin resumen disponible.' }}</div>
+        <p class="text-danger small mt-2" data-contenido-error role="alert" hidden></p>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" data-contenido-reintentar hidden>Reintentar contenido</button>
+      </div>{% endif %}
       {% if mensaje.tiene_adjuntos %}<p class="ss-contacto-adjuntos"><i class="fa-solid fa-paperclip me-1" aria-hidden="true"></i>Este correo contiene adjuntos. Puedes consultarlos en Zoho Mail.</p>{% endif %}
       <div class="d-flex gap-2 flex-wrap mt-3"><a class="btn btn-sm btn-outline-secondary" href="{{ zoho_url }}" target="_blank" rel="noopener noreferrer">Abrir Zoho Mail</a><form method="post" data-ss-loading="Actualizando lectura…">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" name="accion" value="no_leido">Marcar como no leído</button></form></div>
     </article>

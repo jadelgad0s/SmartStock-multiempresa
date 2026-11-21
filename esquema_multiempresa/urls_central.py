@@ -6,7 +6,7 @@ from apps.usuarios.views_recuperacion import (
     RecuperacionEnviadaView, EstablecerNuevaClaveView, ClaveActualizadaView,
 )
 from .admin_central import sitio_sistema
-from .contacto import bandeja, conexion_contacto, cuenta_contacto, detalle_mensaje, mi_cuenta_contacto, sincronizar
+from .contacto import bandeja, conexion_contacto, contenido_mensaje, cuenta_contacto, detalle_mensaje, mi_cuenta_contacto, sincronizar
 from .login import LoginCentralView, login_central
 from .recuperacion_central import SolicitarRecuperacionCentralView
 from .consultas_sistema import consulta_sistema, inventario_sistema
@@ -26,6 +26,7 @@ urlpatterns = [
     path('contacto/bandeja/', bandeja, name='contacto_bandeja'),
     path('contacto/sincronizar/', sincronizar, name='contacto_sincronizar'),
     path('contacto/mensajes/<int:mensaje_id>/', detalle_mensaje, name='contacto_mensaje'),
+    path('contacto/mensajes/<int:mensaje_id>/contenido/', contenido_mensaje, name='contacto_contenido'),
     path('contacto/mi-cuenta/', mi_cuenta_contacto, name='contacto_mi_cuenta'),
     path('cerrar-sesion/', logout_web, name='logout_web'),
     path('recuperar-clave/', SolicitarRecuperacionCentralView.as_view(), name='recuperar_clave'),

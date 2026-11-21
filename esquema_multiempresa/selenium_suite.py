@@ -4,6 +4,7 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event
 from urllib.parse import urlsplit
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -108,6 +109,8 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
             self.assertEqual(urlsplit(navegador.current_url).hostname, codigo + '.localhost')
             self.assertIn(empresa.nombre, navegador.title)
             espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == str(cantidad))
+            self.assertTrue(navegador.find_elements(By.ID, 'ss-navegacion-inicial'))
+            self.assertEqual(navegador.execute_script("return performance.getEntriesByType('resource').filter(r=>new URL(r.name).pathname==='/api/v1/auth/navegacion/').length"), 0)
 
         navegador.switch_to.window(pestanas[0])
         espera.until(EC.element_to_be_clickable((By.ID, 'btn-logout'))).click()
@@ -568,6 +571,7 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
         rol, _ = Rol.objects.using('central').get_or_create(codigo=CONTACTO, defaults={'nombre':'Contacto','es_sistema':True})
         Usuario.objects.db_manager('central').create_user(email=CORREO_CONTACTO, password=clave, nombres='Contacto', is_staff=True, rol=rol)
         llamadas, envios, recibidos = [], [], []
+        contenido_iniciado, entregar_contenido = Event(), Event()
         def resultado(data):
             return SimpleNamespace(status_code=200, content=b'{}', json=lambda:{'status':{'code':200},'data':data})
         def api(metodo, url, **opciones):
@@ -580,6 +584,9 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
                 self.assertEqual(opciones['params']['searchKey'], 'in:Inbox::groupResult:false')
                 return resultado(list(recibidos))
             if url.endswith('/messages/201/content'):
+                contenido_iniciado.set()
+                if not entregar_contenido.wait(timeout=15):
+                    raise AssertionError('La página debe permitir usar el editor antes de recibir el contenido de Zoho.')
                 return resultado({'content':'<p>Necesito ayuda con mi acceso.</p>'})
             if metodo == 'POST' and url.endswith('/messages/201'):
                 envios.append(opciones['json'])
@@ -640,7 +647,15 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='201')
             self.pulsar(navegador, By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]')
             espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
-            self.assertIn('Necesito ayuda con mi acceso.', navegador.find_element(By.CSS_SELECTOR,'.ss-contacto-texto').text)
+            self.assertTrue(contenido_iniciado.wait(timeout=10))
+            editor = navegador.find_element(By.CSS_SELECTOR, '[data-borrador-editor] textarea')
+            self.assertTrue(editor.is_enabled())
+            self.assertIsNone(navegador.find_element(By.ID, 'ss-carga').get_attribute('open'))
+            editor.send_keys('Borrador mientras llega el contenido')
+            entregar_contenido.set()
+            espera.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR,'.ss-contacto-texto'), 'Necesito ayuda con mi acceso.'))
+            self.assertEqual(editor.get_attribute('value'), 'Borrador mientras llega el contenido')
+            editor.clear()
             self.pulsar(navegador, By.CSS_SELECTOR, 'a[href="#contacto-responder"]')
             navegador.find_element(By.CSS_SELECTOR,'[data-borrador-editor] textarea').send_keys('Gracias por escribirnos. Te ayudaremos a recuperar el acceso.')
             self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="borrador"]')
