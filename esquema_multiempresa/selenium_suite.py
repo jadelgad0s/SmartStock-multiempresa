@@ -188,7 +188,16 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
         self.comprobar_menu(navegador)
-        navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').click()
+        perfil = espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.ss-sistema-perfil')))
+        # La clase se añade al iniciar la animación del menú. El clic requiere
+        # que el perfil ya esté dentro de la pantalla y libre de superposiciones.
+        espera.until(lambda d: d.execute_script('''
+            const e=arguments[0], r=e.getBoundingClientRect();
+            const visible=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+            return r.left>=0 && r.right<=innerWidth && r.top>=0 && r.bottom<=innerHeight
+                && visible && (visible===e || e.contains(visible));
+        ''', perfil))
+        perfil.click()
         espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/mi-cuenta/')
         self.assertEqual(navegador.find_element(By.ID, 'id_email').get_attribute('value'), 'gestion-qa@example.invalid')
         navegador.find_element(By.CSS_SELECTOR, '.ss-menu-toggle').click()
