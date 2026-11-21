@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 
 from apps.core.empresa import transaccion_operativa, usar_empresa
 from apps.core.responses import error_response, success_response
+from apps.core.registro_auditoria import crear_evento
 from apps.usuarios.models import Usuario
 from apps.usuarios.navegacion import cuenta_habilitada
 from apps.usuarios.serializers import CustomTokenObtainPairSerializer
@@ -116,6 +117,9 @@ class LoginCentralView(APIView):
                     if usuario.activo and not usuario.esta_bloqueado():
                         with usar_empresa(empresa):
                             usuario.registrar_intento_fallido()
+                crear_evento(alias='central', request=request, usuario=None, accion='LOGIN_FAILED', modelo='Usuario',
+                    operacion='Inicio de sesión no completado', resultado='fallida',
+                    descripcion=f'Intento fallido de acceso central para: {correo}')
                 return error_response('Credenciales incorrectas o cuenta no disponible.', status_code=401)
 
             ahora = timezone.now()

@@ -1,10 +1,12 @@
 from functools import wraps
 
 from django.core.exceptions import PermissionDenied
+from django.db import DatabaseError
 from django.shortcuts import redirect
 from django.views.decorators.cache import never_cache
 
 from apps.core.models import Auditoria
+from apps.core.registro_auditoria import crear_evento, datos_registro
 
 
 ADMINISTRADOR_PLATAFORMA = 'administrador_plataforma'
@@ -82,7 +84,10 @@ def auditar_consultas(request, respuesta):
                          f'{getattr(request, "_modulo_consultado", "empresa")} · {empresa.nombre} ({empresa.codigo})'
                          + (f' · Atención {request._atencion_soporte.pk} · Motivo: {getattr(request, "_acceso_soporte", request._atencion_soporte).motivo}'
                             if getattr(request, '_atencion_soporte', None) else ''))[:2000],
-            ip_address=request.META.get('REMOTE_ADDR'),
+            **datos_registro(request, usuario=request.user, empresa=empresa,
+                modulo=getattr(request, '_modulo_consultado', 'Empresas'),
+                operacion='Consulta de ' + getattr(request, '_modulo_consultado', 'empresa'),
+                resultado='solicitada'),
         ) for empresa in consultas.values()
     ])
 
@@ -94,9 +99,19 @@ def requiere(comprobar):
         def protegida(request, *args, **kwargs):
             if not request.user.is_authenticated:
                 return redirect('login_page')
-            if not comprobar(request.user):
-                raise PermissionDenied
-            respuesta = vista(request, *args, **kwargs)
+            try:
+                if not comprobar(request.user):
+                    raise PermissionDenied
+                respuesta = vista(request, *args, **kwargs)
+            except PermissionDenied:
+                # Solo identidad autenticada; no incorporar parámetros ni credenciales.
+                try:
+                    crear_evento(alias='central', request=request, accion='ACCESS_DENIED', modelo='Acceso',
+                        operacion='Acceso denegado', resultado='denegada',
+                        descripcion='La cuenta no tenía permiso vigente para esta acción.')
+                except DatabaseError:
+                    pass  # La falta de registro nunca convierte una denegación en acceso.
+                raise
             auditar_consultas(request, respuesta)
             return respuesta
         return protegida

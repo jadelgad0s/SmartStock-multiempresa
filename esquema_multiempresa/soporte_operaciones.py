@@ -47,7 +47,8 @@ def solicitar_acceso(request, atencion, datos):
             raise ValidationError('Ya hay una solicitud pendiente. Espera su decisión o retírala antes de solicitar otra.')
         acceso = AccesoSoporte.objects.using('central').create(atencion=atencion, tecnico=request.user,
             alcances=list(dict.fromkeys(alcances)), minutos=datos['minutos'], motivo=datos['motivo'])
-        auditar_soporte(request, atencion, 'CREATE', f'Acceso solicitado {acceso.pk}; permisos: {", ".join(acceso.alcances)}; {acceso.minutos} minutos; motivo: {acceso.motivo}')
+        auditar_soporte(request, atencion, 'CREATE', f'Acceso solicitado {acceso.pk}; permisos: {", ".join(acceso.alcances)}; {acceso.minutos} minutos; motivo: {acceso.motivo}',
+            operacion='Acceso de soporte solicitado', resultado='solicitada')
         transaction.on_commit(lambda: avisar_empresa(atencion), using='central', robust=True)
     return acceso
 
@@ -62,6 +63,7 @@ def decidir_acceso(request, acceso_id, accion):
     with transaction.atomic(using='central'):
         atencion = AtencionSoporte.objects.using('central').select_for_update(of=('self',)).select_related('empresa', 'tecnico', 'tecnico__rol').get(pk=base.atencion_id)
         acceso = AccesoSoporte.objects.using('central').select_for_update().get(pk=acceso_id)
+        estado_anterior = acceso.estado
         reemplazados = 0
         if accion == 'revocar':
             if acceso.estado not in ('pendiente', 'aprobado'):
@@ -88,7 +90,10 @@ def decidir_acceso(request, acceso_id, accion):
         detalle = f'Acceso {acceso.pk}: {acceso.estado}; permisos: {", ".join(acceso.alcances)}'
         if reemplazados:
             detalle += f'; {reemplazados} autorizaciones anteriores de esta atención revocadas'
-        auditar_soporte(request, atencion, 'UPDATE', detalle)
+        auditar_soporte(request, atencion, 'UPDATE', detalle,
+            operacion={'aprobar': 'Acceso de soporte aprobado', 'rechazar': 'Acceso de soporte rechazado',
+                       'revocar': 'Acceso de soporte revocado'}[accion],
+            cambios={'estado': {'antes': estado_anterior, 'despues': acceso.estado}})
         transaction.on_commit(lambda: avisar_tecnico(atencion, 'Permisos de soporte actualizados',
             f'{atencion.empresa.nombre}: solicitud {acceso.get_estado_display().lower()}.'), using='central', robust=True)
     return acceso

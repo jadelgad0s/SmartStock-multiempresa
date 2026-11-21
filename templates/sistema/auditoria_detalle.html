@@ -1,0 +1,29 @@
+{% extends 'sistema/base.html' %}
+{% load static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/sistema_auditoria.css' %}?v=1">{% endblock %}
+{% block acciones %}<a class="btn btn-outline-secondary" href="{{ volver_url }}">Volver al historial</a>{% endblock %}
+{% block panel_content %}
+<section class="card ss-aud-detalle">
+  <div class="ss-aud-detalle-titulo"><h2>{{ evento.operacion }}</h2><span class="ss-aud-resultado ss-aud-{{ evento.resultado|default:'anterior' }}">{{ evento.resultado_etiqueta }}</span></div>
+  <dl class="ss-sistema-datos">
+    <div><dt>Identificador del evento</dt><dd>#{{ evento.id }}</dd></div>
+    <div><dt>Fecha / hora</dt><dd>{{ evento.fecha }} · {{ evento.zona_horaria }}</dd></div>
+    <div><dt>Usuario</dt><dd>{{ evento.usuario }}<small>{{ evento.usuario_email }}</small></dd></div>
+    <div><dt>Perfil al registrar el evento</dt><dd>{{ evento.perfil|default:'No registrado' }}</dd></div>
+    <div><dt>Ámbito consultado</dt><dd>{{ ambito_nombre }}</dd></div>
+    <div><dt>Empresa relacionada</dt><dd>{{ evento.empresa_nombre|default:'No registrada' }}{% if evento.empresa_codigo %} · {{ evento.empresa_codigo }}{% endif %}</dd></div>
+    <div><dt>Módulo</dt><dd>{{ evento.modulo_mostrado }}</dd></div>
+    <div><dt>Elemento afectado</dt><dd>{{ evento.modelo }}{% if evento.objeto_id %} · {{ evento.objeto_id }}{% endif %}</dd></div>
+    <div><dt>Código de acción registrado</dt><dd>{{ evento.accion_registrada }}</dd></div>
+    <div><dt>Atención de soporte</dt><dd>{{ evento.atencion_id|default:'No registrada' }}</dd></div>
+    <div><dt>Dirección IP registrada</dt><dd>{{ evento.ip_address|default:'No registrada' }}</dd></div>
+    <div><dt>Navegador / dispositivo registrado</dt><dd>{{ evento.user_agent|default:'No registrado' }}</dd></div>
+  </dl>
+  {% if not evento.identidad_guardada %}<p class="ss-aud-nota">Este evento es anterior al registro de identidad histórica. Si conserva una cuenta asociada, se muestran sus datos actuales.</p>{% endif %}
+  <h2 class="mt-4 mb-2">Descripción registrada</h2><p class="ss-aud-descripcion">{{ evento.descripcion|default:'Sin descripción registrada.' }}</p>
+</section>
+<section class="card ss-aud-detalle mt-4"><h2 class="mb-3">Cambios registrados</h2>
+  {% for cambio in evento.cambios %}<div class="ss-aud-cambio"><strong>{{ cambio.campo }}</strong><div><span>Antes</span><p>{{ cambio.antes }}</p></div><div><span>Después</span><p>{{ cambio.despues }}</p></div></div>
+  {% empty %}<p class="text-muted mb-0">Este evento no contiene valores anteriores y nuevos registrados.</p>{% endfor %}
+</section>
+{% endblock %}

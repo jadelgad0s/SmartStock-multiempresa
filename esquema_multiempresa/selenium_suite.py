@@ -13,6 +13,7 @@ from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.core.management import call_command
 from django.utils import timezone
+from django.test import override_settings
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -22,6 +23,7 @@ from selenium.webdriver.support.ui import Select
 from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
 from apps.core.models import Auditoria
+from apps.core.registro_auditoria import crear_evento
 from apps.usuarios.models import Usuario
 from esquema_multiempresa.models import AccesoSoporte, AtencionSoporte, BuzonContacto, Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
 from esquema_multiempresa.permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
@@ -644,6 +646,69 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             self.comprobar_carga(navegador, '.ss-sidebar-links a[href="/contacto/bandeja/?vista=sin-leer"]', 'Cargando Sin leer…')
             self.comprobar_carga(navegador, 'a.ss-sistema-perfil', 'Abriendo mi cuenta…')
             self.comprobar_carga(navegador, '.ss-contacto-fila', 'Abriendo correo…')
+
+
+@override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
+class AuditoriaEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+    pulsar = ContactoEnChromeTests.pulsar
+
+    def test_filtros_grupos_detalle_y_documento_en_escritorio_y_movil(self):
+        clave = 'Cuenta-fixture-auditoria-2026!'
+        raiz = Usuario.objects.db_manager('central').create_superuser(
+            email='raiz-auditoria@example.invalid', password=clave, nombres='Javier', apellidos='De prueba')
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        empresa = Empresa.objects.using('central').get(codigo='la-fragua')
+        for _ in range(3):
+            crear_evento(alias='central', usuario=raiz, empresa=empresa, accion='CONSULTA', modelo='Empresa',
+                descripcion='QA-AUD Consulta de empresas', operacion='Consulta de Empresas', resultado='solicitada')
+        evento = crear_evento(alias='central', usuario=raiz, empresa=empresa, accion='DEACTIVATE', modelo='Usuario',
+            descripcion='QA-AUD Cuenta de prueba suspendida. Descripción completa del evento.',
+            operacion='Cuenta desactivada', cambios={'activo': {'antes': True, 'despues': False}})
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1700,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys(raiz.email)
+        navegador.find_element(By.ID, 'password').send_keys(clave)
+        self.pulsar(navegador, By.ID, 'login-submit')
+        espera.until(EC.url_contains('/sistema/'))
+        navegador.get(self.live_server_url + '/sistema/auditoria/?search=QA-AUD')
+        espera.until(EC.visibility_of_element_located((By.ID, 'auditoria-usuario')))
+        self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento')), 4)
+        self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-grupo')), 1)
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-grupo summary')
+        self.assertEqual(len([e for e in navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento') if e.is_displayed()]), 4)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.save_screenshot('/tmp/ss-auditoria-escritorio.png')
+        Select(navegador.find_element(By.ID, 'auditoria-accion')).select_by_value('DEACTIVATE')
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-filtros button[type="submit"]')
+        espera.until(lambda d: 'accion=DEACTIVATE' in d.current_url)
+        self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento')), 1)
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-ver-detalle')
+        espera.until(EC.url_contains(f'/sistema/auditoria/{evento.pk}/'))
+        self.assertIn('Descripción completa del evento.', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('Cuenta activa', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('Superusuario técnico', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.set_window_size(390, 844)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.save_screenshot('/tmp/ss-auditoria-detalle-movil.png')
+        self.pulsar(navegador, By.LINK_TEXT, 'Volver al historial')
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/auditoria/')
+        self.assertIn('accion=DEACTIVATE', navegador.current_url)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.save_screenshot('/tmp/ss-auditoria-listado-movil.png')
+        pestana = navegador.current_window_handle
+        self.pulsar(navegador, By.LINK_TEXT, 'Imprimir / PDF')
+        espera.until(lambda d: len(d.window_handles) == 2)
+        navegador.switch_to.window(next(p for p in navegador.window_handles if p != pestana))
+        espera.until(EC.visibility_of_element_located((By.ID, 'auditoria-imprimir')))
+        self.assertIn('1 evento', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('QA-AUD Cuenta de prueba suspendida', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertNotIn('QA-AUD Consulta de empresas', navegador.find_element(By.TAG_NAME, 'body').text)
             mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='201')
             self.pulsar(navegador, By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]')
             espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))

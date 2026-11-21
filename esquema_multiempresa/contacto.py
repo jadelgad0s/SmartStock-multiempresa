@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
 
 from apps.usuarios.models import Usuario
+from apps.core.registro_auditoria import crear_evento, diferencias, estado_auditable
 from .buzon_contacto import enviar_respuesta, sincronizar_buzon
 from .forms import CuentaContactoForm
 from .forms_contacto import BorradorForm, ConexionZohoForm, NotaForm, SeguimientoForm
@@ -135,9 +136,10 @@ def formulario_contacto(request, cuenta, *, propia, contexto):
     if request.method == 'POST' and formulario.is_valid():
         try:
             with transaction.atomic(using='central'):
+                antes = estado_auditable(Usuario.objects.using('central').select_for_update(of=('self',)).select_related('rol').get(pk=cuenta.pk)) if not nueva else {}
                 guardada = formulario.save()
                 auditar_gestion(request, 'central', 'CREATE' if nueva else 'UPDATE', 'Usuario', guardada,
-                                'Cuenta exclusiva de contacto actualizada')
+                    'Cuenta exclusiva de contacto actualizada', cambios=diferencias(antes, estado_auditable(guardada)))
         except IntegrityError:
             formulario.add_error(None, 'La cuenta de contacto ya existe. Recarga esta página para editarla.')
         else:
@@ -219,8 +221,8 @@ def sincronizar(request):
     return redirect(destino)
 
 
-def confirmar_accion(request, mensaje, titulo, texto):
-    auditar_gestion(request, 'central', 'UPDATE', 'MensajeContacto', mensaje, titulo)
+def confirmar_accion(request, mensaje, titulo, texto, *, cambios=None):
+    auditar_gestion(request, 'central', 'UPDATE', 'MensajeContacto', mensaje, titulo, cambios=cambios)
     confirmar_guardado(request, alias='central', titulo=titulo, mensaje=texto,
                        link=reverse('contacto_mensaje', args=[mensaje.pk]))
     return redirect('contacto_mensaje', mensaje_id=mensaje.pk)
@@ -250,6 +252,7 @@ def guardar_borrador(mensaje, formulario):
 @require_http_methods(['GET', 'POST'])
 def detalle_mensaje(request, mensaje_id):
     mensaje = get_object_or_404(MensajeContacto.objects.using('central'), pk=mensaje_id)
+    antes_seguimiento = estado_auditable(mensaje)
     error = ''
     seguimiento = SeguimientoForm(instance=mensaje)
     nota = NotaForm()
@@ -264,7 +267,8 @@ def detalle_mensaje(request, mensaje_id):
                     if not MensajeContacto.objects.using('central').filter(pk=mensaje.pk, version=datos['version']).update(
                             estado=datos['estado'], categoria=datos['categoria'], seguimiento=datos['seguimiento'], version=F('version') + 1):
                         raise ErrorZoho('El seguimiento cambió en otra pestaña. Recarga antes de guardar.')
-                    return confirmar_accion(request, mensaje, 'Seguimiento actualizado', 'La consulta quedó actualizada.')
+                    return confirmar_accion(request, mensaje, 'Seguimiento actualizado', 'La consulta quedó actualizada.',
+                        cambios=diferencias(antes_seguimiento, estado_auditable(mensaje)))
             elif accion == 'nota':
                 nota = NotaForm(request.POST)
                 if nota.is_valid():
@@ -299,6 +303,9 @@ def detalle_mensaje(request, mensaje_id):
                 raise ErrorZoho('La acción solicitada no es válida.')
         except ErrorZoho as fallo:
             error = str(fallo)
+            crear_evento(alias='central', request=request, accion='UPDATE', modelo='MensajeContacto',
+                objeto_id=mensaje.pk, operacion='Acción de correo no completada', resultado='fallida',
+                descripcion='La operación del buzón no pudo completarse. No se registra el texto del correo.')
     # La página se muestra sin esperar a Zoho. Su contenido se solicita aparte
     # y queda guardado en la misma base central de Neon.
     if request.method == 'GET' and not mensaje.leido:
