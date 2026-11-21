@@ -64,14 +64,14 @@
     <script>
       // Aplicar la preferencia antes del primer pintado de los módulos.
       try {
-        if ((/^\/(dashboard|inicio-bodega|productos|bodegas|ubicaciones|alertas-sms|movimientos|transferencias|mermas|auditoria|usuarios|reportes)\/?$/.test(window.location.pathname) || window.location.pathname.startsWith('/sistema/'))
+        if ((/^\/(dashboard|inicio-bodega|productos|bodegas|ubicaciones|alertas-sms|movimientos|transferencias|mermas|auditoria|usuarios|reportes)\/?$/.test(window.location.pathname) || /^\/(sistema|contacto)\//.test(window.location.pathname))
             && localStorage.getItem('smartstock-theme') === 'dark') {
           document.documentElement.setAttribute('data-bs-theme', 'dark');
         }
       } catch (_) {}
     </script>
     <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=2">
-    <link rel="stylesheet" href="{% static 'css/carga.css' %}">
+    <link rel="stylesheet" href="{% static 'css/carga.css' %}?v=2">
     <style>
         .ss-app-layout:not([data-ss-autorizado]), [data-ss-menu-denegado] { display: none !important; }
     </style>

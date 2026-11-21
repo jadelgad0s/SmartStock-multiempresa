@@ -9,6 +9,8 @@ from apps.core.models import Auditoria
 
 ADMINISTRADOR_PLATAFORMA = 'administrador_plataforma'
 SOPORTE_TECNICO = 'soporte_tecnico'
+CONTACTO = 'contacto'
+CORREO_CONTACTO = 'contacto@smartstockchile.cl'
 PERFILES_EQUIPO = {
     'superusuario': 'Superusuario técnico',
     ADMINISTRADOR_PLATAFORMA: 'Administrador de plataforma',
@@ -20,10 +22,25 @@ def es_personal_smartstock(usuario):
     if not (usuario.is_authenticated and usuario.activo and usuario.is_staff
             and usuario._state.db == 'central'):
         return False
+    # La identidad reservada nunca obtiene acceso al inventario o a la
+    # administración por un cambio accidental de rol o de flags.
+    if usuario.email.lower() == CORREO_CONTACTO or usuario.rol_id and usuario.rol.codigo == CONTACTO:
+        return False
     return bool(usuario.is_superuser or (
         usuario.rol_id and usuario.rol.activo
         and usuario.rol.codigo in (ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO)
     ))
+
+
+def es_contacto_smartstock(usuario):
+    return bool(usuario.is_authenticated and usuario.activo and usuario.is_staff
+                and not usuario.is_superuser and usuario._state.db == 'central'
+                and usuario.email == CORREO_CONTACTO and usuario.rol_id
+                and usuario.rol.activo and usuario.rol.codigo == CONTACTO)
+
+
+def es_cuenta_interna(usuario):
+    return es_personal_smartstock(usuario) or es_contacto_smartstock(usuario)
 
 
 def es_superusuario_smartstock(usuario):
@@ -43,6 +60,8 @@ def perfil_personal(usuario):
 
 
 def nombre_perfil_personal(usuario):
+    if perfil_personal(usuario) == CONTACTO:
+        return 'Contacto'
     return PERFILES_EQUIPO.get(perfil_personal(usuario), 'Sin perfil habilitado')
 
 
@@ -85,3 +104,4 @@ def requiere(comprobar):
 requiere_personal = requiere(es_personal_smartstock)
 requiere_administrador_plataforma = requiere(es_administrador_plataforma)
 requiere_superusuario = requiere(es_superusuario_smartstock)
+requiere_contacto = requiere(es_contacto_smartstock)

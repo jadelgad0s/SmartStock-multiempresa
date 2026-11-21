@@ -1,0 +1,16 @@
+{% extends 'sistema/formulario.html' %}
+{% block panel_content %}
+<div class="card ss-sistema-formulario mb-4">
+  <h2 class="h5">{% if propia %}Tu cuenta de atención{% else %}Una cuenta exclusiva de contacto{% endif %}</h2>
+  <p>El acceso <strong>contacto@smartstockchile.cl</strong> está reservado para atender consultas. Su correo y perfil son fijos.</p>
+  <p class="mb-0">Puede consultar la bandeja, responder correos, guardar borradores y organizar seguimientos. No tiene acceso al inventario, las cuentas de empresas ni la configuración.</p>
+</div>
+{% if not propia %}
+<div class="card ss-sistema-formulario mb-4">
+  <h2 class="h5">Buzón de correo</h2>
+  <p>{% if zoho_configurado %}Hay una autorización configurada para Zoho. Comprueba la conexión si los correos no aparecen.{% else %}Falta autorizar a SmartStock para consultar y responder los correos de Zoho. La contraseña de SmartStock no conecta el buzón.{% endif %}</p>
+  <div><a href="{% url 'sistema_conexion_contacto' %}" class="btn btn-primary">{% if zoho_configurado %}Revisar conexión de Zoho{% else %}Conectar Zoho Mail{% endif %}</a></div>
+</div>
+{% endif %}
+{% if formulario %}{{ block.super }}{% endif %}
+{% endblock %}

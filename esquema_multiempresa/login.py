@@ -27,7 +27,7 @@ from apps.usuarios.serializers import CustomTokenObtainPairSerializer
 from apps.usuarios.views_auth import abrir_sesion_web, auditar_login
 from .acceso import direccion_empresa
 from .models import Empresa, TicketAcceso
-from .permisos import es_personal_smartstock
+from .permisos import CORREO_CONTACTO, es_cuenta_interna, es_contacto_smartstock, es_personal_smartstock
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,8 @@ def empresas_disponibles():
 
 @never_cache
 def login_central(request):
+    if es_contacto_smartstock(request.user):
+        return redirect('contacto_bandeja')
     if es_personal_smartstock(request.user):
         return redirect('sistema_inicio')
     respuesta = render(request, 'login.html', {'dominio_empresas': settings.DOMINIO_EMPRESAS})
@@ -58,7 +60,7 @@ def login_central(request):
 
 
 def coincide(usuario, clave):
-    habilitado = es_personal_smartstock(usuario) if usuario._state.db == 'central' else cuenta_habilitada(usuario)
+    habilitado = es_cuenta_interna(usuario) if usuario._state.db == 'central' else cuenta_habilitada(usuario)
     return usuario.check_password(clave) and habilitado and not usuario.esta_bloqueado()
 
 
@@ -90,11 +92,14 @@ class LoginCentralView(APIView):
                     usuario.resetear_intentos()
                     abrir_sesion_web(request._request, usuario)
                     auditar_login(usuario)
+                    if es_contacto_smartstock(usuario):
+                        return success_response(data={'contacto': True, 'inicio': '/contacto/bandeja/'})
                     return success_response(data={'sistema': True, 'inicio': '/sistema/'})
                 intentos.append((None, usuario))
 
             accesos = []
-            for empresa in empresas_disponibles():
+            # El correo reservado no puede abrir una cuenta homónima de cliente.
+            for empresa in ([] if correo == CORREO_CONTACTO else empresas_disponibles()):
                 with usar_empresa(empresa):
                     usuarios = list(Usuario.objects.select_related('rol').filter(email__iexact=correo))
                     if not usuarios:

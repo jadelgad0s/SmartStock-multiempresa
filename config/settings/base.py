@@ -12,6 +12,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # === SEGURIDAD ===
 SECRET_KEY = config('SECRET_KEY')
+
+# Buzón exclusivo de contacto: API HTTPS de Zoho; credenciales solo en el servidor.
+ZOHO_CONTACTO_CLIENT_ID = config('ZOHO_CONTACTO_CLIENT_ID', default='')
+ZOHO_CONTACTO_CLIENT_SECRET = config('ZOHO_CONTACTO_CLIENT_SECRET', default='')
+ZOHO_CONTACTO_REFRESH_TOKEN = config('ZOHO_CONTACTO_REFRESH_TOKEN', default='')
+ZOHO_CONTACTO_DC = config('ZOHO_CONTACTO_DC', default='com')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 

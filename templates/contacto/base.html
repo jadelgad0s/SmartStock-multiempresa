@@ -1,0 +1,4 @@
+{% extends 'sistema/base.html' %}
+{% load static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/contacto.css' %}?v=2">{% endblock %}
+{% block scripts_comunes %}{{ block.super }}<script src="{% static 'js/contacto.js' %}?v=2" defer></script>{% endblock %}

@@ -4,10 +4,13 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.core.management import call_command
+from django.utils import timezone
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -18,8 +21,10 @@ from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
 from apps.core.models import Auditoria
 from apps.usuarios.models import Usuario
-from esquema_multiempresa.models import Empresa, NotificacionSistema
+from esquema_multiempresa.models import BuzonContacto, Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
 from esquema_multiempresa.permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
+from esquema_multiempresa.permisos import CONTACTO, CORREO_CONTACTO
+from apps.usuarios.models import Rol
 
 
 if (settings.SETTINGS_MODULE != 'esquema_multiempresa.testing'
@@ -37,6 +42,14 @@ for _alias in ('central', 'ferreteria', 'repuestos'):
 
 class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
     databases = {'central', 'ferreteria', 'repuestos'}
+
+    def setUp(self):
+        super().setUp()
+        # StaticLiveServerTestCase vacía los datos entre clases; los roles de
+        # migración se preparan también cuando otra prueba de Chrome va antes.
+        for codigo, nombre in ((ADMINISTRADOR_PLATAFORMA, 'Administrador de plataforma'),
+                               (SOPORTE_TECNICO, 'Soporte técnico')):
+            Rol.objects.using('central').get_or_create(codigo=codigo, defaults={'nombre': nombre, 'es_sistema': True})
 
     def comprobar_menu(self, navegador):
         grupos = navegador.execute_script('''
@@ -175,7 +188,16 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
         self.comprobar_menu(navegador)
-        navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').click()
+        perfil = espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.ss-sistema-perfil')))
+        # La clase se añade al iniciar la animación del menú. El clic requiere
+        # que el perfil ya esté dentro de la pantalla y libre de superposiciones.
+        espera.until(lambda d: d.execute_script('''
+            const e=arguments[0], r=e.getBoundingClientRect();
+            const visible=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+            return r.left>=0 && r.right<=innerWidth && r.top>=0 && r.bottom<=innerHeight
+                && visible && (visible===e || e.contains(visible));
+        ''', perfil))
+        perfil.click()
         espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/mi-cuenta/')
         self.assertEqual(navegador.find_element(By.ID, 'id_email').get_attribute('value'), 'gestion-qa@example.invalid')
         navegador.find_element(By.CSS_SELECTOR, '.ss-menu-toggle').click()
@@ -291,3 +313,224 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertTrue(Auditoria.objects.using('central').filter(usuario=soporte, accion='CONSULTA',
                                                                objeto_id=str(Empresa.objects.get(codigo='la-fragua').pk)).exists())
         self.assertEqual(StockBodega.objects.using('repuestos').get(producto__sku='QA-001').cantidad_total, 4)
+
+
+class ContactoEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+
+    def comprobar_carga(self, navegador, selector, esperado):
+        """Pausa una navegación para observar el indicador antes del cambio de página."""
+        enlace = WebDriverWait(navegador, 20).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+        navegador.execute_script('''
+            const enlace=arguments[0];
+            document.addEventListener('click', function pausar(evento) {
+                if (evento.target.closest('a') !== enlace) return;
+                evento.preventDefault();
+                document.removeEventListener('click', pausar);
+            });
+        ''', enlace)
+        self.pulsar(navegador, By.CSS_SELECTOR, selector)
+        WebDriverWait(navegador, 20).until(EC.visibility_of_element_located((By.ID, 'ss-carga')))
+        self.assertEqual(navegador.find_element(By.ID, 'ss-carga-texto').text, esperado)
+        self.assertTrue(navegador.execute_script('''
+            const d=document.getElementById('ss-carga'), r=d.getBoundingClientRect();
+            return d.scrollWidth<=d.clientWidth && d.scrollHeight<=d.clientHeight
+                && r.left>=0 && r.right<=innerWidth && r.top>=0 && r.bottom<=innerHeight;
+        '''))
+        navegador.execute_script('window.dispatchEvent(new PageTransitionEvent("pageshow", {persisted:true}));')
+        WebDriverWait(navegador, 20).until(EC.invisibility_of_element_located((By.ID, 'ss-carga')))
+
+    def comprobar_menu(self, navegador):
+        """Los contadores permanecen junto al texto en todas las páginas."""
+        filas = navegador.execute_script('''return Array.from(
+            document.querySelectorAll('.ss-menu-con-contador'), e => {
+                const r=e.getBoundingClientRect();
+                const texto=e.querySelector('span:not(.ss-menu-contador)').getBoundingClientRect();
+                const contador=e.querySelector('.ss-menu-contador').getBoundingClientRect();
+                return {alto:r.height, diferencia:Math.abs(texto.top+texto.height/2-contador.top-contador.height/2)};
+            });''')
+        self.assertEqual(len(filas), 7)
+        self.assertTrue(all(fila['alto'] <= 44 and fila['diferencia'] <= 1 for fila in filas), filas)
+
+    def pulsar(self, navegador, tipo, selector):
+        elemento = WebDriverWait(navegador, 20).until(EC.element_to_be_clickable((tipo, selector)))
+        # Bootstrap utiliza desplazamiento suave. Antes del clic nativo se
+        # termina el desplazamiento y se comprueba que el control esté visible.
+        navegador.execute_script('arguments[0].scrollIntoView({block:"center",behavior:"instant"});', elemento)
+        WebDriverWait(navegador, 20).until(lambda d: d.execute_script('''
+            const e=arguments[0], r=e.getBoundingClientRect();
+            const x=r.left+r.width/2, y=r.top+r.height/2;
+            const visible=document.elementFromPoint(x,y);
+            return x>=0 && x<innerWidth && y>=0 && y<innerHeight && visible && (visible===e || e.contains(visible));
+        ''', elemento))
+        elemento.click()
+
+    def test_alta_exclusiva_login_bandeja_borradores_y_seguimiento_en_movil(self):
+        Usuario.objects.db_manager('central').create_superuser(
+            email='root-contacto@example.invalid', password='Root-fixture-contacto-2026!', nombres='Root')
+        Rol.objects.using('central').get_or_create(codigo=CONTACTO, defaults={'nombre':'Contacto', 'es_sistema':True})
+        mensaje = MensajeContacto.objects.using('central').create(
+            cuenta_zoho='101', mensaje_zoho='201', carpeta_zoho='301', remitente_email='consulta@example.invalid',
+            remitente_nombre='Persona de prueba', asunto='Necesito ayuda con mi cuenta', contenido_cargado=True,
+            contenido='Quiero orientación sobre SmartStock.', resumen='Consulta de acceso')
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys('root-contacto@example.invalid')
+        navegador.find_element(By.ID, 'password').send_keys('Root-fixture-contacto-2026!')
+        self.pulsar(navegador, By.ID, 'login-submit')
+        espera.until(EC.url_contains('/sistema/'))
+        navegador.get(self.live_server_url + '/sistema/cuentas/nueva/')
+        self.assertNotIn('Contacto', [opcion.text for opcion in Select(navegador.find_element(By.ID, 'id_perfil')).options])
+        navegador.get(self.live_server_url + '/sistema/contacto/cuenta/')
+        self.assertFalse(navegador.find_element(By.ID, 'id_email').is_enabled())
+        for campo, valor in [('nombres','Contacto'),('apellidos','SmartStock'),
+                             ('password1','Cuenta-fixture-contacto-2026!'),('password2','Cuenta-fixture-contacto-2026!')]:
+            navegador.find_element(By.ID, 'id_' + campo).send_keys(valor)
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-sistema-formulario button[type="submit"]')
+        espera.until(lambda d: Usuario.objects.using('central').filter(email=CORREO_CONTACTO).exists())
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        self.pulsar(navegador, By.ID, 'sistema-confirmacion-cerrar')
+        espera.until(EC.invisibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        self.pulsar(navegador, By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]')
+        espera.until(EC.visibility_of_element_located((By.ID, 'email')))
+        navegador.find_element(By.ID, 'email').send_keys(CORREO_CONTACTO)
+        navegador.find_element(By.ID, 'password').send_keys('Cuenta-fixture-contacto-2026!')
+        self.pulsar(navegador, By.ID, 'login-submit')
+        espera.until(EC.url_contains('/contacto/bandeja/'))
+        self.assertIn('Atención de SmartStock', navegador.find_element(By.TAG_NAME, 'body').text)
+        for ruta in ('/sistema/','/sistema/empresas/','/sistema/configuracion/'):
+            self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, f'.ss-sidebar a[href="{ruta}"]'))
+        self.pulsar(navegador, By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]')
+        espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
+        Select(navegador.find_element(By.ID, 'id_estado')).select_by_value('seguimiento')
+        self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="seguimiento"]')
+        espera.until(lambda d: MensajeContacto.objects.using('central').get(pk=mensaje.pk).estado == 'seguimiento')
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        self.pulsar(navegador, By.ID, 'sistema-confirmacion-cerrar')
+        espera.until(EC.invisibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        navegador.find_element(By.CSS_SELECTOR, '[data-borrador-editor] textarea').send_keys('Gracias por escribirnos. Te orientaremos sobre el acceso.')
+        self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="borrador"]')
+        espera.until(lambda d: RespuestaContacto.objects.using('central').filter(mensaje=mensaje).exists())
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        self.pulsar(navegador, By.ID, 'sistema-confirmacion-cerrar')
+        espera.until(EC.invisibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        self.assertFalse(navegador.find_element(By.CSS_SELECTOR, '[data-respuesta-enviar]').is_enabled())
+        nota = navegador.find_element(By.CSS_SELECTOR, '.ss-contacto-seguimiento textarea[name="texto"]')
+        nota.send_keys('Revisar consulta mañana.')
+        self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="nota"]')
+        espera.until(lambda d: NotaContacto.objects.using('central').filter(mensaje=mensaje).exists())
+        espera.until(EC.visibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        self.pulsar(navegador, By.ID, 'sistema-confirmacion-cerrar')
+        espera.until(EC.invisibility_of_element_located((By.ID, 'sistema-confirmacion')))
+        navegador.set_window_size(390, 844)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+        self.assertTrue(navegador.find_element(By.CSS_SELECTOR, '.ss-contacto-texto').is_displayed())
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-menu-toggle')
+        espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.ss-sistema-perfil'))).click()
+        espera.until(EC.url_contains('/contacto/mi-cuenta/'))
+        self.comprobar_menu(navegador)
+        self.assertFalse(navegador.find_element(By.ID, 'id_email').is_enabled())
+        self.assertFalse(navegador.find_elements(By.ID, 'id_perfil'))
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+
+    def test_conexion_web_actualizacion_y_respuesta_desde_smartstock(self):
+        """Contrato de Zoho simulado: el navegador recorre el mismo flujo real, sin enviar correo externo."""
+        clave = 'Cuenta-fixture-buzon-2026!'
+        Usuario.objects.db_manager('central').create_superuser(email='root-buzon@example.invalid', password=clave, nombres='Root')
+        rol, _ = Rol.objects.using('central').get_or_create(codigo=CONTACTO, defaults={'nombre':'Contacto','es_sistema':True})
+        Usuario.objects.db_manager('central').create_user(email=CORREO_CONTACTO, password=clave, nombres='Contacto', is_staff=True, rol=rol)
+        llamadas, envios, recibidos = [], [], []
+        def resultado(data):
+            return SimpleNamespace(status_code=200, content=b'{}', json=lambda:{'status':{'code':200},'data':data})
+        def api(metodo, url, **opciones):
+            llamadas.append((metodo,url))
+            if url.endswith('/api/accounts'):
+                return resultado([{'accountId':'101','primaryEmailAddress':CORREO_CONTACTO}])
+            if url.endswith('/messages/view'):
+                return resultado([])
+            if url.endswith('/messages/search'):
+                self.assertEqual(opciones['params']['searchKey'], 'in:Inbox::groupResult:false')
+                return resultado(list(recibidos))
+            if url.endswith('/messages/201/content'):
+                return resultado({'content':'<p>Necesito ayuda con mi acceso.</p>'})
+            if metodo == 'POST' and url.endswith('/messages/201'):
+                envios.append(opciones['json'])
+                return resultado({'messageId':'501'})
+            raise AssertionError('Petición de correo no prevista: ' + metodo)
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        def ingresar(correo):
+            navegador.get(self.live_server_url)
+            espera.until(EC.visibility_of_element_located((By.ID,'email'))).send_keys(correo)
+            navegador.find_element(By.ID,'password').send_keys(clave)
+            self.pulsar(navegador, By.ID, 'login-submit')
+            espera.until(lambda d: '/sistema/' in d.current_url or '/contacto/bandeja/' in d.current_url)
+        def cerrar_confirmacion():
+            espera.until(EC.visibility_of_element_located((By.ID,'sistema-confirmacion')))
+            self.pulsar(navegador, By.ID, 'sistema-confirmacion-cerrar')
+            espera.until(EC.invisibility_of_element_located((By.ID,'sistema-confirmacion')))
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200, json=lambda:{'access_token':'access-navegador-fixture','refresh_token':'refresh-navegador-fixture'})), \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=api):
+            ingresar('root-buzon@example.invalid')
+            navegador.get(self.live_server_url + '/sistema/contacto/cuenta/')
+            self.pulsar(navegador, By.LINK_TEXT, 'Conectar Zoho Mail')
+            espera.until(EC.url_contains('/sistema/contacto/conexion/'))
+            for nombre, valor in [('client_id','client-navegador-fixture'),('client_secret','secret-navegador-fixture'),('codigo','code-navegador-fixture')]:
+                navegador.find_element(By.ID,'id_' + nombre).send_keys(valor)
+            self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="conectar"]')
+            espera.until(lambda d: BuzonContacto.objects.using('central').filter(conexion_estado='conectado').exists())
+            cerrar_confirmacion()
+            self.assertEqual(len(envios), 0)
+            self.pulsar(navegador, By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]')
+            espera.until(EC.visibility_of_element_located((By.ID,'email')))
+            ingresar(CORREO_CONTACTO)
+            self.assertIn('No hay correos importados', navegador.find_element(By.TAG_NAME,'body').text)
+            self.comprobar_menu(navegador)
+            self.pulsar(navegador, By.CSS_SELECTOR, 'a.ss-sistema-perfil')
+            espera.until(EC.url_contains('/contacto/mi-cuenta/'))
+            self.comprobar_menu(navegador)
+            self.pulsar(navegador, By.CSS_SELECTOR, '.ss-sidebar-links a[href="/contacto/bandeja/"]')
+            espera.until(EC.url_contains('/contacto/bandeja/'))
+            recibidos.append({'messageId':'201','folderId':'301','fromAddress':'consulta@example.invalid',
+                'sender':'Persona de prueba','subject':'Correo de prueba recibido',
+                'receivedtime':str(int(timezone.now().timestamp() * 1000) - 15000),
+                'summary':'Necesito ayuda con mi acceso','hasAttachment':'0'})
+            antes = sum(url.endswith('/messages/search') for _,url in llamadas)
+            self.pulsar(navegador, By.ID, 'contacto-actualizar')
+            cerrar_confirmacion()
+            self.assertGreater(sum(url.endswith('/messages/search') for _,url in llamadas), antes)
+            self.assertIn('Correo de prueba recibido', navegador.find_element(By.TAG_NAME,'body').text)
+            self.comprobar_menu(navegador)
+            self.comprobar_carga(navegador, '.ss-sidebar-links a[href="/contacto/bandeja/?vista=sin-leer"]', 'Cargando Sin leer…')
+            self.comprobar_carga(navegador, 'a.ss-sistema-perfil', 'Abriendo mi cuenta…')
+            self.comprobar_carga(navegador, '.ss-contacto-fila', 'Abriendo correo…')
+            mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='201')
+            self.pulsar(navegador, By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]')
+            espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
+            self.assertIn('Necesito ayuda con mi acceso.', navegador.find_element(By.CSS_SELECTOR,'.ss-contacto-texto').text)
+            self.pulsar(navegador, By.CSS_SELECTOR, 'a[href="#contacto-responder"]')
+            navegador.find_element(By.CSS_SELECTOR,'[data-borrador-editor] textarea').send_keys('Gracias por escribirnos. Te ayudaremos a recuperar el acceso.')
+            self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="borrador"]')
+            cerrar_confirmacion()
+            self.assertTrue(navegador.find_element(By.CSS_SELECTOR,'[data-respuesta-enviar]').is_enabled())
+            self.pulsar(navegador, By.CSS_SELECTOR, '[data-respuesta-enviar]')
+            cerrar_confirmacion()
+            self.assertEqual(len(envios), 1)
+            self.assertEqual(envios[0]['fromAddress'], CORREO_CONTACTO)
+            self.assertEqual(envios[0]['toAddress'],'consulta@example.invalid')
+            navegador.get(self.live_server_url + '/contacto/bandeja/?vista=enviados')
+            self.assertIn('Gracias por escribirnos.', navegador.find_element(By.TAG_NAME,'body').text)
+            self.assertFalse(navegador.find_elements(By.CSS_SELECTOR,'.ss-contacto-kpis'))
+            navegador.set_window_size(390,844)
+            self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+            self.comprobar_carga(navegador, '.ss-contacto-fila', 'Abriendo correo…')

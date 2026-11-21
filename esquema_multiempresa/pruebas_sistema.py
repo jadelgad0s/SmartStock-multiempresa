@@ -842,7 +842,7 @@ class MigracionFichaEmpresaTests(TransactionTestCase):
             self.assertIsNotNone(nueva.creada_en)
             self.assertIsNotNone(nueva.actualizada_en)
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0006_notificaciones_sistema')])
+            MigrationExecutor(conexion).migrate([('empresas', '0008_conexion_buzon_contacto')])
 
 
 class MigracionPerfilesEquipoTests(TransactionTestCase):
@@ -892,7 +892,7 @@ class MigracionPerfilesEquipoTests(TransactionTestCase):
                 self.assertEqual(list(Usuario.objects.using(alias).values('id', 'email', 'password', 'rol_id')), datos)
                 self.assertEqual(list(Rol.objects.using(alias).values_list('codigo', flat=True)), ['administrador'])
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0006_notificaciones_sistema')])
+            MigrationExecutor(conexion).migrate([('empresas', '0008_conexion_buzon_contacto')])
 
 
 class MigracionApellidosContactoTests(TransactionTestCase):
@@ -916,4 +916,4 @@ class MigracionApellidosContactoTests(TransactionTestCase):
             self.assertEqual((conservada.region, conservada.comuna), ('Región Metropolitana', 'Providencia'))
             self.assertEqual((conservada.codigo, conservada.alias_bd, conservada.activa), ('anterior', 'ferreteria', False))
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0006_notificaciones_sistema')])
+            MigrationExecutor(conexion).migrate([('empresas', '0008_conexion_buzon_contacto')])

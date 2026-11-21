@@ -1,0 +1,47 @@
+{% extends 'contacto/base.html' %}
+{% block acciones %}
+<div class="d-flex gap-2 flex-wrap">
+  <a class="btn btn-outline-secondary" href="{{ zoho_url }}" target="_blank" rel="noopener noreferrer">Abrir Zoho Mail <i class="fa-solid fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i></a>
+  {% if zoho_configurado %}<form method="post" action="{% url 'contacto_sincronizar' %}" data-ss-loading="Consultando tu bandeja en Zoho…">{% csrf_token %}<input type="hidden" name="vista" value="{{ vista }}"><input type="hidden" name="search" value="{{ busqueda }}">{% if request.GET.vencidos == '1' %}<input type="hidden" name="vencidos" value="1">{% endif %}<button id="contacto-actualizar" class="btn btn-primary"><i class="fa-solid fa-rotate me-2" aria-hidden="true"></i>Actualizar bandeja</button></form>{% else %}<a href="#contacto-conexion" class="btn btn-outline-secondary">Revisar conexión</a>{% endif %}
+</div>
+{% endblock %}
+{% block panel_content %}
+<p class="ss-contacto-subtitulo">contacto@smartstockchile.cl · Consultas y seguimiento</p>
+{% if vista == 'todos' %}<div class="ss-sistema-kpis ss-contacto-kpis">
+  {% for etiqueta, valor, filtro in kpis %}<a class="card text-decoration-none" href="{% url 'contacto_bandeja' %}?{% if filtro == 'vencidos' %}vencidos=1{% else %}vista={{ filtro }}{% endif %}" data-ss-loading="Cargando {{ etiqueta|lower }}…"><span class="kpi-title">{{ etiqueta }}</span><strong class="kpi-value">{{ valor|default_if_none:'—' }}</strong></a>{% endfor %}
+</div>{% endif %}
+{% if not zoho_configurado %}
+<section id="contacto-conexion" class="ss-contacto-conexion card" role="status"><i class="fa-regular fa-envelope" aria-hidden="true"></i><div><h2>Tu buzón está pendiente de conexión</h2><p>SmartStock necesita autorización para consultar y responder los correos de <strong>contacto@smartstockchile.cl</strong>.</p><p class="mb-0">Solicita al superusuario abrir <strong>Cuenta de contacto → Conectar Zoho Mail</strong>. Mientras tanto puedes usar Zoho Mail desde el botón superior.</p>{% if datos_disponibles %}<p class="form-text mt-2 mb-0">Se muestran los correos que ya estaban guardados en SmartStock.</p>{% endif %}</div></section>
+{% else %}
+<div id="contacto-sync" class="ss-contacto-sync" data-url="{% url 'contacto_sincronizar' %}" data-usuario="{{ request.user.pk }}" data-total="{{ contadores.todos }}" data-ultimo="{{ contadores.ultimo_id|default_if_none:0 }}" data-consultado="{% if buzon.ultima_consulta %}1{% else %}0{% endif %}">
+  <span id="contacto-sync-estado" role="status">{% if buzon.ultimo_error and not error_consulta %}{{ buzon.ultimo_error }}{% elif buzon.ultima_consulta %}Última consulta: {{ buzon.ultima_consulta|date:'d/m/Y H:i' }}{% else %}Autorización configurada. Actualiza la bandeja para comprobar la conexión.{% endif %}</span>
+  <a id="contacto-sync-nuevos" href="{{ request.get_full_path }}" hidden>Ver bandeja actualizada</a>
+</div>
+{% endif %}
+{% if datos_disponibles %}
+<div class="ss-contacto-herramientas"><p class="ss-contacto-resultados">{{ pagina.paginator.count }} {% if vista == 'enviados' %}respuesta{{ pagina.paginator.count|pluralize:'s' }} enviada{{ pagina.paginator.count|pluralize:'s' }}{% else %}consulta{{ pagina.paginator.count|pluralize:'s' }}{% endif %}</p>
+<form method="get" class="ss-contacto-busqueda" role="search" data-ss-loading="Buscando correos…">
+  <input type="hidden" name="vista" value="{{ vista }}">
+  {% if request.GET.vencidos == '1' %}<input type="hidden" name="vencidos" value="1">{% endif %}
+  <label for="contacto-buscar">{% if vista == 'enviados' %}Buscar respuesta enviada{% else %}Buscar en la bandeja{% endif %}</label><div class="d-flex gap-2"><input id="contacto-buscar" type="search" class="form-control" name="search" value="{{ busqueda }}" maxlength="200" placeholder="Remitente, asunto o resumen"><button class="btn btn-outline-secondary">Buscar</button></div>
+</form></div>
+{% if request.GET.vencidos == '1' %}<p>Seguimientos pendientes para hoy o fechas anteriores. <a href="{% url 'contacto_bandeja' %}">Ver todos</a></p>{% endif %}
+<div class="card ss-contacto-lista">
+  {% if vista == 'enviados' %}{% for respuesta in pagina %}
+  <a href="{% url 'contacto_mensaje' respuesta.mensaje_id %}" class="ss-contacto-fila" data-ss-loading="Abriendo correo…"><i class="fa-regular fa-paper-plane mt-1" aria-hidden="true"></i><div class="ss-contacto-correo"><div class="ss-contacto-cabecera"><strong>Para: {{ respuesta.mensaje.remitente_email }}</strong><time>{{ respuesta.enviada_en|date:'d/m/Y H:i' }}</time></div><span class="ss-contacto-asunto">{{ respuesta.mensaje.asunto|default:'Sin asunto' }}</span><span class="ss-contacto-resumen">{{ respuesta.texto|truncatechars:150 }}</span><span class="ss-contacto-estado" data-estado="resuelto">Enviada desde SmartStock</span></div></a>
+  {% empty %}{% include 'contacto/vacio.html' %}{% endfor %}
+  {% else %}{% for correo in pagina %}
+  <a href="{% url 'contacto_mensaje' correo.pk %}" class="ss-contacto-fila{% if not correo.leido %} ss-contacto-no-leido{% endif %}" data-ss-loading="Abriendo correo…">
+    <span class="ss-contacto-punto" aria-label="{% if correo.leido %}Leído{% else %}Sin leer{% endif %}"></span>
+    <div class="ss-contacto-correo"><div class="ss-contacto-cabecera"><strong>{{ correo.remitente_nombre|default:correo.remitente_email|default:'Remitente no disponible' }}</strong><time datetime="{{ correo.recibido_en|date:'c' }}">{{ correo.recibido_en|date:'d/m/Y H:i' }}</time></div>
+    <span class="ss-contacto-asunto">{{ correo.asunto|default:'Sin asunto' }}{% if correo.tiene_adjuntos %} <i class="fa-solid fa-paperclip" aria-label="Contiene adjuntos"></i>{% endif %}</span>
+    <span class="ss-contacto-resumen">{{ correo.resumen|truncatechars:150 }}</span>
+    <div class="ss-contacto-etiquetas"><span class="ss-contacto-estado" data-estado="{{ correo.estado }}">{{ correo.get_estado_display }}</span><span>{{ correo.get_categoria_display }}</span>{% if correo.seguimiento and correo.estado != 'resuelto' %}<span class="{% if correo.seguimiento <= hoy %}text-danger{% endif %}">Seguimiento: {{ correo.seguimiento|date:'d/m/Y' }}</span>{% endif %}</div></div>
+  </a>{% empty %}{% include 'contacto/vacio.html' %}{% endfor %}{% endif %}
+  {% include 'sistema/paginacion.html' %}
+</div>
+{% elif zoho_configurado %}<section class="card ss-contacto-primera" role="status"><i class="fa-regular fa-envelope" aria-hidden="true"></i><h2>Comprueba la conexión del buzón</h2><p>Pulsa Actualizar bandeja para consultar Zoho. Después aparecerán tus correos y sus indicadores.</p></section>{% endif %}
+{% if zoho_configurado and buzon.ultima_consulta %}
+{% if not buzon.historial_completo and vista != 'enviados' and vista != 'borradores' %}<form method="post" action="{% url 'contacto_sincronizar' %}" class="mt-3" data-ss-loading="Consultando correos anteriores…">{% csrf_token %}<input type="hidden" name="anteriores" value="1"><input type="hidden" name="vista" value="{{ vista }}"><input type="hidden" name="search" value="{{ busqueda }}"><button class="btn btn-outline-secondary">Cargar correos anteriores</button></form>{% endif %}
+<details class="ss-contacto-ayuda"><summary>Sobre esta bandeja</summary><p>Se consultan hasta 100 correos de Recibidos (Inbox) por actualización, tanto leídos como sin leer. La lectura, las notas y los estados de seguimiento se organizan en SmartStock. En Enviados aparecen las respuestas realizadas desde esta aplicación.</p></details>{% endif %}
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends 'contacto/base.html' %}
+{% block acciones %}<div class="d-flex gap-2 flex-wrap"><a href="{% url 'contacto_bandeja' %}" class="btn btn-outline-secondary">Volver a la bandeja</a><a href="#contacto-responder" class="btn btn-primary">Responder</a></div>{% endblock %}
+{% block panel_content %}
+<div class="ss-contacto-detalle">
+  <div class="ss-contacto-principal">
+    <article class="card ss-contacto-tarjeta">
+      <div class="ss-contacto-remitente"><div><strong>{{ mensaje.remitente_nombre|default:'Remitente' }}</strong><span class="d-block">{{ mensaje.remitente_email|default:'Dirección no disponible' }}</span></div><time>{{ mensaje.recibido_en|date:'d/m/Y H:i' }}</time></div>
+      <p class="ss-contacto-ayuda">Para: contacto@smartstockchile.cl</p>
+      {% if mensaje.contenido_cargado %}<div class="ss-contacto-texto">{{ mensaje.contenido|default:'Este correo no contiene texto.' }}</div>{% else %}<div class="alert alert-warning">Se muestra el resumen del correo. El contenido completo se cargará cuando Zoho esté disponible.</div><div class="ss-contacto-texto">{{ mensaje.resumen }}</div>{% endif %}
+      {% if mensaje.tiene_adjuntos %}<p class="ss-contacto-adjuntos"><i class="fa-solid fa-paperclip me-1" aria-hidden="true"></i>Este correo contiene adjuntos. Puedes consultarlos en Zoho Mail.</p>{% endif %}
+      <div class="d-flex gap-2 flex-wrap mt-3"><a class="btn btn-sm btn-outline-secondary" href="{{ zoho_url }}" target="_blank" rel="noopener noreferrer">Abrir Zoho Mail</a><form method="post" data-ss-loading="Actualizando lectura…">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" name="accion" value="no_leido">Marcar como no leído</button></form></div>
+    </article>
+    <section id="contacto-responder" class="card ss-contacto-tarjeta ss-contacto-responder" aria-labelledby="contacto-respuesta-titulo">
+      <h2 id="contacto-respuesta-titulo">Responder consulta</h2>
+      <p class="ss-contacto-ayuda">Desde contacto@smartstockchile.cl para {{ mensaje.remitente_email|default:'remitente no disponible' }}.</p>
+      {% if not zoho_configurado %}<p class="alert alert-info">Puedes preparar un borrador. El envío estará disponible al conectar Zoho.</p>{% endif %}
+      {% if sin_confirmar %}<p class="alert alert-warning">Hay un envío sin confirmar. Comprueba su resultado en Enviados de Zoho antes de preparar otra respuesta.</p>{% else %}
+      <form method="post" data-borrador-editor data-ss-loading="Guardando borrador…">{% csrf_token %}{% include 'contacto/campos.html' with form=respuesta_form %}<button name="accion" value="borrador" class="btn btn-outline-primary">Guardar borrador</button></form>
+      {% endif %}
+    </section>
+    {% for respuesta in respuestas %}
+    <section class="card ss-contacto-tarjeta ss-contacto-respuesta" aria-label="Respuesta {{ respuesta.get_estado_display }}">
+      <div class="ss-contacto-cabecera"><h2>{{ respuesta.get_estado_display }}</h2><time>{{ respuesta.creada_en|date:'d/m/Y H:i' }}</time></div><div class="ss-contacto-texto">{{ respuesta.texto }}</div>
+      {% if respuesta.estado == 'borrador' %}<p class="form-text" id="contacto-enviar-ayuda" role="status">Revisa el texto guardado. Enviar respuesta enviará este borrador al remitente del correo.</p><form method="post" data-ss-loading="Enviando respuesta por Zoho…">{% csrf_token %}<input type="hidden" name="respuesta" value="{{ respuesta.pk }}"><input type="hidden" name="version" value="{{ respuesta.version }}"><button class="btn btn-primary" data-respuesta-enviar name="accion" value="enviar" aria-describedby="contacto-enviar-ayuda"{% if not zoho_configurado or not mensaje.remitente_email %} disabled{% endif %}>Enviar respuesta</button></form>
+      {% elif respuesta.estado == 'incierta' or respuesta.estado == 'enviando' %}<p class="text-warning-emphasis">No se reintentará automáticamente. Comprueba Enviados en Zoho.</p>{% if respuesta.estado == 'incierta' or respuesta.iniciado_en < corte_revision %}<form method="post" data-ss-loading="Registrando resultado del envío…" class="d-flex gap-2 flex-wrap">{% csrf_token %}<input type="hidden" name="respuesta" value="{{ respuesta.pk }}"><input type="hidden" name="version" value="{{ respuesta.version }}"><button class="btn btn-outline-secondary" name="accion" value="confirmar_enviada">Comprobé que se envió</button><button class="btn btn-outline-secondary" name="accion" value="confirmar_no_enviada">Comprobé que no se envió</button></form>{% endif %}
+      {% elif respuesta.estado == 'enviada' %}<p class="form-text mb-0">Registrada como enviada: {{ respuesta.enviada_en|date:'d/m/Y H:i' }}.</p>{% endif %}
+    </section>{% endfor %}
+  </div>
+  <aside class="ss-contacto-seguimiento">
+    <section class="card ss-contacto-tarjeta"><h2>Organizar consulta</h2><form method="post" data-ss-loading="Guardando seguimiento…">{% csrf_token %}{% include 'contacto/campos.html' with form=seguimiento_form %}<button class="btn btn-primary" name="accion" value="seguimiento">Guardar seguimiento</button></form></section>
+    <section class="card ss-contacto-tarjeta"><h2>Notas internas</h2><form method="post" data-ss-loading="Guardando nota…">{% csrf_token %}{% include 'contacto/campos.html' with form=nota_form %}<button class="btn btn-outline-secondary" name="accion" value="nota">Añadir nota</button></form><div class="ss-contacto-notas">{% for nota in notas %}<article><time>{{ nota.creada_en|date:'d/m/Y H:i' }}</time><p class="ss-contacto-texto">{{ nota.texto }}</p></article>{% empty %}<p class="form-text">Todavía no hay notas para esta consulta.</p>{% endfor %}</div></section>
+  </aside>
+</div>
+{% endblock %}

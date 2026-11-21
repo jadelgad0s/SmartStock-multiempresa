@@ -4,14 +4,16 @@ from apps.core.empresa import empresa_actual, usar_empresa
 from apps.usuarios.views_recuperacion import RecuperacionClaveForm, SolicitarRecuperacionView
 from .acceso import direccion_empresa
 from .login import empresas_disponibles, logger
-from .permisos import es_personal_smartstock
+from .permisos import CORREO_CONTACTO, es_cuenta_interna
 
 
 class RecuperacionCentralForm(RecuperacionClaveForm):
     def get_users(self, email):
         usuarios = super().get_users(email)
         if empresa_actual() is None:
-            return (usuario for usuario in usuarios if es_personal_smartstock(usuario))
+            return (usuario for usuario in usuarios if es_cuenta_interna(usuario))
+        if email.strip().lower() == CORREO_CONTACTO:
+            return ()
         return usuarios
 
     def save(self, **kwargs):

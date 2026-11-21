@@ -1,0 +1,23 @@
+{% extends 'sistema/base.html' %}
+{% block acciones %}<a href="{% url 'sistema_cuenta_contacto' %}" class="btn btn-outline-secondary">Volver a Cuenta de contacto</a>{% endblock %}
+{% block panel_content %}
+<section class="card ss-sistema-formulario mb-4" aria-labelledby="zoho-estado-titulo">
+  <h2 id="zoho-estado-titulo" class="h5">Estado de contacto@smartstockchile.cl</h2>
+  <p><strong>{% if buzon.conexion_estado == 'conectado' and zoho_configurado %}Conexión comprobada{% elif buzon.conexion_estado == 'error' %}La conexión necesita revisión{% elif zoho_configurado %}Autorización configurada; pendiente de comprobación{% else %}Pendiente de conexión{% endif %}</strong></p>
+  {% if zoho_configurado %}<p class="form-text">{% if buzon.credenciales_cifradas %}Autorización guardada desde SmartStock.{% else %}Autorización configurada mediante variables del servidor.{% endif %}</p>{% endif %}
+  {% if buzon.ultimo_error and not error_consulta and not formulario.non_field_errors %}<p class="text-danger">{{ buzon.ultimo_error }}</p>{% endif %}
+  {% if buzon.ultima_consulta %}<p class="form-text">Última consulta correcta: {{ buzon.ultima_consulta|date:'d/m/Y H:i' }}.</p>{% endif %}
+  <p class="form-text">Se consultan los correos de Recibidos (Inbox) de contacto@smartstockchile.cl, tanto leídos como sin leer. Los mensajes de Spam, Papelera y otras carpetas no se incorporan a esta bandeja.</p>
+  {% if zoho_configurado %}<form method="post" data-ss-loading="Comprobando Zoho y actualizando correos…">{% csrf_token %}<button name="accion" value="comprobar" class="btn btn-primary">Comprobar y actualizar bandeja</button><p class="form-text mb-0">Comprueba la lectura e incorpora los correos recientes. No envía correos.</p></form>{% endif %}
+</section>
+<section class="card ss-sistema-formulario mb-4" aria-labelledby="zoho-pasos-titulo">
+  <h2 id="zoho-pasos-titulo" class="h5">{% if zoho_configurado %}Renovar autorización{% else %}Conectar el buzón{% endif %}</h2>
+  <p>Autoriza una vez el buzón de Zoho. Después podrás consultar y responder desde SmartStock.</p>
+  <ol class="ps-3"><li class="mb-2">Abre <a href="https://api-console.zoho.com/" target="_blank" rel="noopener noreferrer">Zoho API Console</a> con la cuenta <strong>contacto@smartstockchile.cl</strong> y crea un <strong>Self Client</strong>.</li><li class="mb-2">Copia su <strong>Client ID</strong> y <strong>Client Secret</strong> en el formulario inferior.</li><li class="mb-2">En <strong>Generate Code</strong>, solicita estos permisos: <code class="text-break d-block mt-1">ZohoMail.accounts.READ,ZohoMail.messages.READ,ZohoMail.messages.CREATE</code></li><li>Genera un código y pégalo aquí antes de que caduque. El centro de datos debe coincidir con tu cuenta de Zoho.</li></ol>
+  <form method="post" data-ss-loading="Autorizando el buzón y consultando correos…" autocomplete="off">
+    {% csrf_token %}{% include 'contacto/campos.html' with form=formulario %}
+    <button name="accion" value="conectar" class="btn btn-primary">Autorizar y cargar correos</button>
+    <p class="form-text mb-0">Las credenciales se guardan cifradas y solo se utilizan en el servidor. No introduzcas la contraseña de SmartStock ni la contraseña del correo.</p>
+  </form>
+</section>
+{% endblock %}

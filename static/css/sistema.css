@@ -7,6 +7,8 @@
 .ss-sistema .ss-sistema-menu-lista { display: grid; gap: .125rem; margin: 0; padding: 0; }
 .ss-sistema-menu-lista > li { min-width: 0; margin: 0; padding: 0; }
 .ss-sistema .nav-link.sidebar-item { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: .5rem; min-height: 40px; font-size: .875rem; line-height: 1.25rem; padding: .5rem .75rem; margin: 0; }
+.ss-sistema .nav-link.ss-menu-con-contador { grid-template-columns: 1.25rem minmax(0, 1fr) auto; gap: .4rem; }
+.ss-menu-contador { margin-left: auto; min-width: 1.6rem; padding: .1rem .4rem; border-radius: 1rem; font-size: .7rem; text-align: center; background: var(--slate-100); font-variant-numeric: tabular-nums; }
 .ss-sistema .sidebar-item > span { min-width: 0; overflow-wrap: anywhere; }
 .ss-sistema .sidebar-item.active { box-shadow: inset 3px 0 0 var(--teal-600); }
 .ss-sistema-perfil { display: flex; align-items: center; gap: .6rem; min-height: 68px; padding: .75rem .4rem; border-top: 1px solid var(--slate-200); border-radius: 0 0 .5rem .5rem; color: var(--slate-800); text-decoration: none; }

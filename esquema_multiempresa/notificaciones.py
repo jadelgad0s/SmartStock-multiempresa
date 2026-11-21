@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import NotificacionSistema
-from .permisos import es_personal_smartstock
+from .permisos import es_cuenta_interna
 
 
 def confirmar_guardado(request, *, alias, titulo, mensaje, link, empresa=None):
@@ -50,7 +50,7 @@ def solo_personal(vista):
     def protegida(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return respuesta(mensaje='Inicia sesión para consultar tus notificaciones.', status=401)
-        if not es_personal_smartstock(request.user):
+        if not es_cuenta_interna(request.user):
             return respuesta(mensaje='Esta cuenta no tiene acceso al panel de SmartStock.', status=403)
         return vista(request, *args, **kwargs)
     return protegida

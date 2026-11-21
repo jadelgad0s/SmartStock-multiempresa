@@ -11,6 +11,7 @@ django-filter>=24.3
 
 # Utilidades
 python-decouple==3.8
+cryptography>=46,<51
 Pillow>=11,<13
 twilio>=9,<10
 

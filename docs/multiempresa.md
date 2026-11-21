@@ -43,7 +43,7 @@ Comprueba el esquema de las tres bases.
 python manage.py plan_esquema --settings=esquema_multiempresa.settings
 ```
 
-Con el esquema actual deben aparecer 18 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica, pases de acceso y notificaciones del equipo.
+Con el esquema actual deben aparecer 22 tablas previstas en la central y 46 en cada empresa. Ejecuta las migraciones también al actualizar una instalación que tenía las dos tablas iniciales en la central. Django añadirá las tablas de autenticación, sesiones, auditoría técnica, pases de acceso y notificaciones del equipo.
 
 ```bat
 python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
@@ -171,3 +171,10 @@ set "SS_TEST_POSTGRES="
 python -m pip install selenium==4.52.0
 python manage.py test esquema_multiempresa.selenium_suite --settings=esquema_multiempresa.testing --verbosity 2
 ```
+
+
+## Cuenta exclusiva de contacto
+
+El acceso `contacto@smartstockchile.cl` tiene un panel de atención separado del equipo técnico y de las empresas. La migración `0007_contacto_y_bandeja` prepara su rol y las tablas centrales; no crea usuarios ni contraseñas. Consulta [Cuenta de contacto y conexión de Zoho](contacto-zoho.md) para habilitar la cuenta y conectar el buzón por HTTPS.
+
+La conexión de contacto se configura también desde **Cuenta de contacto → Conectar Zoho Mail**, exclusiva del superusuario. Actualiza dependencias y aplica `empresas.0008_conexion_buzon_contacto` en la central. La autorización queda cifrada; las empresas conservan sus 46 tablas. La bandeja añade Enviados, contadores por vista y diagnósticos de conexión.

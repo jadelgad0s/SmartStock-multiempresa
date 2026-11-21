@@ -1,0 +1,10 @@
+<div class="ss-contacto-vacio"><i class="fa-regular {% if vista == 'enviados' %}fa-paper-plane{% else %}fa-envelope-open{% endif %}" aria-hidden="true"></i>
+  {% if busqueda %}<h2>No hay resultados para esta búsqueda</h2><p>Prueba con otro nombre, correo o asunto.</p>
+  {% elif vista == 'sin-leer' %}<h2>Estás al día con tus correos</h2><p>No quedan correos sin leer.</p>
+  {% elif vista == 'pendiente' %}<h2>No tienes consultas pendientes</h2><p>Las nuevas consultas aparecerán aquí hasta que las atiendas.</p>
+  {% elif vista == 'seguimiento' %}<h2>No hay consultas en seguimiento</h2><p>Aquí encontrarás las consultas que necesiten una respuesta o revisión posterior.</p>
+  {% elif vista == 'resuelto' %}<h2>Todavía no hay consultas resueltas</h2><p>Cuando completes una atención, márcala como resuelta para encontrarla aquí.</p>
+  {% elif vista == 'borradores' %}<h2>No tienes borradores</h2><p>Aquí aparecerán las respuestas que guardes sin enviar.</p>
+  {% elif vista == 'enviados' %}<h2>Todavía no has enviado respuestas</h2><p>Abre una consulta, prepara tu respuesta y envíala desde SmartStock.</p>
+  {% else %}<h2>No hay correos importados</h2><p>Zoho no devolvió correos de Recibidos en la última consulta. Si tu mensaje está en otra carpeta, muévelo a Recibidos y actualiza la bandeja.</p>{% endif %}
+</div>

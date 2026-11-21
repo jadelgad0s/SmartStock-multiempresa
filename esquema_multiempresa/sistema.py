@@ -22,7 +22,7 @@ from .forms import CuentaTecnicaForm, EmpresaPanelForm, UsuarioEmpresaForm
 from .models import Empresa
 from .notificaciones import confirmar_guardado, confirmaciones_para_pagina
 from .permisos import (
-    ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO, es_administrador_plataforma, es_personal_smartstock,
+    CONTACTO, CORREO_CONTACTO, es_administrador_plataforma, es_cuenta_interna,
     es_superusuario_smartstock, nombre_perfil_personal,
     registrar_empresa_consultada, requiere_administrador_plataforma, requiere_personal,
     requiere_superusuario,
@@ -63,6 +63,7 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
     ]
     if contexto['es_superusuario']:
         secciones[-1][1].insert(0, ('cuentas', 'Equipo de SmartStock', 'user-gear', 'sistema_cuentas'))
+        secciones[-1][1].insert(1, ('contacto', 'Cuenta de contacto', 'envelope', 'sistema_cuenta_contacto'))
         secciones[-1][1].append(('configuracion', 'Configuración', 'sliders', 'sistema_admin:index'))
     contexto['secciones_menu'] = [
         {'nombre': nombre, 'enlaces': [
@@ -134,9 +135,8 @@ def inicio_sistema(request):
             ('Empresas registradas', len(empresas)),
             ('Empresas activas', sum(empresa.activa for empresa in empresas)),
             ('Usuarios de empresas', sum(fila.get('usuarios', 0) for fila in resumenes) if disponibles else None),
-            ('Personal activo de SmartStock', Usuario.objects.using('central').filter(is_staff=True, activo=True).filter(
-                Q(is_superuser=True) | Q(rol__activo=True, rol__codigo__in=(ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO)),
-            ).count()),
+            ('Personal activo de SmartStock', sum(es_cuenta_interna(cuenta) for cuenta in
+                Usuario.objects.using('central').filter(is_staff=True, activo=True).select_related('rol'))),
         ],
     )
     return render(request, 'sistema/inicio.html', contexto)
@@ -235,7 +235,8 @@ def cuentas_sistema(request):
     cuentas = list(paginar(request, contexto, consulta))
     for cuenta in cuentas:
         cuenta.perfil_mostrado = nombre_perfil_personal(cuenta)
-        cuenta.perfil_habilitado = es_personal_smartstock(cuenta)
+        cuenta.perfil_habilitado = es_cuenta_interna(cuenta)
+        cuenta.es_contacto = cuenta.email.lower() == CORREO_CONTACTO or bool(cuenta.rol_id and cuenta.rol.codigo == CONTACTO)
     contexto['cuentas_tecnicas'] = cuentas
     return render(request, 'sistema/cuentas.html', contexto)
 
@@ -245,6 +246,8 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
     alias = empresa.alias_bd if empresa else 'central'
     consulta = Usuario.objects.using(alias).filter(is_superuser=False) if empresa else Usuario.objects.using(alias).filter(is_staff=True)
     usuario = get_object_or_404(consulta, pk=usuario_id) if usuario_id else Usuario()
+    if empresa is None and usuario.pk and (usuario.email.lower() == CORREO_CONTACTO or usuario.rol_id and usuario.rol.codigo == CONTACTO):
+        return redirect('sistema_cuenta_contacto')
     if empresa is None and not request.user.is_superuser and not (propia and usuario.pk == request.user.pk):
         raise PermissionDenied
     opciones = {'alias': alias} if empresa else {'actor': request.user}

@@ -10,7 +10,7 @@
     <td><strong>{{ cuenta.nombre_completo|default:cuenta.email }}</strong><small class="ss-sistema-secundario">{{ cuenta.email }}</small></td>
     <td>{{ cuenta.perfil_mostrado }}</td>
     <td><span class="{% if cuenta.perfil_habilitado %}badge-soft-success{% else %}badge-soft-warning{% endif %}">{% if not cuenta.activo %}Inactivo{% elif not cuenta.perfil_habilitado %}Perfil sin acceso{% else %}Activo{% endif %}</span></td>
-    <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_editar_cuenta' cuenta.pk %}">Editar</a></td>
+    <td><a class="btn btn-sm btn-outline-secondary" href="{% if cuenta.es_contacto %}{% url 'sistema_cuenta_contacto' %}{% else %}{% url 'sistema_editar_cuenta' cuenta.pk %}{% endif %}">Editar</a></td>
   </tr>{% empty %}<tr><td colspan="4" class="text-center text-muted py-4">No hay cuentas que coincidan con la búsqueda.</td></tr>{% endfor %}</tbody>
 </table></div>{% include 'sistema/paginacion.html' %}</div>
 {% endblock %}
