@@ -238,11 +238,64 @@ class ContactoTests(TestCase):
             BuzonContacto.objects.using('central').update(ultima_consulta=timezone.now() - timedelta(minutes=1))
             self.assertEqual(sincronizar_buzon(), 0)
             self.assertEqual(externo.call_count, 4)
-            self.assertEqual(externo.call_args_list[1].kwargs['params']['includesent'], 'false')
+            self.assertEqual(externo.call_args_list[1].kwargs['params']['searchKey'], 'in:Inbox::groupResult:false')
         self.assertEqual(MensajeContacto.objects.using('central').count(), 2)
         self.mensaje.refresh_from_db(using='central')
         self.assertEqual(self.mensaje.estado, 'resuelto')
         self.assertEqual(NotificacionSistema.objects.using('central').filter(destinatario=self.contacto).count(), 1)
+
+    @override_settings(**ZOHO)
+    def test_actualizar_importa_correo_de_recibidos_recien_llegado_con_fecha_de_busqueda(self):
+        """Una lista sin carpeta vacía no implica que Recibidos no tenga mensajes."""
+        self.entrar()
+        recibida = timezone.now() - timedelta(seconds=15)
+        fila = fila_zoho('202')
+        fila['subject'] = 'Prueba recién llegada a Recibidos'
+        fila['receivedtime'] = str(int(recibida.timestamp() * 1000))
+        del fila['receivedTime']
+
+        def api(metodo, url, **opciones):
+            self.assertEqual(metodo, 'GET')
+            if url.endswith('/api/accounts'):
+                return cuentas_zoho()
+            if url.endswith('/messages/view'):
+                return respuesta_zoho([])
+            if url.endswith('/messages/search'):
+                criterios = opciones['params']
+                self.assertEqual(criterios['searchKey'], 'in:Inbox::groupResult:false')
+                # Zoho omite los dos minutos más recientes cuando no se da un
+                # límite explícito; la fecha actual debe incluir esta fixture.
+                if criterios.get('receivedTime', 0) >= int(recibida.timestamp() * 1000):
+                    return respuesta_zoho([fila])
+                return respuesta_zoho([])
+            self.fail('Se intentó consultar un recurso de otro buzón')
+
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200, json=lambda: {'access_token': 'token-fixture'})), \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=api):
+            resultado = self.post('/contacto/sincronizar/', {}, HTTP_ACCEPT='application/json')
+            repetido = self.post('/contacto/sincronizar/', {}, HTTP_ACCEPT='application/json')
+        self.assertEqual(resultado.status_code, 200)
+        self.assertEqual(resultado.json()['nuevos'], 1)
+        self.assertEqual(repetido.json()['nuevos'], 0)
+        mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='202')
+        self.assertLess(abs((mensaje.recibido_en - recibida).total_seconds()), .001)
+        self.assertFalse(mensaje.contenido_cargado)
+        self.assertContains(self.cliente.get('/contacto/bandeja/'), 'Prueba recién llegada a Recibidos')
+
+    @override_settings(**ZOHO)
+    def test_consulta_de_recibidos_conserva_paginacion_y_no_se_limita_a_sin_leer(self):
+        leido, sin_leer = fila_zoho('202'), fila_zoho('203')
+        leido['status'], sin_leer['status'] = 'read', 'unread'
+        with patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=[
+                cuentas_zoho(), respuesta_zoho([leido, sin_leer])]) as externo:
+            cliente = ClienteZoho({'client_id':'fixture','client_secret':'fixture','refresh_token':'fixture','dc':'com'}, token='fixture')
+            cuenta, filas = cliente.listar(101)
+        self.assertEqual(cuenta, '101')
+        self.assertEqual([fila['messageId'] for fila in filas], ['202', '203'])
+        criterios = externo.call_args.kwargs['params']
+        self.assertEqual((criterios['start'], criterios['limit']), (101, 100))
+        self.assertNotIn('status', criterios)
 
     @override_settings(**ZOHO)
     def test_no_importa_otro_buzon_aunque_token_tenga_acceso(self):
@@ -398,6 +451,9 @@ class ContactoTests(TestCase):
         self.entrar()
         principal = self.cliente.get('/contacto/bandeja/')
         self.assertTrue(all(valor == 0 for _, valor, _ in principal.context['kpis']))
+        self.assertContains(principal, 'No hay correos importados')
+        self.assertContains(principal, 'Zoho no devolvió correos de Recibidos')
+        self.assertNotContains(principal, 'Tu bandeja no tiene correos')
         for vista, texto in [('sin-leer','Estás al día con tus correos'), ('pendiente','No tienes consultas pendientes'),
                              ('borradores','Aquí aparecerán las respuestas que guardes sin enviar.'),
                              ('enviados','Todavía no has enviado respuestas')]:

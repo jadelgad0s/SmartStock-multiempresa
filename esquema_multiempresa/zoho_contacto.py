@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from cryptography.hazmat.primitives import hashes
@@ -220,9 +221,14 @@ class ClienteZoho:
 
     def listar(self, inicio=1):
         cuenta = self.comprobar_cuenta()
-        datos = self.pedir('GET', f'/accounts/{cuenta}/messages/view', params={
-            'start': inicio, 'limit': 100, 'status': 'all', 'sortBy': 'date', 'sortorder': 'false',
-            'includesent': 'false', 'includearchive': 'true', 'threadedMails': 'false', 'includeto': 'true',
+        # /messages/view sin folderId no identifica la bandeja de entrada.
+        # La búsqueda explícita usa el permiso messages.READ ya concedido;
+        # no necesita acceso adicional para enumerar las carpetas del buzón.
+        datos = self.pedir('GET', f'/accounts/{cuenta}/messages/search', params={
+            'searchKey': 'in:Inbox::groupResult:false',
+            'start': inicio, 'limit': 100, 'includeto': 'true',
+            # Sin este parámetro Zoho omite por defecto los últimos dos minutos.
+            'receivedTime': int(timezone.now().timestamp() * 1000),
         })
         if not isinstance(datos, list) or len(datos) > 100 or not all(isinstance(fila, dict) for fila in datos):
             raise ErrorZoho('No pudimos interpretar la lista de correos de Zoho.')

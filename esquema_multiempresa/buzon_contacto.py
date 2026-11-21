@@ -24,7 +24,10 @@ def importar_fila(cuenta, fila):
     except ValidationError:
         remitente = ''  # Visible pero no respondible; nunca inventar un destino.
     try:
-        fecha = datetime.fromtimestamp(int(fila['receivedTime']) / 1000, tz=tz.utc)
+        # La API de búsqueda documenta receivedtime; otras respuestas de Zoho
+        # utilizan receivedTime. Ambas son marcas Unix en milisegundos.
+        recibida = fila.get('receivedTime', fila.get('receivedtime'))
+        fecha = datetime.fromtimestamp(int(recibida) / 1000, tz=tz.utc)
     except (KeyError, ValueError, TypeError, OverflowError, OSError):
         raise ErrorZoho('Zoho devolvió un correo sin fecha válida. No se completó esta consulta.') from None
     mensaje, nuevo = MensajeContacto.objects.using('central').get_or_create(

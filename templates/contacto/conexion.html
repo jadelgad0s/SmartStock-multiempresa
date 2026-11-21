@@ -7,6 +7,7 @@
   {% if zoho_configurado %}<p class="form-text">{% if buzon.credenciales_cifradas %}Autorización guardada desde SmartStock.{% else %}Autorización configurada mediante variables del servidor.{% endif %}</p>{% endif %}
   {% if buzon.ultimo_error and not error_consulta and not formulario.non_field_errors %}<p class="text-danger">{{ buzon.ultimo_error }}</p>{% endif %}
   {% if buzon.ultima_consulta %}<p class="form-text">Última consulta correcta: {{ buzon.ultima_consulta|date:'d/m/Y H:i' }}.</p>{% endif %}
+  <p class="form-text">Se consultan los correos de Recibidos (Inbox) de contacto@smartstockchile.cl, tanto leídos como sin leer. Los mensajes de Spam, Papelera y otras carpetas no se incorporan a esta bandeja.</p>
   {% if zoho_configurado %}<form method="post" data-ss-loading="Comprobando Zoho y actualizando correos…">{% csrf_token %}<button name="accion" value="comprobar" class="btn btn-primary">Comprobar y actualizar bandeja</button><p class="form-text mb-0">Comprueba la lectura e incorpora los correos recientes. No envía correos.</p></form>{% endif %}
 </section>
 <section class="card ss-sistema-formulario mb-4" aria-labelledby="zoho-pasos-titulo">

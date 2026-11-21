@@ -10,6 +10,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.core.management import call_command
+from django.utils import timezone
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -308,6 +309,18 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
 class ContactoEnChromeTests(StaticLiveServerTestCase):
     databases = {'central', 'ferreteria', 'repuestos'}
 
+    def comprobar_menu(self, navegador):
+        """Los contadores permanecen junto al texto en todas las páginas."""
+        filas = navegador.execute_script('''return Array.from(
+            document.querySelectorAll('.ss-menu-con-contador'), e => {
+                const r=e.getBoundingClientRect();
+                const texto=e.querySelector('span:not(.ss-menu-contador)').getBoundingClientRect();
+                const contador=e.querySelector('.ss-menu-contador').getBoundingClientRect();
+                return {alto:r.height, diferencia:Math.abs(texto.top+texto.height/2-contador.top-contador.height/2)};
+            });''')
+        self.assertEqual(len(filas), 7)
+        self.assertTrue(all(fila['alto'] <= 44 and fila['diferencia'] <= 1 for fila in filas), filas)
+
     def pulsar(self, navegador, tipo, selector):
         elemento = WebDriverWait(navegador, 20).until(EC.element_to_be_clickable((tipo, selector)))
         # Bootstrap utiliza desplazamiento suave. Antes del clic nativo se
@@ -389,6 +402,7 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
         self.pulsar(navegador, By.CSS_SELECTOR, '.ss-menu-toggle')
         espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.ss-sistema-perfil'))).click()
         espera.until(EC.url_contains('/contacto/mi-cuenta/'))
+        self.comprobar_menu(navegador)
         self.assertFalse(navegador.find_element(By.ID, 'id_email').is_enabled())
         self.assertFalse(navegador.find_elements(By.ID, 'id_perfil'))
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
@@ -399,7 +413,7 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
         Usuario.objects.db_manager('central').create_superuser(email='root-buzon@example.invalid', password=clave, nombres='Root')
         rol, _ = Rol.objects.using('central').get_or_create(codigo=CONTACTO, defaults={'nombre':'Contacto','es_sistema':True})
         Usuario.objects.db_manager('central').create_user(email=CORREO_CONTACTO, password=clave, nombres='Contacto', is_staff=True, rol=rol)
-        llamadas, envios = [], []
+        llamadas, envios, recibidos = [], [], []
         def resultado(data):
             return SimpleNamespace(status_code=200, content=b'{}', json=lambda:{'status':{'code':200},'data':data})
         def api(metodo, url, **opciones):
@@ -407,9 +421,10 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             if url.endswith('/api/accounts'):
                 return resultado([{'accountId':'101','primaryEmailAddress':CORREO_CONTACTO}])
             if url.endswith('/messages/view'):
-                return resultado([{'messageId':'201','folderId':'301','fromAddress':'consulta@example.invalid',
-                    'sender':'Persona de prueba','subject':'Correo de prueba recibido','receivedTime':'1795219200000',
-                    'summary':'Necesito ayuda con mi acceso','hasAttachment':'0'}])
+                return resultado([])
+            if url.endswith('/messages/search'):
+                self.assertEqual(opciones['params']['searchKey'], 'in:Inbox::groupResult:false')
+                return resultado(list(recibidos))
             if url.endswith('/messages/201/content'):
                 return resultado({'content':'<p>Necesito ayuda con mi acceso.</p>'})
             if metodo == 'POST' and url.endswith('/messages/201'):
@@ -448,14 +463,23 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             self.pulsar(navegador, By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]')
             espera.until(EC.visibility_of_element_located((By.ID,'email')))
             ingresar(CORREO_CONTACTO)
-            self.assertIn('Correo de prueba recibido', navegador.find_element(By.TAG_NAME,'body').text)
-            alturas = navegador.execute_script('return Array.from(document.querySelectorAll(".ss-menu-con-contador"), e => e.getBoundingClientRect().height)')
-            self.assertEqual(len(alturas), 7)
-            self.assertLessEqual(max(alturas) - min(alturas), 1)
-            antes = sum(url.endswith('/messages/view') for _,url in llamadas)
+            self.assertIn('No hay correos importados', navegador.find_element(By.TAG_NAME,'body').text)
+            self.comprobar_menu(navegador)
+            self.pulsar(navegador, By.CSS_SELECTOR, 'a.ss-sistema-perfil')
+            espera.until(EC.url_contains('/contacto/mi-cuenta/'))
+            self.comprobar_menu(navegador)
+            self.pulsar(navegador, By.CSS_SELECTOR, '.ss-sidebar-links a[href="/contacto/bandeja/"]')
+            espera.until(EC.url_contains('/contacto/bandeja/'))
+            recibidos.append({'messageId':'201','folderId':'301','fromAddress':'consulta@example.invalid',
+                'sender':'Persona de prueba','subject':'Correo de prueba recibido',
+                'receivedtime':str(int(timezone.now().timestamp() * 1000) - 15000),
+                'summary':'Necesito ayuda con mi acceso','hasAttachment':'0'})
+            antes = sum(url.endswith('/messages/search') for _,url in llamadas)
             self.pulsar(navegador, By.ID, 'contacto-actualizar')
             cerrar_confirmacion()
-            self.assertGreater(sum(url.endswith('/messages/view') for _,url in llamadas), antes)
+            self.assertGreater(sum(url.endswith('/messages/search') for _,url in llamadas), antes)
+            self.assertIn('Correo de prueba recibido', navegador.find_element(By.TAG_NAME,'body').text)
+            self.comprobar_menu(navegador)
             mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='201')
             self.pulsar(navegador, By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]')
             espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
