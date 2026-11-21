@@ -2,6 +2,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   'use strict';
   const datos = await window.SmartStockNavegacion?.lista;
   if (!datos?.usuario) return;
+  document.querySelectorAll('#ss-navigation .sidebar-item').forEach(enlace => {
+    enlace.classList.toggle('active', enlace.getAttribute('aria-current') === 'page');
+  });
   const el = id => document.getElementById(id);
   if (el('user-name')) el('user-name').textContent = datos.usuario.nombre_completo || datos.usuario.email;
   if (el('user-role')) el('user-role').textContent = datos.usuario.rol_nombre || 'Administrador';

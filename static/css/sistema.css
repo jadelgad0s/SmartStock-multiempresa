@@ -1,7 +1,7 @@
 .ss-sistema { min-height: 100vh; }
 .ss-soporte-contenido { overflow-wrap: anywhere; }
 .ss-soporte-permisos { margin: .5rem 0 1.25rem; }
-.ss-soporte-permisos label { display: flex; align-items: baseline; gap: .65rem; margin-bottom: .6rem; }
+.ss-sistema .ss-soporte-permisos label { display: flex; align-items: baseline; gap: .65rem; margin-bottom: .6rem; }
 .ss-soporte-permisos input[type=checkbox] { width: auto; flex: 0 0 auto; }
 .ss-sistema > .ss-sidebar { width: 250px; height: 100dvh; position: sticky; top: 0; flex-shrink: 0; }
 .ss-sistema-marca { margin: .3rem .5rem 1rem; color: var(--slate-800); }

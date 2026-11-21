@@ -385,7 +385,10 @@ class SoporteEnChromeTests(StaticLiveServerTestCase):
 
         navegador.switch_to.new_window('tab')
         pestana_cliente = navegador.current_window_handle
-        navegador.get(self.live_server_url)
+        # La sesión técnica central permanece abierta en la otra pestaña.
+        # El cliente entra desde el host propio de su empresa.
+        origen_cliente = 'http://la-fragua.localhost:' + str(urlsplit(self.live_server_url).port)
+        navegador.get(origen_cliente)
         navegador.find_element(By.ID, 'email').send_keys('cliente-qa@example.invalid')
         navegador.find_element(By.ID, 'password').send_keys('Cliente-qa-fixture-2026!')
         navegador.find_element(By.ID, 'login-submit').click()
@@ -396,6 +399,7 @@ class SoporteEnChromeTests(StaticLiveServerTestCase):
         espera.until(lambda d: urlsplit(d.current_url).path == '/soporte/')
         espera.until(lambda d: d.find_element(By.CSS_SELECTOR, '.ss-app-layout').get_attribute('data-ss-autorizado') is not None)
         espera.until(lambda d: d.find_element(By.ID, 'user-name').text == 'Cliente QA')
+        self.assertEqual(navegador.find_element(By.CSS_SELECTOR, '#ss-navigation .sidebar-item.active').get_attribute('href'), origen_cliente + '/soporte/')
         self.assertIn('Consultar catálogo y stock', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertIn('15 minutos', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, 'a[href*="/sistema/configuracion/"]'))
