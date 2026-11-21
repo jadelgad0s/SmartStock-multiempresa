@@ -4,7 +4,7 @@ from django.db import models
 from django.utils import timezone
 
 from .validadores import normalizar_rut, validar_rut
-from .borrado import cascada_central
+from .borrado import anular_central, cascada_central
 
 
 class Empresa(models.Model):
@@ -62,6 +62,69 @@ class TicketAcceso(models.Model):
     class Meta:
         db_table = 'tickets_acceso'
         default_permissions = ()
+
+
+class AtencionSoporte(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='atenciones_soporte')
+    # Las cuentas del equipo existen únicamente en la central. No se expone
+    # ninguna relación inversa sobre los usuarios operativos de las empresas.
+    tecnico = models.ForeignKey('usuarios.Usuario', on_delete=anular_central, null=True, blank=True, related_name='+')
+    asunto = models.CharField(max_length=160)
+    motivo = models.TextField(max_length=2000)
+    estado = models.CharField(max_length=12, choices=[('abierta', 'Abierta'), ('cerrada', 'Cerrada')], default='abierta')
+    creada_en = models.DateTimeField(default=timezone.now)
+    cerrada_en = models.DateTimeField(null=True, blank=True)
+    resolucion = models.TextField(max_length=2000, blank=True)
+
+    class Meta:
+        db_table = 'atenciones_soporte'
+        default_permissions = ()
+        ordering = ['-creada_en', '-pk']
+
+
+class AccesoSoporte(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    atencion = models.ForeignKey(AtencionSoporte, on_delete=models.PROTECT, related_name='accesos')
+    tecnico = models.ForeignKey('usuarios.Usuario', on_delete=anular_central, null=True, related_name='+')
+    alcances = models.JSONField(default=list)
+    motivo = models.TextField(max_length=1000)
+    minutos = models.PositiveSmallIntegerField(default=30, choices=[(15, '15 minutos'), (30, '30 minutos'), (60, '60 minutos')])
+    estado = models.CharField(max_length=12, default='pendiente', choices=[
+        ('pendiente', 'Pendiente de autorización'), ('aprobado', 'Autorizado'),
+        ('rechazado', 'Rechazado'), ('revocado', 'Revocado')])
+    solicitado_en = models.DateTimeField(default=timezone.now)
+    decidido_en = models.DateTimeField(null=True, blank=True)
+    expira_en = models.DateTimeField(null=True, blank=True, db_index=True)
+    # El aprobador pertenece a la empresa: solo se guarda su identidad histórica,
+    # sin una FK hacia una tabla de usuarios de otra base.
+    aprobador_id = models.PositiveBigIntegerField(null=True, blank=True)
+    aprobador_email = models.EmailField(blank=True)
+
+    class Meta:
+        db_table = 'accesos_soporte'
+        default_permissions = ()
+        ordering = ['-solicitado_en', '-pk']
+        constraints = [
+            models.CheckConstraint(condition=models.Q(minutos__in=[15, 30, 60]), name='soporte_duracion_acotada'),
+            models.CheckConstraint(condition=~models.Q(estado='aprobado') | (
+                models.Q(expira_en__isnull=False, decidido_en__isnull=False, aprobador_id__isnull=False)
+                & models.Q(expira_en__gt=models.F('decidido_en'))), name='soporte_aprobacion_completa'),
+            models.UniqueConstraint(fields=['atencion'], condition=models.Q(estado='pendiente'), name='soporte_una_solicitud_pendiente'),
+        ]
+
+    @property
+    def vigente(self):
+        return bool(self.estado == 'aprobado' and self.expira_en and self.expira_en > timezone.now())
+
+    @property
+    def estado_visible(self):
+        return 'Vencido' if self.estado == 'aprobado' and not self.vigente else self.get_estado_display()
+
+    @property
+    def permisos_visibles(self):
+        from .autorizacion_soporte import ALCANCES
+        return [ALCANCES[clave] for clave in self.alcances if clave in ALCANCES]
 
 
 class NotificacionSistema(models.Model):

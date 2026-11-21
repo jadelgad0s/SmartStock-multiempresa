@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const url = new URL(link, window.location.origin);
       const permitida = ['/sistema/usuarios/', '/sistema/cuentas/', '/sistema/mi-cuenta/', '/sistema/contacto/cuenta/', '/sistema/contacto/conexion/', '/contacto/mi-cuenta/', '/contacto/bandeja/'].includes(url.pathname)
         || /^\/sistema\/empresas\/[a-z0-9-]+\/$/.test(url.pathname)
+        || /^\/sistema\/atenciones\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/$/.test(url.pathname)
         || /^\/contacto\/mensajes\/\d+\/$/.test(url.pathname);
       return url.origin === window.location.origin && permitida ? url.pathname + url.search : null;
     } catch (_) { return null; }

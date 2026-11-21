@@ -1,0 +1,5 @@
+{% extends 'sistema/base.html' %}
+{% block acciones %}<a href="{% url 'sistema_nueva_atencion' %}" class="btn btn-primary">Nueva atención</a>{% endblock %}
+{% block panel_content %}<p class="text-muted">Cada consulta de inventario necesita autorización del administrador de la empresa, con permisos y duración definidos.</p>
+<form method="get" class="ss-sistema-busqueda mb-3" data-ss-loading="Buscando atenciones…"><label for="estado-atencion">Estado</label><div class="d-flex gap-2"><select id="estado-atencion" name="estado" class="form-select"><option value="">Todas</option><option value="abierta"{% if request.GET.estado == 'abierta' %} selected{% endif %}>Abiertas</option><option value="cerrada"{% if request.GET.estado == 'cerrada' %} selected{% endif %}>Cerradas</option></select><button class="btn btn-outline-secondary">Consultar</button></div></form>
+{% include 'soporte/tabla_atenciones.html' %}{% include 'sistema/paginacion.html' %}{% endblock %}

@@ -4,6 +4,8 @@
 <section class="ss-dash-kpis" aria-label="Resumen del sistema">
   {% for etiqueta, valor in kpis %}<div class="card ss-dash-kpi"><span class="kpi-title">{{ etiqueta }}</span><strong class="kpi-value">{{ valor|default_if_none:'—' }}</strong></div>{% endfor %}
 </section>
-<div class="ss-sistema-titulo-tabla"><h2>Empresas registradas</h2><a href="{% url 'sistema_empresas' %}">Ver todas</a></div>
-{% include 'sistema/tabla_empresas.html' %}
+{% if es_gestor %}<div class="ss-sistema-titulo-tabla"><h2>Empresas registradas</h2><a href="{% url 'sistema_empresas' %}">Ver todas</a></div>
+{% include 'sistema/tabla_empresas.html' %}{% endif %}
+<div class="ss-sistema-titulo-tabla"><h2>{% if es_gestor %}Atenciones recientes{% else %}Mis atenciones{% endif %}</h2><a href="{% url 'sistema_atenciones' %}">Ver atenciones</a></div>
+{% include 'soporte/tabla_atenciones.html' %}
 {% endblock %}

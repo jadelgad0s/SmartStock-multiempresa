@@ -12,9 +12,11 @@ from .recuperacion_central import SolicitarRecuperacionCentralView
 from .consultas_sistema import consulta_sistema, inventario_sistema
 from .notificaciones import leer_notificacion, leer_todas, listar_notificaciones
 from .sistema import (
-    abrir_configuracion, auditoria_sistema, cuentas_sistema, editar_cuenta_tecnica,
+    abrir_configuracion, auditoria_sistema, cuentas_sistema, diagnostico_sistema, editar_cuenta_tecnica,
     editar_empresa, editar_usuario_empresa, empresas_sistema, ficha_empresa, inicio_sistema, mi_cuenta, usuarios_sistema,
 )
+from .vistas_soporte import (atenciones_sistema, nueva_atencion, detalle_atencion,
+                             invitar_administrador, recuperar_usuario_empresa)
 
 
 urlpatterns = [
@@ -31,6 +33,12 @@ urlpatterns = [
     path('restablecer-clave/<uidb64>/<token>/', EstablecerNuevaClaveView.as_view(), name='establecer_nueva_clave'),
     path('clave-actualizada/', ClaveActualizadaView.as_view(), name='clave_actualizada'),
     path('sistema/', inicio_sistema, name='sistema_inicio'),
+    path('sistema/atenciones/', atenciones_sistema, name='sistema_atenciones'),
+    path('sistema/atenciones/nueva/', nueva_atencion, name='sistema_nueva_atencion'),
+    path('sistema/atenciones/<uuid:atencion_id>/', detalle_atencion, name='sistema_atencion'),
+    path('sistema/diagnostico/', diagnostico_sistema, name='sistema_diagnostico'),
+    path('sistema/empresas/<slug:codigo>/invitar-administrador/', invitar_administrador, name='sistema_invitar_administrador'),
+    path('sistema/empresas/<slug:codigo>/usuarios/<int:usuario_id>/recuperar/', recuperar_usuario_empresa, name='sistema_recuperar_usuario'),
     path('sistema/empresas/', empresas_sistema, name='sistema_empresas'),
     path('sistema/empresas/nueva/', editar_empresa, name='sistema_nueva_empresa'),
     path('sistema/empresas/<slug:codigo>/', ficha_empresa, name='sistema_ficha_empresa'),

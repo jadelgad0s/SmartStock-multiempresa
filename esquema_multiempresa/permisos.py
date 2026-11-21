@@ -79,7 +79,9 @@ def auditar_consultas(request, respuesta):
         Auditoria(
             usuario=request.user, accion='CONSULTA', modelo='Empresa', objeto_id=str(empresa.pk),
             descripcion=(f'SmartStock · {request.user.email} · Solicitud de consulta de '
-                         f'{getattr(request, "_modulo_consultado", "empresa")} · {empresa.nombre} ({empresa.codigo})'),
+                         f'{getattr(request, "_modulo_consultado", "empresa")} · {empresa.nombre} ({empresa.codigo})'
+                         + (f' · Atención {request._atencion_soporte.pk} · Motivo: {getattr(request, "_acceso_soporte", request._atencion_soporte).motivo}'
+                            if getattr(request, '_atencion_soporte', None) else ''))[:2000],
             ip_address=request.META.get('REMOTE_ADDR'),
         ) for empresa in consultas.values()
     ])

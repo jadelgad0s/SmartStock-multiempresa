@@ -16,13 +16,14 @@ from apps.core.empresa import empresa_actual, usar_empresa
 from apps.core.models import Auditoria
 from apps.productos.models import Bodega, DetalleMovimiento, Movimiento, Producto, StockBodega, TipoMovimiento
 from apps.usuarios.models import Rol, Sesion, Usuario
-from .models import Empresa, NotificacionSistema
+from .models import Empresa, NotificacionSistema, AtencionSoporte, AccesoSoporte
+from .autorizacion_soporte import ALCANCES, LECTURAS
 from .forms import EmpresaPanelForm
 from .permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
 from .territorio import regiones_chile
 
 
-@override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
+@override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'], EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
 class PanelSmartStockTests(TestCase):
     databases = {'central', 'ferreteria', 'repuestos'}
     clave = 'Cuenta-fixture-que-cumple-2026!'
@@ -61,6 +62,16 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
         self.assertEqual(respuesta.data['data']['inicio'], '/sistema/')
 
+    def autorizar(self, empresa=None, usuario=None, alcances=None):
+        empresa, usuario = empresa or self.fragua, usuario or self.tecnico
+        atencion = AtencionSoporte.objects.using('central').create(
+            empresa=empresa, tecnico=usuario, asunto='Revisión autorizada', motivo='Incidencia de prueba del cliente')
+        ahora = timezone.now()
+        return AccesoSoporte.objects.using('central').create(atencion=atencion, tecnico=usuario,
+            alcances=list(alcances or ALCANCES), motivo='Revisión del inventario solicitada por el cliente', estado='aprobado',
+            decidido_en=ahora, expira_en=ahora + timedelta(minutes=30), aprobador_id=90,
+            aprobador_email='cliente@example.invalid')
+
     def guardar(self, ruta, datos):
         self.cliente.get(ruta)
         with self.captureOnCommitCallbacks(using='central', execute=True), \
@@ -77,7 +88,7 @@ class PanelSmartStockTests(TestCase):
         self.entrar()
         panel = self.cliente.get('/sistema/')
         self.assertContains(panel, 'ss-app-layout')
-        for modulo in ('Empresas', 'Usuarios de empresas', 'Auditoría', 'Catálogo', 'Transferencias'):
+        for modulo in ('Empresas', 'Usuarios de empresas', 'Auditoría', 'Atenciones de soporte', 'Diagnóstico'):
             self.assertContains(panel, modulo)
         self.assertContains(panel, 'href="/sistema/mi-cuenta/" class="ss-sidebar-profile ss-sistema-perfil')
         self.assertFalse(any(enlace['nombre'] == 'Mi cuenta' for seccion in panel.context['secciones_menu']
@@ -114,6 +125,8 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(self.cliente.get('/sistema/empresas/').status_code, 403)
 
     def test_modulos_consultan_la_empresa_elegida_con_ids_repetidos(self):
+        self.autorizar()
+        self.autorizar(self.motor)
         self.entrar()
         for codigo, nombre, ajena, stock in (('la-fragua', self.fragua.nombre, self.motor.nombre, 15),
                                             ('punto-motor', self.motor.nombre, self.fragua.nombre, 4)):
@@ -128,6 +141,7 @@ class PanelSmartStockTests(TestCase):
         self.assertIsNone(empresa_actual())
 
     def test_crear_y_editar_usuario_afecta_solo_a_la_empresa_de_la_url(self):
+        self.autorizar()
         self.entrar()
         rol = Rol.objects.using('ferreteria').get(codigo='operador')
         respuesta = self.guardar('/sistema/empresas/la-fragua/usuarios/nuevo/', self.datos_cuenta(rol=str(rol.pk)))
@@ -135,13 +149,14 @@ class PanelSmartStockTests(TestCase):
         usuario = Usuario.objects.using('ferreteria').get(email='nueva@example.invalid')
         self.assertFalse(Usuario.objects.using('repuestos').filter(email=usuario.email).exists())
         self.assertFalse(Usuario.objects.using('central').filter(email=usuario.email).exists())
-        self.assertTrue(usuario.check_password(self.clave))
+        self.assertFalse(usuario.has_usable_password())
         evento = Auditoria.objects.using('ferreteria').latest('id')
         self.assertIsNone(evento.usuario_id)
         self.assertIn(self.tecnico.email, evento.descripcion)
         self.assertFalse(Auditoria.objects.using('repuestos').exists())
 
     def test_no_se_puede_elegir_otra_base_o_promover_cuentas_mediante_post(self):
+        self.autorizar()
         self.entrar()
         rol = Rol.objects.using('ferreteria').get(codigo='operador')
         datos = self.datos_cuenta(rol=str(rol.pk), empresa='punto-motor', alias_bd='repuestos', is_superuser='on', is_staff='on')
@@ -151,19 +166,20 @@ class PanelSmartStockTests(TestCase):
         self.assertFalse(Usuario.objects.using('repuestos').filter(email=usuario.email).exists())
 
     def test_editar_id_repetido_no_modifica_otra_empresa_ni_al_superusuario_central(self):
+        self.autorizar()
         self.entrar()
         rol = Rol.objects.using('ferreteria').get(codigo='administrador')
         ruta = '/sistema/empresas/la-fragua/usuarios/90/'
         datos = self.datos_cuenta(email='cliente@example.invalid', nombres='Nombre actualizado', rol=str(rol.pk),
-                                 password1='', password2='', activo='')
+                                 password1='', password2='', activo='on')
         self.assertEqual(self.guardar(ruta, datos).status_code, 302)
         usuario = Usuario.objects.using('ferreteria').get(pk=90)
         self.assertEqual(usuario.nombres, 'Nombre actualizado')
-        self.assertFalse(usuario.activo)
+        self.assertTrue(usuario.activo)
         self.assertTrue(usuario.check_password(self.clave))
         self.assertEqual(Usuario.objects.using('repuestos').get(pk=90).nombres, self.motor.nombre)
         self.assertEqual(Usuario.objects.using('central').get(pk=90).email, self.superusuario.email)
-        self.assertEqual(Auditoria.objects.using('ferreteria').latest('id').accion, 'DEACTIVATE')
+        self.assertEqual(Auditoria.objects.using('ferreteria').latest('id').accion, 'UPDATE')
 
     def test_administrador_plataforma_no_gestiona_el_equipo_por_url_o_post(self):
         self.entrar()
@@ -207,6 +223,8 @@ class PanelSmartStockTests(TestCase):
         self.assertContains(self.cliente.get('/sistema/cuentas/', {'search': 'qa26@'}), 'qa26@example.invalid')
 
     def test_reportes_y_descargas_conservan_el_inventario_de_cada_empresa(self):
+        self.autorizar()
+        self.autorizar(self.motor)
         self.entrar()
         for codigo, nombre, stock in (('la-fragua', self.fragua.nombre, 15), ('punto-motor', self.motor.nombre, 4)):
             respuesta = self.cliente.get('/sistema/reportes/', {'empresa': codigo, 'informe': 'existencias', 'bodega': 1, 'exportar': 'csv'})
@@ -218,6 +236,7 @@ class PanelSmartStockTests(TestCase):
             self.assertContains(pdf, nombre)
 
     def test_filtros_vacios_no_impiden_consultar_y_fechas_invertidas_muestran_error(self):
+        self.autorizar()
         self.entrar()
         respuesta = self.cliente.get('/sistema/movimientos/', {'empresa': 'la-fragua', 'desde': '', 'hasta': '', 'search': ''})
         self.assertEqual(respuesta.status_code, 200)
@@ -244,7 +263,7 @@ class PanelSmartStockTests(TestCase):
 
     def test_un_error_de_empresa_muestra_un_estado_y_el_panel_sigue_disponible(self):
         self.entrar()
-        with patch('esquema_multiempresa.sistema.Producto.objects.filter', side_effect=OperationalError('base indisponible')):
+        with patch('esquema_multiempresa.sistema.Usuario.objects.filter', side_effect=OperationalError('base indisponible')):
             pagina = self.cliente.get('/sistema/')
         self.assertContains(pagina, 'Sin conexión con la empresa')
         self.assertEqual(self.cliente.get('/sistema/mi-cuenta/').status_code, 200)
@@ -399,20 +418,20 @@ class PanelSmartStockTests(TestCase):
         self.entrar()
         Usuario.objects.using('ferreteria').filter(pk=90).update(activo=False)
         pagina = self.cliente.get('/sistema/empresas/la-fragua/')
-        self.assertContains(pagina, 'Añadir administrador')
         self.assertContains(pagina, 'Ficha pendiente de completar')
         self.assertFalse(pagina.context['resumen']['administrador'])
+        self.assertFalse(pagina.context['resumen']['puede_invitar'])
+        self.assertNotContains(pagina, '>Invitar administrador</a>')
+        self.assertEqual(self.cliente.get('/sistema/empresas/la-fragua/invitar-administrador/').status_code, 403)
         otra = self.cliente.get('/sistema/empresas/punto-motor/')
         self.assertTrue(otra.context['resumen']['administrador'])
-        self.assertNotContains(otra, 'Añadir administrador')
-        formulario = self.cliente.get('/sistema/empresas/la-fragua/usuarios/nuevo/?rol=administrador')
-        rol = formulario.context['formulario'].initial['rol']
-        self.assertEqual(rol.codigo, 'administrador')
-        self.assertEqual(rol._state.db, 'ferreteria')
+        self.assertNotContains(otra, '>Invitar administrador</a>')
+        self.assertNotContains(pagina, 'Sin productos activos registrados')
         anonimo = APIClient(HTTP_HOST='127.0.0.1:8000')
         self.assertEqual(anonimo.get('/sistema/empresas/la-fragua/').status_code, 302)
 
     def test_resumen_sin_bodegas_explicita_la_preparacion_y_oculta_graficos(self):
+        self.autorizar()
         self.entrar()
         Bodega.objects.using('ferreteria').update(activa=False)
         pagina = self.cliente.get('/sistema/inventario/?empresa=la-fragua')
@@ -423,6 +442,7 @@ class PanelSmartStockTests(TestCase):
         self.assertTrue(Bodega.objects.using('repuestos').get(pk=1).activa)
 
     def test_resumen_sin_productos_activos_no_muestra_graficos_vacios(self):
+        self.autorizar()
         self.entrar()
         Producto.objects.using('ferreteria').update(activo=False)
         pagina = self.cliente.get('/sistema/inventario/?empresa=la-fragua')
@@ -433,6 +453,8 @@ class PanelSmartStockTests(TestCase):
         self.assertTrue(Producto.objects.using('repuestos').get(pk=10).activo)
 
     def test_resumen_sin_movimientos_conserva_existencias_y_cambia_con_el_periodo(self):
+        self.autorizar()
+        self.autorizar(self.motor)
         self.entrar()
         ruta = '/sistema/inventario/?empresa=la-fragua'
         pagina = self.cliente.get(ruta)
@@ -453,6 +475,7 @@ class PanelSmartStockTests(TestCase):
         self.assertContains(otra, 'Sin movimientos en el período')
 
     def test_error_de_conexion_no_se_presenta_como_inventario_vacio(self):
+        self.autorizar()
         self.entrar()
         with patch('esquema_multiempresa.consultas_sistema.datos_resumen_dashboard', side_effect=OperationalError('sin conexión')):
             pagina = self.cliente.get('/sistema/inventario/?empresa=la-fragua')
@@ -557,6 +580,7 @@ class PanelSmartStockTests(TestCase):
             self.assertNotIn(self.clave, evento.descripcion)
 
     def test_soporte_consulta_los_modulos_sin_controles_de_gestion(self):
+        self.autorizar(usuario=self.soporte, alcances=LECTURAS)
         self.entrar(self.soporte)
         panel = self.cliente.get('/sistema/')
         self.assertContains(panel, 'Soporte técnico')
@@ -602,6 +626,7 @@ class PanelSmartStockTests(TestCase):
         self.assertTrue(Usuario.objects.using('central').get(pk=90).is_superuser)
 
     def test_soporte_lee_reportes_pero_no_exporta_por_url_directa(self):
+        self.autorizar(usuario=self.soporte, alcances=LECTURAS)
         self.entrar(self.soporte)
         for formato in ('csv', 'pdf'):
             respuesta = self.cliente.get('/sistema/reportes/', {
@@ -632,7 +657,7 @@ class PanelSmartStockTests(TestCase):
         Usuario.objects.using('central').filter(pk=self.tecnico.pk).update(rol=rol)
         self.assertContains(self.cliente.get('/sistema/'), 'Soporte técnico')
         self.assertEqual(self.guardar('/sistema/empresas/la-fragua/editar/', self.datos_empresa()).status_code, 403)
-        self.assertEqual(self.cliente.get('/sistema/inventario/?empresa=la-fragua').status_code, 200)
+        self.assertEqual(self.cliente.get('/sistema/inventario/?empresa=la-fragua').status_code, 404)
         self.assertEqual(self.cliente.get('/sistema/cuentas/').status_code, 403)
 
     def test_perfil_inactivo_ausente_o_ajeno_bloquea_sesion_y_nuevo_login(self):
@@ -654,10 +679,11 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(self.cliente.get('/sistema/configuracion/').status_code, 200)
 
     def test_consulta_de_soporte_se_audita_en_central_y_conserva_historiales_de_empresas(self):
+        self.autorizar(usuario=self.soporte, alcances=LECTURAS)
         self.entrar(self.soporte)
         evento = Auditoria.objects.using('central').create(accion='UPDATE', modelo='Usuario', descripcion='Evento interno reservado')
         auditoria = self.cliente.get('/sistema/auditoria/')
-        self.assertContains(auditoria, 'Selecciona una empresa para consultar su auditoría.')
+        self.assertEqual(auditoria.status_code, 200)
         self.assertNotContains(auditoria, evento.descripcion)
         antes = Auditoria.objects.using('central').filter(accion='CONSULTA').count()
         self.cliente.get('/sistema/catalogo/?empresa=la-fragua')
@@ -710,6 +736,7 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(NotificacionSistema.objects.using('central').count(), 1)
 
     def test_guardado_de_usuario_de_empresa_notifica_al_actor_central_sin_cruzar_usuarios(self):
+        self.autorizar()
         self.entrar()
         rol = Rol.objects.using('ferreteria').get(codigo='operador')
         self.guardar('/sistema/empresas/la-fragua/usuarios/nuevo/', self.datos_cuenta(rol=rol.pk))
@@ -718,7 +745,7 @@ class PanelSmartStockTests(TestCase):
         self.assertEqual(aviso.empresa_nombre, self.fragua.nombre)
         self.assertIn('Usuario de empresa creado', aviso.titulo)
         self.assertNotIn(self.clave, aviso.mensaje)
-        self.assertEqual(aviso.link, '/sistema/usuarios/?empresa=la-fragua')
+        self.assertTrue(aviso.link.startswith('/sistema/usuarios/?empresa=la-fragua&atencion='))
         for alias in ('ferreteria', 'repuestos'):
             self.assertNotIn('notificaciones_sistema', connections[alias].introspection.table_names())
 
@@ -842,7 +869,7 @@ class MigracionFichaEmpresaTests(TransactionTestCase):
             self.assertIsNotNone(nueva.creada_en)
             self.assertIsNotNone(nueva.actualizada_en)
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0008_conexion_buzon_contacto')])
+            MigrationExecutor(conexion).migrate([('empresas', '0009_soporte_temporal')])
 
 
 class MigracionPerfilesEquipoTests(TransactionTestCase):
@@ -892,7 +919,7 @@ class MigracionPerfilesEquipoTests(TransactionTestCase):
                 self.assertEqual(list(Usuario.objects.using(alias).values('id', 'email', 'password', 'rol_id')), datos)
                 self.assertEqual(list(Rol.objects.using(alias).values_list('codigo', flat=True)), ['administrador'])
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0008_conexion_buzon_contacto')])
+            MigrationExecutor(conexion).migrate([('empresas', '0009_soporte_temporal')])
 
 
 class MigracionApellidosContactoTests(TransactionTestCase):
@@ -916,4 +943,4 @@ class MigracionApellidosContactoTests(TransactionTestCase):
             self.assertEqual((conservada.region, conservada.comuna), ('Región Metropolitana', 'Providencia'))
             self.assertEqual((conservada.codigo, conservada.alias_bd, conservada.activa), ('anterior', 'ferreteria', False))
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0008_conexion_buzon_contacto')])
+            MigrationExecutor(conexion).migrate([('empresas', '0009_soporte_temporal')])

@@ -83,6 +83,7 @@
             </div>
         </nav>
         <main class="container-fluid p-4 ss-dashboard">
+            {% block panel_empresa %}
             <div class="ss-dash-heading">
                 <div>
                     <h4 class="fw-bold mb-1">Resumen de inventario</h4>
@@ -237,6 +238,7 @@
                 </div>
             </div>
             <p class="text-muted small mt-3 mb-0">El stock considera productos activos. Las entradas, salidas y movimientos recientes conservan el historial de la bodega.</p>
+            {% endblock %}
         </main>
     </div>
 </div>
