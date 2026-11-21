@@ -309,6 +309,28 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
 class ContactoEnChromeTests(StaticLiveServerTestCase):
     databases = {'central', 'ferreteria', 'repuestos'}
 
+    def comprobar_carga(self, navegador, selector, esperado):
+        """Pausa una navegación para observar el indicador antes del cambio de página."""
+        enlace = WebDriverWait(navegador, 20).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+        navegador.execute_script('''
+            const enlace=arguments[0];
+            document.addEventListener('click', function pausar(evento) {
+                if (evento.target.closest('a') !== enlace) return;
+                evento.preventDefault();
+                document.removeEventListener('click', pausar);
+            });
+        ''', enlace)
+        self.pulsar(navegador, By.CSS_SELECTOR, selector)
+        WebDriverWait(navegador, 20).until(EC.visibility_of_element_located((By.ID, 'ss-carga')))
+        self.assertEqual(navegador.find_element(By.ID, 'ss-carga-texto').text, esperado)
+        self.assertTrue(navegador.execute_script('''
+            const d=document.getElementById('ss-carga'), r=d.getBoundingClientRect();
+            return d.scrollWidth<=d.clientWidth && d.scrollHeight<=d.clientHeight
+                && r.left>=0 && r.right<=innerWidth && r.top>=0 && r.bottom<=innerHeight;
+        '''))
+        navegador.execute_script('window.dispatchEvent(new PageTransitionEvent("pageshow", {persisted:true}));')
+        WebDriverWait(navegador, 20).until(EC.invisibility_of_element_located((By.ID, 'ss-carga')))
+
     def comprobar_menu(self, navegador):
         """Los contadores permanecen junto al texto en todas las páginas."""
         filas = navegador.execute_script('''return Array.from(
@@ -480,6 +502,9 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             self.assertGreater(sum(url.endswith('/messages/search') for _,url in llamadas), antes)
             self.assertIn('Correo de prueba recibido', navegador.find_element(By.TAG_NAME,'body').text)
             self.comprobar_menu(navegador)
+            self.comprobar_carga(navegador, '.ss-sidebar-links a[href="/contacto/bandeja/?vista=sin-leer"]', 'Cargando Sin leer…')
+            self.comprobar_carga(navegador, 'a.ss-sistema-perfil', 'Abriendo mi cuenta…')
+            self.comprobar_carga(navegador, '.ss-contacto-fila', 'Abriendo correo…')
             mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='201')
             self.pulsar(navegador, By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]')
             espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
@@ -499,3 +524,4 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             self.assertFalse(navegador.find_elements(By.CSS_SELECTOR,'.ss-contacto-kpis'))
             navegador.set_window_size(390,844)
             self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+            self.comprobar_carga(navegador, '.ss-contacto-fila', 'Abriendo correo…')

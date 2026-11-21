@@ -6,7 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const cargarPagina = mensaje => {
     navegando = true;
     if (!dialogo || !textoCarga) return;
-    textoCarga.textContent = mensaje;
+    const etiqueta = typeof mensaje === 'string' ? mensaje.replace(/\s+/g, ' ').trim() : '';
+    textoCarga.textContent = etiqueta && etiqueta.length <= 90 ? etiqueta : 'Cargando página…';
     if (!dialogo.open && typeof dialogo.showModal === 'function') dialogo.showModal();
   };
   const salida = document.getElementById('ss-cerrar-sesion');
@@ -30,7 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (url.origin !== window.location.origin || !(/^\/(sistema|contacto)\//).test(url.pathname)
         || (url.pathname === window.location.pathname && url.search === window.location.search)) return;
     if (navegando) { evento.preventDefault(); return; }
-    cargarPagina('Cargando ' + (enlace.textContent.trim() || 'SmartStock') + '…');
+    // Un enlace puede contener una tarjeta entera, un correo o contadores.
+    // La carga describe la acción y nunca copia el contenido del registro.
+    cargarPagina(enlace.dataset.ssLoading);
   });
   window.addEventListener('pageshow', () => {
     navegando = false;

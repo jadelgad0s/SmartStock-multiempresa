@@ -13,8 +13,12 @@ async function pantalla(t) {
       <button type="submit" id="guardar">Guardar</button>
       <button type="submit" name="exportar" value="csv" id="exportar">Exportar CSV</button>
     </form>
-    <a id="navegar" href="/sistema/catalogo/">Catálogo</a>
+    <a id="navegar" href="/sistema/catalogo/" data-ss-loading="Cargando Catálogo…">Catálogo</a>
     <a id="externo" href="https://example.invalid/">Otro sitio</a>
+    <a id="correo" href="/contacto/mensajes/1/" data-ss-loading="Abriendo correo…"><strong>persona@example.invalid</strong><time>21/11/2026 01:00</time><span>Asunto y contenido privado ${'textoSinEspacios'.repeat(30)}</span></a>
+    <a id="filtro" href="/contacto/bandeja/?vista=sin-leer" data-ss-loading="Cargando Sin leer…"><span>Sin leer</span><span class="ss-menu-contador">9876</span></a>
+    <a id="perfil" href="/contacto/mi-cuenta/" data-ss-loading="Abriendo mi cuenta…">Nombre del usuario <span>Contacto</span></a>
+    <a id="tarjeta" href="/sistema/empresas/empresa-qa/">Nombre de empresa y datos de la ficha ${'ficha'.repeat(50)}</a>
     </div>`, {runScripts: 'outside-only', url: 'http://localhost/sistema/'});
   t.after(() => dom.window.close());
   const {window} = dom;
@@ -84,6 +88,32 @@ test('un formulario inválido conserva los campos y permite corregir sin abrir l
   correo.value = 'qa@example.invalid';
   assert.equal(enviar('guardar').defaultPrevented, false);
   assert.equal(dialogo.open, true);
+});
+
+test('la carga de correos, filtros y perfiles describe la acción sin copiar contenido ni contadores', async t => {
+  const {window, dialogo} = await pantalla(t);
+  window.document.addEventListener('click', evento => evento.preventDefault());
+  for (const [id, esperado] of [['correo', 'Abriendo correo…'], ['filtro', 'Cargando Sin leer…'],
+      ['perfil', 'Abriendo mi cuenta…'], ['tarjeta', 'Cargando página…']]) {
+    const enlace = window.document.getElementById(id);
+    (enlace.querySelector('span') || enlace).dispatchEvent(
+      new window.MouseEvent('click', {bubbles: true, cancelable: true, button: 0}));
+    assert.equal(dialogo.open, true);
+    assert.equal(dialogo.textContent, esperado);
+    window.dispatchEvent(new window.PageTransitionEvent('pageshow', {persisted: true}));
+  }
+});
+
+test('una etiqueta de carga vacía o excesiva utiliza un mensaje breve', async t => {
+  const {window, dialogo} = await pantalla(t);
+  window.document.addEventListener('click', evento => evento.preventDefault());
+  const enlace = window.document.getElementById('correo');
+  for (const etiqueta of ['  ', 'palabra'.repeat(100)]) {
+    enlace.dataset.ssLoading = etiqueta;
+    enlace.dispatchEvent(new window.MouseEvent('click', {bubbles: true, cancelable: true, button: 0}));
+    assert.equal(dialogo.textContent, 'Cargando página…');
+    window.dispatchEvent(new window.PageTransitionEvent('pageshow', {persisted: true}));
+  }
 });
 
 test('un período sin movimientos conserva el gráfico de existencias y permite cambiar el tema', async t => {

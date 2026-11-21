@@ -10,7 +10,7 @@
 <div class="d-flex ss-app-layout ss-sistema" data-ss-autorizado>
   <aside id="ss-navigation" class="bg-sidebar d-flex flex-column p-3 ss-sidebar" aria-label="Menú de SmartStock">
     <button type="button" class="ss-sidebar-close" aria-label="Cerrar menú"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-    <a href="{% firstof inicio_panel '/sistema/' %}" class="ss-sistema-marca d-flex align-items-center text-decoration-none">
+    <a href="{% firstof inicio_panel '/sistema/' %}" class="ss-sistema-marca d-flex align-items-center text-decoration-none" data-ss-loading="Cargando SmartStock…">
       <span class="bg-primary-soft rounded p-2 me-2"><img src="{% static 'branding/smartstock-mark.png' %}" alt="" width="28" height="28"></span>
       <span class="fs-5 fw-bold">SmartStock</span>
     </a>
@@ -20,13 +20,13 @@
       <h2 id="ss-menu-seccion-{{ forloop.counter }}" class="text-sidebar-muted">{{ seccion.nombre }}</h2>
       <ul class="nav nav-pills flex-column ss-sistema-menu-lista">
         {% for enlace in seccion.enlaces %}
-        <li><a href="{{ enlace.url }}" class="nav-link sidebar-item{% if enlace.mostrar_contador %} ss-menu-con-contador{% endif %}{% if enlace.activo %} active{% endif %}"{% if enlace.activo %} aria-current="page"{% endif %}><i class="fa-solid fa-{{ enlace.icono }} sidebar-icon" aria-hidden="true"></i><span>{{ enlace.nombre }}</span>{% if enlace.mostrar_contador %}<span class="ss-menu-contador">{{ enlace.contador|default_if_none:'—' }}</span>{% endif %}</a></li>
+        <li><a href="{{ enlace.url }}" class="nav-link sidebar-item{% if enlace.mostrar_contador %} ss-menu-con-contador{% endif %}{% if enlace.activo %} active{% endif %}" data-ss-loading="Cargando {{ enlace.nombre }}…"{% if enlace.activo %} aria-current="page"{% endif %}><i class="fa-solid fa-{{ enlace.icono }} sidebar-icon" aria-hidden="true"></i><span>{{ enlace.nombre }}</span>{% if enlace.mostrar_contador %}<span class="ss-menu-contador">{{ enlace.contador|default_if_none:'—' }}</span>{% endif %}</a></li>
         {% endfor %}
       </ul>
       </section>
       {% endfor %}
     </nav>
-    <a href="{% firstof perfil_panel '/sistema/mi-cuenta/' %}" class="ss-sidebar-profile ss-sistema-perfil mt-auto" aria-label="Mi cuenta de {{ request.user.nombre_completo|default:request.user.email }}" title="Abrir mi cuenta"{% if modulo == 'mi_cuenta' %} aria-current="page"{% endif %}>
+    <a href="{% firstof perfil_panel '/sistema/mi-cuenta/' %}" class="ss-sidebar-profile ss-sistema-perfil mt-auto" aria-label="Mi cuenta de {{ request.user.nombre_completo|default:request.user.email }}" title="Abrir mi cuenta" data-ss-loading="Abriendo mi cuenta…"{% if modulo == 'mi_cuenta' %} aria-current="page"{% endif %}>
       <span class="ss-dash-avatar rounded-circle" aria-hidden="true">{{ request.user.nombres|first|upper }}{{ request.user.apellidos|first|upper }}</span>
       <span class="ss-sistema-perfil-datos"><strong>{{ request.user.nombre_completo|default:request.user.email }}</strong><span>{{ perfil_personal }}</span></span>
       <i class="fa-solid fa-angle-right ss-sistema-perfil-flecha" aria-hidden="true"></i>
@@ -60,6 +60,6 @@
 <script src="{% static 'js/theme.js' %}?v=1" defer></script>
 <script src="{% static 'js/responsive.js' %}?v=2" defer></script>
 <script src="{% static 'js/carga.js' %}" defer></script>
-<script src="{% static 'js/sistema.js' %}?v=avisos-4" defer></script>
+<script src="{% static 'js/sistema.js' %}?v=carga-5" defer></script>
 <script src="{% static 'js/sistema_notificaciones.js' %}?v=2" defer></script>
 {% endblock %}

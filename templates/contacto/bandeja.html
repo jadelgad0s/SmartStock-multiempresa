@@ -8,7 +8,7 @@
 {% block panel_content %}
 <p class="ss-contacto-subtitulo">contacto@smartstockchile.cl · Consultas y seguimiento</p>
 {% if vista == 'todos' %}<div class="ss-sistema-kpis ss-contacto-kpis">
-  {% for etiqueta, valor, filtro in kpis %}<a class="card text-decoration-none" href="{% url 'contacto_bandeja' %}?{% if filtro == 'vencidos' %}vencidos=1{% else %}vista={{ filtro }}{% endif %}"><span class="kpi-title">{{ etiqueta }}</span><strong class="kpi-value">{{ valor|default_if_none:'—' }}</strong></a>{% endfor %}
+  {% for etiqueta, valor, filtro in kpis %}<a class="card text-decoration-none" href="{% url 'contacto_bandeja' %}?{% if filtro == 'vencidos' %}vencidos=1{% else %}vista={{ filtro }}{% endif %}" data-ss-loading="Cargando {{ etiqueta|lower }}…"><span class="kpi-title">{{ etiqueta }}</span><strong class="kpi-value">{{ valor|default_if_none:'—' }}</strong></a>{% endfor %}
 </div>{% endif %}
 {% if not zoho_configurado %}
 <section id="contacto-conexion" class="ss-contacto-conexion card" role="status"><i class="fa-regular fa-envelope" aria-hidden="true"></i><div><h2>Tu buzón está pendiente de conexión</h2><p>SmartStock necesita autorización para consultar y responder los correos de <strong>contacto@smartstockchile.cl</strong>.</p><p class="mb-0">Solicita al superusuario abrir <strong>Cuenta de contacto → Conectar Zoho Mail</strong>. Mientras tanto puedes usar Zoho Mail desde el botón superior.</p>{% if datos_disponibles %}<p class="form-text mt-2 mb-0">Se muestran los correos que ya estaban guardados en SmartStock.</p>{% endif %}</div></section>
@@ -28,10 +28,10 @@
 {% if request.GET.vencidos == '1' %}<p>Seguimientos pendientes para hoy o fechas anteriores. <a href="{% url 'contacto_bandeja' %}">Ver todos</a></p>{% endif %}
 <div class="card ss-contacto-lista">
   {% if vista == 'enviados' %}{% for respuesta in pagina %}
-  <a href="{% url 'contacto_mensaje' respuesta.mensaje_id %}" class="ss-contacto-fila"><i class="fa-regular fa-paper-plane mt-1" aria-hidden="true"></i><div class="ss-contacto-correo"><div class="ss-contacto-cabecera"><strong>Para: {{ respuesta.mensaje.remitente_email }}</strong><time>{{ respuesta.enviada_en|date:'d/m/Y H:i' }}</time></div><span class="ss-contacto-asunto">{{ respuesta.mensaje.asunto|default:'Sin asunto' }}</span><span class="ss-contacto-resumen">{{ respuesta.texto|truncatechars:150 }}</span><span class="ss-contacto-estado" data-estado="resuelto">Enviada desde SmartStock</span></div></a>
+  <a href="{% url 'contacto_mensaje' respuesta.mensaje_id %}" class="ss-contacto-fila" data-ss-loading="Abriendo correo…"><i class="fa-regular fa-paper-plane mt-1" aria-hidden="true"></i><div class="ss-contacto-correo"><div class="ss-contacto-cabecera"><strong>Para: {{ respuesta.mensaje.remitente_email }}</strong><time>{{ respuesta.enviada_en|date:'d/m/Y H:i' }}</time></div><span class="ss-contacto-asunto">{{ respuesta.mensaje.asunto|default:'Sin asunto' }}</span><span class="ss-contacto-resumen">{{ respuesta.texto|truncatechars:150 }}</span><span class="ss-contacto-estado" data-estado="resuelto">Enviada desde SmartStock</span></div></a>
   {% empty %}{% include 'contacto/vacio.html' %}{% endfor %}
   {% else %}{% for correo in pagina %}
-  <a href="{% url 'contacto_mensaje' correo.pk %}" class="ss-contacto-fila{% if not correo.leido %} ss-contacto-no-leido{% endif %}">
+  <a href="{% url 'contacto_mensaje' correo.pk %}" class="ss-contacto-fila{% if not correo.leido %} ss-contacto-no-leido{% endif %}" data-ss-loading="Abriendo correo…">
     <span class="ss-contacto-punto" aria-label="{% if correo.leido %}Leído{% else %}Sin leer{% endif %}"></span>
     <div class="ss-contacto-correo"><div class="ss-contacto-cabecera"><strong>{{ correo.remitente_nombre|default:correo.remitente_email|default:'Remitente no disponible' }}</strong><time datetime="{{ correo.recibido_en|date:'c' }}">{{ correo.recibido_en|date:'d/m/Y H:i' }}</time></div>
     <span class="ss-contacto-asunto">{{ correo.asunto|default:'Sin asunto' }}{% if correo.tiene_adjuntos %} <i class="fa-solid fa-paperclip" aria-label="Contiene adjuntos"></i>{% endif %}</span>

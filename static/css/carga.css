@@ -1,7 +1,8 @@
 .ss-carga {
+    box-sizing: border-box;
     width: min(22rem, calc(100% - 2rem));
     margin: auto;
-    padding: 1.6rem 2.5rem;
+    padding: 1.6rem 2rem;
     border: 0;
     border-radius: .95rem;
     background: #fff;
@@ -31,8 +32,11 @@ body:has(.ss-carga[open]) .modal-backdrop { opacity: 0; }
 
 .ss-carga p {
     margin: 0;
+    font-size: .95rem;
     font-weight: 600;
     line-height: 1.45;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 [data-bs-theme="dark"] .ss-carga {
