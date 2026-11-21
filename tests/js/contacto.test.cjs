@@ -17,7 +17,8 @@ async function pantalla(t, html) {
   return {window, peticiones, intervalos, el:id => window.document.getElementById(id)};
 }
 const bandeja = `<form id="ss-cerrar-sesion"><input name="csrfmiddlewaretoken" value="csrf-fixture"></form>
-  <div id="contacto-sync" data-url="/contacto/sincronizar/"><span id="contacto-sync-estado"></span><a id="contacto-sync-nuevos" hidden>Ver nuevos</a></div>`;
+  <div id="contacto-sync" data-url="/contacto/sincronizar/" data-usuario="1" data-total="0" data-ultimo="0" data-consultado="1"><span id="contacto-sync-estado"></span><a id="contacto-sync-nuevos" hidden>Ver nuevos</a></div>`;
+const datos = (nuevos=0) => ({success:true,usuario_id:1,nuevos,total:nuevos,ultimo_id:nuevos,ultima_consulta:'2026-11-21T00:00:00Z'});
 
 test('consulta con sesión y CSRF sin superponer peticiones ni recargar la página', async t => {
   const c = await pantalla(t, bandeja);
@@ -27,7 +28,7 @@ test('consulta con sesión y CSRF sin superponer peticiones ni recargar la pági
   assert.equal(c.peticiones[0].opciones.credentials, 'same-origin');
   assert.equal(c.intervalos[0].tiempo, 60000);
   c.intervalos[0].callback(); assert.equal(c.peticiones.length, 1);
-  c.peticiones[0].resolve({ok:true,json:async()=>({success:true,nuevos:2})}); await tick();
+  c.peticiones[0].resolve({ok:true,json:async()=>datos(2)}); await tick();
   assert.equal(c.el('contacto-sync-nuevos').hidden, false);
   assert.match(c.el('contacto-sync-estado').textContent, /correos nuevos/);
   c.intervalos[0].callback(); assert.equal(c.peticiones.length, 1);
@@ -41,9 +42,33 @@ test('una pestaña oculta no consulta el buzón y un error permite reintentar', 
   c.intervalos[0].callback(); assert.equal(c.peticiones.length, 1);
   Object.defineProperty(c.window.document, 'hidden', {value:false,configurable:true});
   c.intervalos[0].callback(); assert.equal(c.peticiones.length, 2);
-  c.peticiones[1].resolve({ok:true,json:async()=>({success:true,nuevos:0})}); await tick();
+  c.peticiones[1].resolve({ok:true,json:async()=>datos()}); await tick();
   assert.match(c.el('contacto-sync-estado').textContent, /Bandeja consultada/);
   assert.equal(c.el('contacto-sync-nuevos').hidden, true);
+});
+
+test('muestra el motivo de Zoho como texto y permite volver a consultar', async t => {
+  const c = await pantalla(t, bandeja);
+  c.peticiones[0].resolve({ok:false,json:async()=>({success:false,codigo:'permisos',mensaje:'Zoho necesita permisos <script>no ejecutar</script>'})}); await tick();
+  assert.equal(c.el('contacto-sync-estado').textContent, 'Zoho necesita permisos <script>no ejecutar</script>');
+  assert.equal(c.el('contacto-sync-estado').querySelector('script'), null);
+  c.intervalos[0].callback(); assert.equal(c.peticiones.length, 2);
+  assert.equal(c.peticiones[1].opciones.body, 'automatico=1');
+  c.peticiones[1].resolve({ok:true,json:async()=>datos()}); await tick();
+});
+
+test('detecta correos incorporados por otra pestaña aunque esta consulta no importe nuevos', async t => {
+  const c = await pantalla(t, bandeja);
+  c.peticiones[0].resolve({ok:true,json:async()=>({...datos(),total:1,ultimo_id:8})}); await tick();
+  assert.equal(c.el('contacto-sync-nuevos').hidden, false);
+});
+
+test('al cambiar de sesión deja de actualizar y no presenta información de otra cuenta', async t => {
+  const c = await pantalla(t, bandeja);
+  c.peticiones[0].resolve({ok:true,json:async()=>({...datos(2),usuario_id:5})}); await tick();
+  assert.match(c.el('contacto-sync-estado').textContent, /sesión cambió/);
+  assert.equal(c.el('contacto-sync-nuevos').hidden, true);
+  c.intervalos[0].callback(); assert.equal(c.peticiones.length, 1);
 });
 
 test('sin conexión configurada no hace consultas automáticas', async t => {

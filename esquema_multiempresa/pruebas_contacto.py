@@ -23,7 +23,7 @@ from .buzon_contacto import sincronizar_buzon
 from .forms import CuentaTecnicaForm
 from .models import BuzonContacto, Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
 from .permisos import CONTACTO, CORREO_CONTACTO, SOPORTE_TECNICO, es_contacto_smartstock, es_personal_smartstock
-from .zoho_contacto import ClienteZoho, ErrorZoho, texto_correo
+from .zoho_contacto import ClienteZoho, ErrorZoho, cifrar_configuracion, configuracion_zoho, texto_correo
 
 
 ZOHO = {'ZOHO_CONTACTO_CLIENT_ID': 'cliente-fixture', 'ZOHO_CONTACTO_CLIENT_SECRET': 'secreto-fixture',
@@ -77,9 +77,9 @@ class ContactoTests(TestCase):
         return self.cliente.post('/api/v1/auth/login-web/', {'email': usuario.email, 'password': self.clave},
                                  format='json', HTTP_X_CSRFTOKEN=self.cliente.cookies['csrftoken'].value)
 
-    def post(self, ruta, datos):
+    def post(self, ruta, datos, **headers):
         with self.captureOnCommitCallbacks(using='central', execute=True):
-            return self.cliente.post(ruta, datos, HTTP_X_CSRFTOKEN=self.cliente.cookies['csrftoken'].value)
+            return self.cliente.post(ruta, datos, HTTP_X_CSRFTOKEN=self.cliente.cookies['csrftoken'].value, **headers)
 
     @property
     def ruta(self):
@@ -219,7 +219,9 @@ class ContactoTests(TestCase):
         self.entrar()
         with patch('esquema_multiempresa.zoho_contacto.requests.request') as externo:
             respuesta = self.post('/contacto/sincronizar/', {})
-            self.assertContains(respuesta, 'aún no está conectado', status_code=503)
+            self.assertEqual(respuesta.status_code, 302)
+            self.assertContains(self.cliente.get(respuesta.url), 'aún no está conectado')
+            self.assertFalse(NotificacionSistema.objects.using('central').exists())
             self.assertEqual(MensajeContacto.objects.using('central').count(), 1)
             externo.assert_not_called()
 
@@ -376,3 +378,149 @@ class ContactoTests(TestCase):
             with self.assertRaises(CommandError):
                 call_command('conectar_zoho_contacto', stdout=StringIO())
             self.assertEqual(archivo.read_text(), 'NO_CAMBIAR=fixture\n')
+
+    def test_sin_primera_consulta_indicadores_desconocidos_y_un_solo_aviso(self):
+        MensajeContacto.objects.using('central').all().delete()
+        self.entrar()
+        principal = self.cliente.get('/contacto/bandeja/')
+        self.assertTrue(all(valor is None for _, valor, _ in principal.context['kpis']))
+        self.assertContains(principal, 'Tu buzón está pendiente de conexión', count=1)
+        self.assertNotContains(principal, 'No hay correos en esta vista')
+        self.assertNotContains(principal, 'id="contacto-buscar"')
+        self.assertNotContains(principal, 'id="contacto-actualizar"')
+        otra = self.cliente.get('/contacto/bandeja/?vista=pendiente')
+        self.assertNotContains(otra, 'class="ss-sistema-kpis ss-contacto-kpis"')
+        self.assertContains(otra, 'ss-menu-contador')
+
+    def test_buzon_consultado_vacio_muestra_cero_y_mensajes_por_vista(self):
+        MensajeContacto.objects.using('central').all().delete()
+        BuzonContacto.objects.using('central').create(ultima_consulta=timezone.now(), conexion_estado='conectado')
+        self.entrar()
+        principal = self.cliente.get('/contacto/bandeja/')
+        self.assertTrue(all(valor == 0 for _, valor, _ in principal.context['kpis']))
+        for vista, texto in [('sin-leer','Estás al día con tus correos'), ('pendiente','No tienes consultas pendientes'),
+                             ('borradores','Aquí aparecerán las respuestas que guardes sin enviar.'),
+                             ('enviados','Todavía no has enviado respuestas')]:
+            self.assertContains(self.cliente.get('/contacto/bandeja/?vista=' + vista), texto)
+
+    def test_enviados_muestra_solo_respuestas_confirmadas_con_busqueda(self):
+        self.entrar()
+        RespuestaContacto.objects.using('central').create(mensaje=self.mensaje, estado='enviada',
+            texto='Respuesta realizada desde SmartStock', enviada_en=timezone.now())
+        RespuestaContacto.objects.using('central').create(mensaje=self.mensaje, estado='incierta', texto='No mostrar sin confirmar')
+        pagina = self.cliente.get('/contacto/bandeja/?vista=enviados')
+        self.assertContains(pagina, 'Respuesta realizada desde SmartStock')
+        self.assertNotContains(pagina, 'No mostrar sin confirmar')
+        self.assertEqual(len(pagina.context['pagina']), 1)
+        self.assertEqual(len(self.cliente.get('/contacto/bandeja/?vista=enviados&search=inexistente').context['pagina']), 0)
+
+    def test_conexion_web_solo_para_superusuario_y_exige_csrf(self):
+        for usuario in (self.contacto, self.soporte):
+            self.entrar(usuario)
+            self.assertEqual(self.cliente.get('/sistema/contacto/conexion/').status_code, 403)
+            self.assertEqual(self.post('/sistema/contacto/conexion/', {'accion':'comprobar'}).status_code, 403)
+        self.entrar(self.root)
+        self.assertContains(self.cliente.get('/sistema/contacto/conexion/'), 'Autorizar y cargar correos')
+        self.assertEqual(self.cliente.post('/sistema/contacto/conexion/', {'accion':'conectar'}).status_code, 403)
+
+    def test_autorizar_desde_web_verifica_buzon_cifra_secretos_e_importa_correo(self):
+        self.entrar(self.root)
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200, json=lambda: {'access_token':'access-web-fixture','refresh_token':'refresh-web-fixture'})), \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=[
+                cuentas_zoho(), respuesta_zoho([fila_zoho('202')])]):
+            respuesta = self.post('/sistema/contacto/conexion/', {'accion':'conectar','centro':'com',
+                'client_id':'client-web-fixture','client_secret':'secret-web-fixture','codigo':'code-web-fixture'})
+        self.assertEqual(respuesta.status_code, 302)
+        buzon = BuzonContacto.objects.using('central').get()
+        self.assertEqual(buzon.conexion_estado, 'conectado')
+        self.assertTrue(buzon.ultima_consulta)
+        self.assertNotIn('secret-web-fixture', buzon.credenciales_cifradas)
+        self.assertNotIn('refresh-web-fixture', buzon.credenciales_cifradas)
+        self.assertEqual(configuracion_zoho()['refresh_token'], 'refresh-web-fixture')
+        self.assertTrue(MensajeContacto.objects.using('central').filter(mensaje_zoho='202').exists())
+        pagina = self.cliente.get('/sistema/contacto/conexion/')
+        for secreto in ('secret-web-fixture','refresh-web-fixture','access-web-fixture','code-web-fixture',buzon.credenciales_cifradas):
+            self.assertNotContains(pagina, secreto)
+
+    def test_cuenta_zoho_incorrecta_no_guarda_credenciales_ni_renderiza_secretos(self):
+        self.entrar(self.root)
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200, json=lambda: {'access_token':'access-web-fixture','refresh_token':'refresh-web-fixture'})), \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', return_value=cuentas_zoho('personal@example.invalid')):
+            respuesta = self.post('/sistema/contacto/conexion/', {'accion':'conectar','centro':'com',
+                'client_id':'client-web-fixture','client_secret':'secret-web-fixture','codigo':'code-web-fixture'})
+        self.assertContains(respuesta, 'no corresponde al buzón')
+        self.assertFalse(BuzonContacto.objects.using('central').exclude(credenciales_cifradas='').exists())
+        self.assertNotContains(respuesta, 'secret-web-fixture')
+        self.assertNotContains(respuesta, 'code-web-fixture')
+
+    def test_actualizar_explica_autorizacion_pendiente_y_conserva_la_vista(self):
+        self.entrar()
+        respuesta = self.post('/contacto/sincronizar/', {'vista':'pendiente','search':'Consulta'})
+        self.assertIn('vista=pendiente', respuesta.url)
+        pagina = self.cliente.get(respuesta.url)
+        self.assertContains(pagina, 'Cuenta de contacto → Conectar Zoho')
+        self.assertFalse(NotificacionSistema.objects.using('central').exists())
+        resultado = self.post('/contacto/sincronizar/', {}, HTTP_ACCEPT='application/json')
+        self.assertEqual(resultado.status_code, 503)
+        self.assertEqual(resultado.json()['codigo'], 'sin_configuracion')
+
+    @override_settings(**ZOHO)
+    def test_actualizacion_manual_no_reutiliza_consulta_automatica_reciente(self):
+        self.entrar()
+        BuzonContacto.objects.using('central').create(ultima_consulta=timezone.now())
+        with patch('esquema_multiempresa.buzon_contacto.ClienteZoho') as cliente:
+            cliente.return_value.listar.return_value = ('101',[fila_zoho('202')])
+            respuesta = self.post('/contacto/sincronizar/', {}, HTTP_ACCEPT='application/json')
+            cliente.return_value.listar.assert_called_once_with(1)
+        self.assertEqual(respuesta.json()['nuevos'], 1)
+        self.assertEqual(respuesta.json()['total'], 2)
+
+    @override_settings(**ZOHO)
+    def test_token_vencido_se_renueva_una_vez_en_lectura(self):
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200, json=lambda: {'access_token':'token-renovado'})) as renovar, \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=[
+                 respuesta_zoho({},401), cuentas_zoho()]):
+            config = {'client_id':'cliente','client_secret':'secreto','refresh_token':'refresh','dc':'com'}
+            self.assertEqual(ClienteZoho(config, token='token-vencido').comprobar_cuenta(), '101')
+            renovar.assert_called_once()
+
+    @override_settings(**ZOHO)
+    def test_permisos_de_zoho_producen_diagnostico_claro_sin_datos_privados(self):
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200, json=lambda: {'access_token':'token-fixture'})), \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=[
+                 cuentas_zoho(), respuesta_zoho({},403)]):
+            with self.assertRaisesMessage(ErrorZoho, 'no concedió permisos'):
+                sincronizar_buzon(forzar=True)
+        buzon = BuzonContacto.objects.using('central').get()
+        self.assertEqual(buzon.conexion_estado, 'error')
+        self.assertIn('no concedió permisos', buzon.ultimo_error)
+
+    def test_cifrado_rechaza_otra_clave_y_admite_clave_anterior_autorizada(self):
+        from django.conf import settings
+        config = {'client_id':'cliente','client_secret':'secreto','refresh_token':'refresh','dc':'com'}
+        anterior = settings.SECRET_KEY
+        BuzonContacto.objects.using('central').create(credenciales_cifradas=cifrar_configuracion(config))
+        with override_settings(SECRET_KEY='otra-clave-fixture', SECRET_KEY_FALLBACKS=[]):
+            with self.assertRaisesMessage(ErrorZoho, 'autorización guardada'):
+                configuracion_zoho()
+        with override_settings(SECRET_KEY='otra-clave-fixture', SECRET_KEY_FALLBACKS=[anterior]):
+            self.assertEqual(configuracion_zoho(), config)
+
+    @override_settings(**ZOHO)
+    def test_rechazo_explicito_de_envio_no_se_marca_como_confirmado_o_incierto(self):
+        self.entrar()
+        borrador = RespuestaContacto.objects.using('central').create(mensaje=self.mensaje, texto='Respuesta revisada')
+        rechazo = SimpleNamespace(status_code=200,content=b'{}',json=lambda:{'status':{'code':403},'data':{}})
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200,json=lambda:{'access_token':'token-fixture'})), \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=[cuentas_zoho(),rechazo]):
+            respuesta = self.post(self.ruta, {'accion':'enviar','respuesta':str(borrador.pk),'version':0})
+        self.assertContains(respuesta, 'no concedió permisos')
+        borrador.refresh_from_db(using='central')
+        self.assertEqual(borrador.estado,'rechazada')
+        self.assertIsNone(borrador.enviada_en)
+        self.assertFalse(NotificacionSistema.objects.using('central').exists())

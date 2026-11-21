@@ -3,40 +3,62 @@ from datetime import timedelta
 from uuid import UUID
 
 from django.contrib.auth import update_session_auth_hash
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import F, Q
+from django.db.models import Count, F, Max, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
 
 from apps.usuarios.models import Usuario
 from .buzon_contacto import enviar_respuesta, sincronizar_buzon
 from .forms import CuentaContactoForm
-from .forms_contacto import BorradorForm, NotaForm, SeguimientoForm
+from .forms_contacto import BorradorForm, ConexionZohoForm, NotaForm, SeguimientoForm
 from .models import BuzonContacto, MensajeContacto, NotaContacto, RespuestaContacto
 from .notificaciones import confirmar_guardado, confirmaciones_para_pagina
 from .permisos import CORREO_CONTACTO, requiere_contacto, requiere_superusuario
 from .sistema import auditar_gestion, contexto_sistema
-from .zoho_contacto import ClienteZoho, ErrorZoho, servidores, zoho_configurado
+from .zoho_contacto import ClienteZoho, ErrorZoho, autorizar_codigo, cifrar_configuracion, servidores, zoho_configurado
 
 
 VISTAS = [('todos', 'Bandeja de entrada', 'inbox'), ('sin-leer', 'Sin leer', 'envelope'),
           ('pendiente', 'Pendientes', 'clock'), ('seguimiento', 'En seguimiento', 'comments'),
-          ('resuelto', 'Resueltos', 'check'), ('borradores', 'Borradores', 'pen-to-square')]
+          ('resuelto', 'Resueltos', 'check'), ('borradores', 'Borradores', 'pen-to-square'),
+          ('enviados', 'Enviados', 'paper-plane')]
+
+
+def datos_bandeja():
+    hoy = timezone.localdate()
+    datos = MensajeContacto.objects.using('central').aggregate(
+        todos=Count('pk'), ultimo_id=Max('pk'),
+        sin_leer=Count('pk', filter=Q(leido=False)), pendiente=Count('pk', filter=Q(estado='pendiente')),
+        en_seguimiento=Count('pk', filter=Q(estado='seguimiento')), resuelto=Count('pk', filter=Q(estado='resuelto')),
+        vencidos=Count('pk', filter=~Q(estado='resuelto') & Q(seguimiento__lte=hoy)))
+    datos['sin-leer'] = datos.pop('sin_leer')
+    datos['seguimiento'] = datos.pop('en_seguimiento')
+    datos['borradores'] = RespuestaContacto.objects.using('central').filter(estado='borrador').count()
+    datos['enviados'] = RespuestaContacto.objects.using('central').filter(estado='enviada').count()
+    return datos
 
 
 def contexto_contacto(request, titulo, vista='todos'):
+    buzon = BuzonContacto.objects.using('central').filter(pk=1).first()
+    datos = datos_bandeja()
+    conocidos = bool(datos['todos'] or buzon and buzon.ultima_consulta)
     contexto = {
         'titulo': titulo, 'modulo': 'mi_cuenta' if vista == 'mi_cuenta' else vista,
         'identidad_panel': 'Atención de SmartStock', 'perfil_personal': 'Contacto',
         'inicio_panel': reverse('contacto_bandeja'), 'perfil_panel': reverse('contacto_mi_cuenta'),
         'confirmaciones': confirmaciones_para_pagina(request),
         'zoho_configurado': zoho_configurado(),
+        'buzon': buzon, 'datos_disponibles': conocidos, 'contadores': datos,
         'secciones_menu': [{'nombre': 'Atención', 'enlaces': [
             {'nombre': nombre, 'icono': icono, 'activo': clave == vista,
+             'mostrar_contador': True, 'contador': datos[clave] if conocidos else None,
              'url': reverse('contacto_bandeja') + (f'?vista={clave}' if clave != 'todos' else '')}
             for clave, nombre, icono in VISTAS]}],
     }
@@ -45,6 +67,46 @@ def contexto_contacto(request, titulo, vista='todos'):
     except ErrorZoho:
         contexto['zoho_url'] = 'https://mail.zoho.com/'
     return contexto
+
+
+@requiere_superusuario
+@require_http_methods(['GET', 'POST'])
+@sensitive_post_parameters('client_secret', 'codigo')
+@sensitive_variables()
+def conexion_contacto(request):
+    accion = request.POST.get('accion') if request.method == 'POST' else None
+    formulario = ConexionZohoForm(request.POST if accion == 'conectar' else None, initial={'centro': settings.ZOHO_CONTACTO_DC})
+    error_conexion = ''
+    if request.method == 'POST':
+        try:
+            if accion == 'conectar' and formulario.is_valid():
+                config, cliente = autorizar_codigo(**formulario.cleaned_data)
+                with transaction.atomic(using='central'):
+                    buzon, _ = BuzonContacto.objects.using('central').get_or_create(pk=1)
+                    if buzon.cuenta_zoho and buzon.cuenta_zoho != cliente.cuenta:
+                        raise ErrorZoho('El buzón de Zoho cambió de identificación. Revisa la migración de sus correos antes de reemplazarlo.')
+                    buzon.credenciales_cifradas = cifrar_configuracion(config)
+                    buzon.save(using='central', update_fields=['credenciales_cifradas'])
+                nuevos = sincronizar_buzon(forzar=True, cliente=cliente)
+            elif accion == 'comprobar':
+                nuevos = sincronizar_buzon(forzar=True)
+            else:
+                nuevos = None
+            if nuevos is not None:
+                auditar_gestion(request, 'central', 'UPDATE', 'BuzonContacto', BuzonContacto(pk=1), 'Conexión de contacto comprobada')
+                confirmar_guardado(request, alias='central', titulo='Buzón conectado',
+                    mensaje=f'Zoho respondió correctamente. Se incorporaron {nuevos} correo(s).',
+                    link=reverse('sistema_conexion_contacto'))
+                return redirect('sistema_conexion_contacto')
+        except ErrorZoho as error:
+            if accion == 'conectar':
+                formulario.add_error(None, str(error))
+            else:
+                error_conexion = str(error)
+    contexto = contexto_sistema(request, 'contacto', 'Conexión del buzón de contacto')
+    contexto.update(formulario=formulario, buzon=BuzonContacto.objects.using('central').filter(pk=1).first(),
+                     zoho_configurado=zoho_configurado(), error_consulta=error_conexion)
+    return render(request, 'contacto/conexion.html', contexto)
 
 
 @requiere_superusuario
@@ -104,22 +166,27 @@ def bandeja(request):
         consulta = consulta.filter(leido=False)
     elif vista == 'borradores':
         consulta = consulta.filter(respuestas__estado='borrador')
+    elif vista == 'enviados':
+        consulta = RespuestaContacto.objects.using('central').filter(estado='enviada').select_related('mensaje').order_by('-enviada_en', '-creada_en')
     texto = request.GET.get('search', '').strip()[:200]
     if texto:
-        consulta = consulta.filter(Q(asunto__icontains=texto) | Q(remitente_email__icontains=texto)
-                                   | Q(remitente_nombre__icontains=texto) | Q(resumen__icontains=texto))
+        if vista == 'enviados':
+            consulta = consulta.filter(Q(mensaje__asunto__icontains=texto) | Q(mensaje__remitente_email__icontains=texto) | Q(texto__icontains=texto))
+        else:
+            consulta = consulta.filter(Q(asunto__icontains=texto) | Q(remitente_email__icontains=texto)
+                                       | Q(remitente_nombre__icontains=texto) | Q(resumen__icontains=texto))
     hoy = timezone.localdate()
-    if request.GET.get('vencidos') == '1':
+    if request.GET.get('vencidos') == '1' and vista != 'enviados':
         consulta = consulta.exclude(estado='resuelto').filter(seguimiento__lte=hoy)
     filtros = request.GET.copy()
     filtros.pop('page', None)
     contexto.update(
         pagina=Paginator(consulta, 25).get_page(request.GET.get('page')), filtros_pagina=filtros.urlencode(),
-        vista=vista, busqueda=texto, hoy=hoy, buzon=BuzonContacto.objects.using('central').filter(pk=1).first(),
-        kpis=[('Sin leer', todos.filter(leido=False).count(), 'sin-leer'),
-              ('Pendientes', todos.filter(estado='pendiente').count(), 'pendiente'),
-              ('En seguimiento', todos.filter(estado='seguimiento').count(), 'seguimiento'),
-              ('Seguimientos para hoy', todos.exclude(estado='resuelto').filter(seguimiento__lte=hoy).count(), 'vencidos')],
+        vista=vista, busqueda=texto, hoy=hoy,
+        error_consulta=request.session.pop('contacto_error_sync', ''),
+        kpis=[(etiqueta, contexto['contadores'][clave] if contexto['datos_disponibles'] else None, clave)
+              for etiqueta, clave in [('Sin leer', 'sin-leer'), ('Pendientes', 'pendiente'),
+                                     ('En seguimiento', 'seguimiento'), ('Seguimientos para hoy', 'vencidos')]],
     )
     return render(request, 'contacto/bandeja.html', contexto)
 
@@ -127,19 +194,27 @@ def bandeja(request):
 @requiere_contacto
 @require_POST
 def sincronizar(request):
+    from urllib.parse import urlencode
+    filtros = {clave: request.POST[clave][:200] for clave in ('vista', 'search', 'vencidos') if request.POST.get(clave)}
+    destino = reverse('contacto_bandeja') + ('?' + urlencode(filtros) if filtros else '')
     try:
-        nuevos = sincronizar_buzon(anteriores=request.POST.get('anteriores') == '1')
+        nuevos = sincronizar_buzon(anteriores=request.POST.get('anteriores') == '1',
+                                   forzar=request.POST.get('automatico') != '1')
     except ErrorZoho as error:
         if request.headers.get('Accept') == 'application/json':
-            return JsonResponse({'success': False, 'mensaje': str(error)}, status=503)
-        contexto = contexto_contacto(request, 'No pudimos actualizar la bandeja')
-        contexto['error_consulta'] = str(error)
-        return render(request, 'contacto/error.html', contexto, status=503)
+            return JsonResponse({'success': False, 'codigo': error.codigo, 'mensaje': str(error)},
+                                status=409 if error.codigo == 'ocupado' else 503)
+        request.session['contacto_error_sync'] = str(error)
+        return redirect(destino)
     if request.headers.get('Accept') == 'application/json':
-        return JsonResponse({'success': True, 'nuevos': nuevos})
+        buzon = BuzonContacto.objects.using('central').get(pk=1)
+        datos = datos_bandeja()
+        return JsonResponse({'success': True, 'usuario_id': request.user.pk, 'nuevos': nuevos,
+            'total': datos['todos'], 'ultimo_id': datos['ultimo_id'],
+            'ultima_consulta': buzon.ultima_consulta.isoformat() if buzon.ultima_consulta else None})
     confirmar_guardado(request, alias='central', titulo='Bandeja consultada',
                        mensaje=f'{nuevos} correo(s) incorporado(s).', link=reverse('contacto_bandeja'))
-    return redirect('contacto_bandeja')
+    return redirect(destino)
 
 
 def confirmar_accion(request, mensaje, titulo, texto):

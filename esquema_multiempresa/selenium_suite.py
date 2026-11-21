@@ -4,6 +4,8 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
@@ -18,7 +20,7 @@ from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
 from apps.core.models import Auditoria
 from apps.usuarios.models import Usuario
-from esquema_multiempresa.models import Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
+from esquema_multiempresa.models import BuzonContacto, Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
 from esquema_multiempresa.permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
 from esquema_multiempresa.permisos import CONTACTO, CORREO_CONTACTO
 from apps.usuarios.models import Rol
@@ -377,3 +379,83 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
         self.assertFalse(navegador.find_element(By.ID, 'id_email').is_enabled())
         self.assertFalse(navegador.find_elements(By.ID, 'id_perfil'))
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
+
+    def test_conexion_web_actualizacion_y_respuesta_desde_smartstock(self):
+        """Contrato de Zoho simulado: el navegador recorre el mismo flujo real, sin enviar correo externo."""
+        clave = 'Cuenta-fixture-buzon-2026!'
+        Usuario.objects.db_manager('central').create_superuser(email='root-buzon@example.invalid', password=clave, nombres='Root')
+        rol, _ = Rol.objects.using('central').get_or_create(codigo=CONTACTO, defaults={'nombre':'Contacto','es_sistema':True})
+        Usuario.objects.db_manager('central').create_user(email=CORREO_CONTACTO, password=clave, nombres='Contacto', is_staff=True, rol=rol)
+        llamadas, envios = [], []
+        def resultado(data):
+            return SimpleNamespace(status_code=200, content=b'{}', json=lambda:{'status':{'code':200},'data':data})
+        def api(metodo, url, **opciones):
+            llamadas.append((metodo,url))
+            if url.endswith('/api/accounts'):
+                return resultado([{'accountId':'101','primaryEmailAddress':CORREO_CONTACTO}])
+            if url.endswith('/messages/view'):
+                return resultado([{'messageId':'201','folderId':'301','fromAddress':'consulta@example.invalid',
+                    'sender':'Persona de prueba','subject':'Correo de prueba recibido','receivedTime':'1795219200000',
+                    'summary':'Necesito ayuda con mi acceso','hasAttachment':'0'}])
+            if url.endswith('/messages/201/content'):
+                return resultado({'content':'<p>Necesito ayuda con mi acceso.</p>'})
+            if metodo == 'POST' and url.endswith('/messages/201'):
+                envios.append(opciones['json'])
+                return resultado({'messageId':'501'})
+            raise AssertionError('Petición de correo no prevista: ' + metodo)
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        def ingresar(correo):
+            navegador.get(self.live_server_url)
+            espera.until(EC.visibility_of_element_located((By.ID,'email'))).send_keys(correo)
+            navegador.find_element(By.ID,'password').send_keys(clave)
+            navegador.find_element(By.ID,'login-submit').click()
+            espera.until(lambda d: '/sistema/' in d.current_url or '/contacto/bandeja/' in d.current_url)
+        def cerrar_confirmacion():
+            espera.until(EC.visibility_of_element_located((By.ID,'sistema-confirmacion')))
+            navegador.find_element(By.ID,'sistema-confirmacion-cerrar').click()
+            espera.until(EC.invisibility_of_element_located((By.ID,'sistema-confirmacion')))
+        with patch('esquema_multiempresa.zoho_contacto.requests.post', return_value=SimpleNamespace(
+                status_code=200, json=lambda:{'access_token':'access-navegador-fixture','refresh_token':'refresh-navegador-fixture'})), \
+             patch('esquema_multiempresa.zoho_contacto.requests.request', side_effect=api):
+            ingresar('root-buzon@example.invalid')
+            navegador.get(self.live_server_url + '/sistema/contacto/cuenta/')
+            navegador.find_element(By.LINK_TEXT,'Conectar Zoho Mail').click()
+            espera.until(EC.url_contains('/sistema/contacto/conexion/'))
+            for nombre, valor in [('client_id','client-navegador-fixture'),('client_secret','secret-navegador-fixture'),('codigo','code-navegador-fixture')]:
+                navegador.find_element(By.ID,'id_' + nombre).send_keys(valor)
+            navegador.find_element(By.CSS_SELECTOR,'button[value="conectar"]').click()
+            espera.until(lambda d: BuzonContacto.objects.using('central').filter(conexion_estado='conectado').exists())
+            cerrar_confirmacion()
+            self.assertEqual(len(envios), 0)
+            navegador.find_element(By.CSS_SELECTOR,'button[form="ss-cerrar-sesion"]').click()
+            espera.until(EC.visibility_of_element_located((By.ID,'email')))
+            ingresar(CORREO_CONTACTO)
+            self.assertIn('Correo de prueba recibido', navegador.find_element(By.TAG_NAME,'body').text)
+            antes = sum(url.endswith('/messages/view') for _,url in llamadas)
+            navegador.find_element(By.ID,'contacto-actualizar').click()
+            cerrar_confirmacion()
+            self.assertGreater(sum(url.endswith('/messages/view') for _,url in llamadas), antes)
+            mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='201')
+            navegador.find_element(By.CSS_SELECTOR,f'a[href="/contacto/mensajes/{mensaje.pk}/"]').click()
+            espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
+            self.assertIn('Necesito ayuda con mi acceso.', navegador.find_element(By.CSS_SELECTOR,'.ss-contacto-texto').text)
+            navegador.find_element(By.CSS_SELECTOR,'a[href="#contacto-responder"]').click()
+            navegador.find_element(By.CSS_SELECTOR,'[data-borrador-editor] textarea').send_keys('Gracias por escribirnos. Te ayudaremos a recuperar el acceso.')
+            navegador.find_element(By.CSS_SELECTOR,'button[value="borrador"]').click()
+            cerrar_confirmacion()
+            self.assertTrue(navegador.find_element(By.CSS_SELECTOR,'[data-respuesta-enviar]').is_enabled())
+            navegador.find_element(By.CSS_SELECTOR,'[data-respuesta-enviar]').click()
+            cerrar_confirmacion()
+            self.assertEqual(len(envios), 1)
+            self.assertEqual(envios[0]['fromAddress'], CORREO_CONTACTO)
+            self.assertEqual(envios[0]['toAddress'],'consulta@example.invalid')
+            navegador.get(self.live_server_url + '/contacto/bandeja/?vista=enviados')
+            self.assertIn('Gracias por escribirnos.', navegador.find_element(By.TAG_NAME,'body').text)
+            self.assertFalse(navegador.find_elements(By.CSS_SELECTOR,'.ss-contacto-kpis'))
+            navegador.set_window_size(390,844)
+            self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))

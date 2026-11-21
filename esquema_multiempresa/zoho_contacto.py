@@ -1,5 +1,7 @@
 """Cliente acotado a un único buzón Zoho. No usa contraseñas de usuarios Django."""
 import hashlib
+import base64
+import json
 import re
 from html import unescape
 from html.parser import HTMLParser
@@ -7,12 +9,20 @@ from html.parser import HTMLParser
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.views.decorators.debug import sensitive_variables
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from .permisos import CORREO_CONTACTO
+from .models import BuzonContacto
 
 
 class ErrorZoho(Exception):
     """Mensaje apto para pantalla, sin cuerpos de respuestas ni secretos."""
+    def __init__(self, mensaje, *, codigo='conexion'):
+        super().__init__(mensaje)
+        self.codigo = codigo
 
 
 class EnvioIncierto(ErrorZoho):
@@ -20,15 +30,43 @@ class EnvioIncierto(ErrorZoho):
 
 
 def zoho_configurado():
-    return bool(settings.ZOHO_CONTACTO_CLIENT_ID and settings.ZOHO_CONTACTO_CLIENT_SECRET
+    return bool(BuzonContacto.objects.using('central').exclude(credenciales_cifradas='').exists()
+                or settings.ZOHO_CONTACTO_CLIENT_ID and settings.ZOHO_CONTACTO_CLIENT_SECRET
                 and settings.ZOHO_CONTACTO_REFRESH_TOKEN)
 
 
-def servidores():
-    dc = settings.ZOHO_CONTACTO_DC
+def cifrador():
+    claves = [settings.SECRET_KEY, *settings.SECRET_KEY_FALLBACKS]
+    return MultiFernet([Fernet(base64.urlsafe_b64encode(HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=None,
+        info=b'smartstock-buzon-contacto-v1').derive(clave.encode()))) for clave in claves])
+
+
+def cifrar_configuracion(datos):
+    return cifrador().encrypt(json.dumps(datos).encode()).decode()
+
+
+@sensitive_variables()
+def configuracion_zoho():
+    cifrada = BuzonContacto.objects.using('central').values_list('credenciales_cifradas', flat=True).first()
+    if cifrada:
+        try:
+            datos = json.loads(cifrador().decrypt(cifrada.encode()))
+            if not isinstance(datos, dict) or not all(isinstance(datos.get(campo), str) and datos[campo]
+                    for campo in ('client_id', 'client_secret', 'refresh_token', 'dc')):
+                raise ValueError
+            return datos
+        except (InvalidToken, ValueError, TypeError):
+            raise ErrorZoho('La autorización guardada necesita renovarse. El superusuario debe volver a conectar Zoho.', codigo='autorizacion') from None
+    return {'client_id': settings.ZOHO_CONTACTO_CLIENT_ID, 'client_secret': settings.ZOHO_CONTACTO_CLIENT_SECRET,
+            'refresh_token': settings.ZOHO_CONTACTO_REFRESH_TOKEN, 'dc': settings.ZOHO_CONTACTO_DC}
+
+
+def servidores(dc=None):
+    dc = dc or configuracion_zoho()['dc']
     # Nunca se acepta una URL arbitraria suministrada por una petición.
     if dc not in ('com', 'eu', 'in', 'com.au', 'jp'):
-        raise ErrorZoho('Revisa el centro de datos de Zoho configurado para este buzón.')
+        raise ErrorZoho('Revisa el centro de datos de Zoho configurado para este buzón.', codigo='autorizacion')
     return f'https://accounts.zoho.{dc}', f'https://mail.zoho.{dc}'
 
 
@@ -72,35 +110,58 @@ def texto_cabecera(valor, limite):
     return re.sub(r'[\r\n\x00-\x1f\x7f]', ' ', unescape(str(valor or ''))).strip()[:limite]
 
 
+@sensitive_variables()
+def autorizar_codigo(*, centro, client_id, client_secret, codigo):
+    accounts, _ = servidores(centro)
+    try:
+        respuesta = requests.post(accounts + '/oauth/v2/token', data={
+            'grant_type': 'authorization_code', 'client_id': client_id,
+            'client_secret': client_secret, 'code': codigo,
+        }, timeout=(5, 15), allow_redirects=False)
+        datos = respuesta.json()
+        if respuesta.status_code != 200 or not all(isinstance(datos.get(campo), str) and datos[campo]
+                for campo in ('access_token', 'refresh_token')):
+            raise ValueError
+    except (requests.RequestException, ValueError, TypeError, AttributeError):
+        raise ErrorZoho('Zoho no aceptó el código. Genera uno nuevo y comprueba el Client ID, Client Secret y centro de datos.', codigo='autorizacion') from None
+    config = {'client_id': client_id, 'client_secret': client_secret, 'refresh_token': datos['refresh_token'], 'dc': centro}
+    cliente = ClienteZoho(config, token=datos['access_token'])
+    cliente.comprobar_cuenta()
+    return config, cliente
+
+
 class ClienteZoho:
-    def __init__(self):
-        if not zoho_configurado():
-            raise ErrorZoho('Zoho Mail aún no está conectado. Solicita la conexión al superusuario de SmartStock.')
-        self.accounts, self.mail = servidores()
-        firma = hashlib.sha256((settings.ZOHO_CONTACTO_CLIENT_ID + ':' + settings.ZOHO_CONTACTO_REFRESH_TOKEN).encode()).hexdigest()
-        self.cache_key = f'contacto-zoho-token:{settings.ZOHO_CONTACTO_DC}:{firma}'
-        self.token = cache.get(self.cache_key)
+    def __init__(self, configuracion=None, *, token=None):
+        self.configuracion = configuracion or configuracion_zoho()
+        if not all(self.configuracion.get(campo) for campo in ('client_id', 'client_secret', 'refresh_token')):
+            raise ErrorZoho('Zoho Mail aún no está conectado. El superusuario debe abrir Cuenta de contacto → Conectar Zoho.', codigo='sin_configuracion')
+        self.accounts, self.mail = servidores(self.configuracion['dc'])
+        firma = hashlib.sha256((self.configuracion['client_id'] + ':' + self.configuracion['refresh_token']).encode()).hexdigest()
+        self.cache_key = f'contacto-zoho-token:{self.configuracion["dc"]}:{firma}'
+        self.token = token or cache.get(self.cache_key)
         if not self.token:
             self.renovar_token()
         self.cuenta = None
 
+    @sensitive_variables()
     def renovar_token(self):
         try:
             respuesta = requests.post(self.accounts + '/oauth/v2/token', data={
-                'grant_type': 'refresh_token', 'client_id': settings.ZOHO_CONTACTO_CLIENT_ID,
-                'client_secret': settings.ZOHO_CONTACTO_CLIENT_SECRET,
-                'refresh_token': settings.ZOHO_CONTACTO_REFRESH_TOKEN,
+                'grant_type': 'refresh_token', 'client_id': self.configuracion['client_id'],
+                'client_secret': self.configuracion['client_secret'],
+                'refresh_token': self.configuracion['refresh_token'],
             }, timeout=(5, 15), allow_redirects=False)
             datos = respuesta.json()
             token = datos.get('access_token') if respuesta.status_code == 200 else None
             if not isinstance(token, str) or not token:
                 raise ValueError
         except (requests.RequestException, ValueError, AttributeError):
-            raise ErrorZoho('No se pudo autorizar el buzón en Zoho. Solicita revisar la conexión.') from None
+            raise ErrorZoho('Zoho no autorizó el buzón. El superusuario debe revisar el centro de datos o renovar la conexión.', codigo='autorizacion') from None
         self.token = token
         cache.set(self.cache_key, token, timeout=3000)
 
-    def pedir(self, metodo, ruta, *, params=None, datos=None):
+    @sensitive_variables()
+    def pedir(self, metodo, ruta, *, params=None, datos=None, _renovado=False):
         try:
             respuesta = requests.request(metodo, self.mail + '/api' + ruta, params=params, json=datos,
                                          headers={'Authorization': 'Zoho-oauthtoken ' + self.token},
@@ -108,19 +169,37 @@ class ClienteZoho:
         except requests.RequestException:
             if metodo == 'POST':
                 raise EnvioIncierto('Zoho no confirmó el envío. Revisa Enviados en Zoho antes de volver a responder.') from None
-            raise ErrorZoho('No pudimos consultar Zoho. Inténtalo nuevamente más tarde.') from None
+            raise ErrorZoho('No pudimos conectar con Zoho. Revisa Internet e inténtalo nuevamente.', codigo='red') from None
         if respuesta.status_code == 401:
             cache.delete(self.cache_key)
+            if metodo == 'GET' and not _renovado:
+                self.renovar_token()
+                return self.pedir(metodo, ruta, params=params, datos=datos, _renovado=True)
+            raise ErrorZoho('La autorización de Zoho caducó o fue revocada. Solicita volver a conectar el buzón.', codigo='autorizacion')
+        if respuesta.status_code == 403:
+            raise ErrorZoho('Zoho no concedió permisos para esta operación. Autoriza lectura y creación de mensajes desde Cuenta de contacto.', codigo='permisos')
+        if respuesta.status_code == 429:
+            raise ErrorZoho('Zoho limitó temporalmente las consultas. Espera un minuto antes de reintentar.', codigo='limite')
         if respuesta.status_code >= 500 and metodo == 'POST':
             raise EnvioIncierto('Zoho no confirmó el envío. Revisa Enviados en Zoho antes de volver a responder.')
         try:
             if len(respuesta.content) > 2_000_000:
                 raise ValueError
             payload = respuesta.json()
-            if not 200 <= respuesta.status_code < 300 or not 200 <= int(payload['status']['code']) < 300:
+            codigo = int(payload['status']['code'])
+            if codigo == 403:
+                raise ErrorZoho('Zoho no concedió permisos para esta operación. Autoriza lectura y creación de mensajes desde Cuenta de contacto.', codigo='permisos')
+            if codigo == 401:
+                cache.delete(self.cache_key)
+                raise ErrorZoho('La autorización de Zoho caducó o fue revocada. Solicita volver a conectar el buzón.', codigo='autorizacion')
+            if codigo == 429:
+                raise ErrorZoho('Zoho limitó temporalmente las consultas. Espera un minuto antes de reintentar.', codigo='limite')
+            if 400 <= codigo < 500:
+                raise ErrorZoho('Zoho rechazó la operación. Revisa los permisos o el correo original antes de reintentar.')
+            if not 200 <= respuesta.status_code < 300 or not 200 <= codigo < 300:
                 raise ValueError
             return payload['data']
-        except (ValueError, TypeError, KeyError):
+        except (ValueError, TypeError, KeyError, AttributeError):
             if metodo == 'POST' and 200 <= respuesta.status_code < 300:
                 raise EnvioIncierto('La respuesta de Zoho no permitió confirmar el envío. Revisa Enviados en Zoho.') from None
             raise ErrorZoho('Zoho rechazó la operación. Revisa los permisos y la conexión del buzón.') from None

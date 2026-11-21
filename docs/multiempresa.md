@@ -176,3 +176,5 @@ python manage.py test esquema_multiempresa.selenium_suite --settings=esquema_mul
 ## Cuenta exclusiva de contacto
 
 El acceso `contacto@smartstockchile.cl` tiene un panel de atención separado del equipo técnico y de las empresas. La migración `0007_contacto_y_bandeja` prepara su rol y las tablas centrales; no crea usuarios ni contraseñas. Consulta [Cuenta de contacto y conexión de Zoho](contacto-zoho.md) para habilitar la cuenta y conectar el buzón por HTTPS.
+
+La conexión de contacto se configura también desde **Cuenta de contacto → Conectar Zoho Mail**, exclusiva del superusuario. Actualiza dependencias y aplica `empresas.0008_conexion_buzon_contacto` en la central. La autorización queda cifrada; las empresas conservan sus 46 tablas. La bandeja añade Enviados, contadores por vista y diagnósticos de conexión.

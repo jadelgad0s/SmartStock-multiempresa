@@ -4,6 +4,22 @@ from .forms import FormularioPanel
 from .models import MensajeContacto
 
 
+class ConexionZohoForm(FormularioPanel, forms.Form):
+    centro = forms.ChoiceField(label='Centro de datos de Zoho', choices=[
+        ('com', 'Estados Unidos (.com)'), ('eu', 'Europa (.eu)'), ('in', 'India (.in)'),
+        ('com.au', 'Australia (.com.au)'), ('jp', 'Japón (.jp)')])
+    client_id = forms.CharField(label='Client ID', max_length=300, widget=forms.TextInput(attrs={'autocomplete': 'off'}))
+    client_secret = forms.CharField(label='Client Secret', max_length=500,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
+    codigo = forms.CharField(label='Código de autorización de Zoho', max_length=2048,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+        help_text='Genera un código nuevo en Self Client. No es la contraseña del correo.')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.estilizar()
+
+
 class SeguimientoForm(FormularioPanel, forms.ModelForm):
     version = forms.IntegerField(min_value=0, widget=forms.HiddenInput)
 

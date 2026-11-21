@@ -39,17 +39,17 @@ def importar_fila(cuenta, fila):
     return nuevo
 
 
-def sincronizar_buzon(*, anteriores=False):
+def sincronizar_buzon(*, anteriores=False, forzar=False, cliente=None):
     buzon, _ = BuzonContacto.objects.using('central').get_or_create(pk=1)
     ahora, token = timezone.now(), uuid4()
-    if not anteriores and buzon.ultima_consulta and buzon.ultima_consulta > ahora - timedelta(seconds=30):
+    if not forzar and not anteriores and buzon.ultima_consulta and buzon.ultima_consulta > ahora - timedelta(seconds=30):
         return 0
     disponibles = BuzonContacto.objects.using('central').filter(pk=1).filter(
         Q(bloqueo__isnull=True) | Q(iniciado_en__lt=ahora - timedelta(minutes=3)))
     if not disponibles.update(bloqueo=token, iniciado_en=ahora):
-        raise ErrorZoho('La bandeja ya se está actualizando. Espera un momento.')
+        raise ErrorZoho('La bandeja ya se está actualizando. Espera un momento.', codigo='ocupado')
     try:
-        cliente = ClienteZoho()
+        cliente = cliente or ClienteZoho()
         inicio = buzon.siguiente_pagina if anteriores else 1
         if anteriores and buzon.historial_completo:
             return 0
@@ -68,7 +68,7 @@ def sincronizar_buzon(*, anteriores=False):
                 completo = buzon.historial_completo or len(filas) < 100
             BuzonContacto.objects.using('central').filter(pk=1, bloqueo=token).update(
                 cuenta_zoho=cuenta, ultima_consulta=ahora, siguiente_pagina=siguiente,
-                historial_completo=completo)
+                historial_completo=completo, conexion_estado='conectado', ultimo_error='', comprobado_en=timezone.now())
             destinatario = Usuario.objects.using('central').filter(
                 email=CORREO_CONTACTO, rol__codigo=CONTACTO, rol__activo=True,
                 is_staff=True, is_superuser=False, activo=True).first()
@@ -78,6 +78,11 @@ def sincronizar_buzon(*, anteriores=False):
                     mensaje=f'{nuevos} correo(s) incorporado(s) a la bandeja de contacto.',
                     link=reverse('contacto_bandeja', urlconf='esquema_multiempresa.urls_central'))
         return nuevos
+    except ErrorZoho as error:
+        BuzonContacto.objects.using('central').filter(pk=1, bloqueo=token).update(
+            conexion_estado='pendiente' if error.codigo == 'sin_configuracion' else 'error',
+            ultimo_error=str(error)[:400], comprobado_en=timezone.now())
+        raise
     finally:
         BuzonContacto.objects.using('central').filter(pk=1, bloqueo=token).update(bloqueo=None, iniciado_en=None)
 

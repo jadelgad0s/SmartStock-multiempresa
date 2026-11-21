@@ -1,5 +1,5 @@
 {% extends 'contacto/base.html' %}
-{% block acciones %}<a href="{% url 'contacto_bandeja' %}" class="btn btn-outline-secondary">Volver a la bandeja</a>{% endblock %}
+{% block acciones %}<div class="d-flex gap-2 flex-wrap"><a href="{% url 'contacto_bandeja' %}" class="btn btn-outline-secondary">Volver a la bandeja</a><a href="#contacto-responder" class="btn btn-primary">Responder</a></div>{% endblock %}
 {% block panel_content %}
 <div class="ss-contacto-detalle">
   <div class="ss-contacto-principal">
@@ -10,7 +10,7 @@
       {% if mensaje.tiene_adjuntos %}<p class="ss-contacto-adjuntos"><i class="fa-solid fa-paperclip me-1" aria-hidden="true"></i>Este correo contiene adjuntos. Puedes consultarlos en Zoho Mail.</p>{% endif %}
       <div class="d-flex gap-2 flex-wrap mt-3"><a class="btn btn-sm btn-outline-secondary" href="{{ zoho_url }}" target="_blank" rel="noopener noreferrer">Abrir Zoho Mail</a><form method="post" data-ss-loading="Actualizando lectura…">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" name="accion" value="no_leido">Marcar como no leído</button></form></div>
     </article>
-    <section class="card ss-contacto-tarjeta" aria-labelledby="contacto-respuesta-titulo">
+    <section id="contacto-responder" class="card ss-contacto-tarjeta ss-contacto-responder" aria-labelledby="contacto-respuesta-titulo">
       <h2 id="contacto-respuesta-titulo">Responder consulta</h2>
       <p class="ss-contacto-ayuda">Desde contacto@smartstockchile.cl para {{ mensaje.remitente_email|default:'remitente no disponible' }}.</p>
       {% if not zoho_configurado %}<p class="alert alert-info">Puedes preparar un borrador. El envío estará disponible al conectar Zoho.</p>{% endif %}

@@ -37,5 +37,23 @@
 .ss-contacto-adjuntos { margin-top:1.5rem; font-size:.875rem; color:var(--slate-600); }
 .ss-contacto-notas article { border-top:1px solid var(--slate-200); margin-top:1rem; padding-top:1rem; }
 .ss-contacto-notas p { margin:.3rem 0 0; }
+.ss-menu-contador { margin-left:auto; min-width:1.6rem; padding:.1rem .4rem; border-radius:1rem; font-size:.7rem; text-align:center; background:var(--slate-100); font-variant-numeric:tabular-nums; }
+.ss-contacto-herramientas { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+.ss-contacto-herramientas .ss-contacto-busqueda { margin-bottom:0; width:min(100%,600px); }
+.ss-contacto-resultados { color:var(--slate-600); font-size:.875rem; margin:0 0 .6rem; white-space:nowrap; }
+.ss-contacto-primera { padding:2rem; text-align:center; }
+.ss-contacto-primera h2 { font-size:1rem; margin:1rem 0 .5rem; }
+.ss-contacto-primera p { margin:0; font-size:.875rem; color:var(--slate-600); }
+.ss-contacto-conexion { scroll-margin-top:1rem; }
+.ss-contacto-conexion p { max-width:850px; }
+.ss-contacto-ayuda summary { cursor:pointer; width:fit-content; }
+.ss-contacto-ayuda p { max-width:800px; margin:.75rem 0; }
+.ss-contacto-sync { padding:.65rem 0; align-items:center; }
+.ss-contacto-sync[data-error=true] { color:var(--bs-danger-text-emphasis,#991b1b); }
+#contacto-actualizar { background:var(--teal-600); border-color:var(--teal-600); }
+.ss-contacto-tarjeta .btn:disabled { background:var(--slate-100); border-color:var(--slate-200); color:var(--slate-600); opacity:1; }
+.ss-contacto-tarjeta .btn-outline-primary { color:var(--teal-600); border-color:var(--teal-600); }
+.ss-contacto-responder { scroll-margin-top:1rem; }
+@media(max-width:700px) { .ss-contacto-herramientas { display:block; } .ss-contacto-herramientas .ss-contacto-busqueda { width:100%; } .ss-contacto-resultados { margin-bottom:.75rem; } }
 @media(max-width:1100px) { .ss-contacto-detalle { grid-template-columns:minmax(0,1fr); } .ss-contacto-seguimiento { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; } }
 @media(max-width:600px) { .ss-contacto-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; } .ss-contacto-seguimiento { display:block; } .ss-contacto-fila { padding:1rem; } .ss-contacto-cabecera time { width:100%; } .ss-contacto-tarjeta { padding:1rem; } }

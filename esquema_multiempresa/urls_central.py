@@ -6,7 +6,7 @@ from apps.usuarios.views_recuperacion import (
     RecuperacionEnviadaView, EstablecerNuevaClaveView, ClaveActualizadaView,
 )
 from .admin_central import sitio_sistema
-from .contacto import bandeja, cuenta_contacto, detalle_mensaje, mi_cuenta_contacto, sincronizar
+from .contacto import bandeja, conexion_contacto, cuenta_contacto, detalle_mensaje, mi_cuenta_contacto, sincronizar
 from .login import LoginCentralView, login_central
 from .recuperacion_central import SolicitarRecuperacionCentralView
 from .consultas_sistema import consulta_sistema, inventario_sistema
@@ -40,6 +40,7 @@ urlpatterns = [
     path('sistema/empresas/<slug:codigo>/usuarios/<int:usuario_id>/', editar_usuario_empresa, name='sistema_editar_usuario_empresa'),
     path('sistema/cuentas/', cuentas_sistema, name='sistema_cuentas'),
     path('sistema/contacto/cuenta/', cuenta_contacto, name='sistema_cuenta_contacto'),
+    path('sistema/contacto/conexion/', conexion_contacto, name='sistema_conexion_contacto'),
     path('sistema/cuentas/nueva/', editar_cuenta_tecnica, name='sistema_nueva_cuenta'),
     path('sistema/cuentas/<int:usuario_id>/', editar_cuenta_tecnica, name='sistema_editar_cuenta'),
     path('sistema/mi-cuenta/', mi_cuenta, name='sistema_mi_cuenta'),

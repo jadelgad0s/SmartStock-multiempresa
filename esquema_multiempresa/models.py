@@ -85,7 +85,7 @@ class NotificacionSistema(models.Model):
 
 
 class BuzonContacto(models.Model):
-    """Estado de consulta del único buzón; nunca contiene credenciales."""
+    """Estado del único buzón y autorización cifrada con la clave del servidor."""
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     cuenta_zoho = models.CharField(max_length=40, blank=True)
     ultima_consulta = models.DateTimeField(null=True, blank=True)
@@ -93,6 +93,11 @@ class BuzonContacto(models.Model):
     historial_completo = models.BooleanField(default=False)
     bloqueo = models.UUIDField(null=True, blank=True)
     iniciado_en = models.DateTimeField(null=True, blank=True)
+    credenciales_cifradas = models.TextField(blank=True, editable=False)
+    conexion_estado = models.CharField(max_length=20, default='pendiente',
+        choices=[('pendiente', 'Pendiente de conexión'), ('conectado', 'Conexión comprobada'), ('error', 'Requiere revisión')])
+    ultimo_error = models.CharField(max_length=400, blank=True)
+    comprobado_en = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'buzon_contacto'
