@@ -421,7 +421,9 @@ class SoporteEnChromeTests(StaticLiveServerTestCase):
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
         self.pulsar(navegador, '.ss-menu-toggle')
         espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
-        self.assertTrue(navegador.find_element(By.CSS_SELECTOR, '.ss-sidebar-links a[href*="/catalogo/"]').is_displayed())
+        # La clase cambia al iniciar la animación; esperar a que el enlace
+        # esté visible comprueba el menú abierto, no un fotograma intermedio.
+        espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.ss-sidebar-links a[href*="/catalogo/"]')))
         self.assertFalse(navegador.find_elements(By.LINK_TEXT, 'Movimientos'))
         self.pulsar(navegador, '.ss-sidebar-close')
 
