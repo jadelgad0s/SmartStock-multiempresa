@@ -21,6 +21,8 @@ python manage.py runserver 127.0.0.1:8000 --settings=esquema_multiempresa.web
 4. Una vez aprobada, el técnico vuelve a abrir la atención. Aparecen las consultas autorizadas, un aviso con la empresa y el vencimiento, y los enlaces correspondientes en el menú. Los permisos se comprueban en el servidor en cada petición.
 5. El cliente puede **Revocar acceso ahora** o cerrar la atención. El técnico puede retirar su solicitud o finalizarla con un resultado. Reasignar la atención, cerrarla o suspender la empresa revoca sus accesos; reabrir el servicio o volver a asignar el mismo técnico no los recupera. El vencimiento no necesita una tarea programada.
 
+Cada atención mantiene una sola autorización efectiva. Autorizar una solicitud nueva reemplaza y revoca los permisos anteriores de esa atención; revocar la nueva no reactiva una autorización previa. Rechazar una renovación conserva únicamente el permiso anterior hasta su propio vencimiento o revocación.
+
 En desarrollo, un administrador de La Fragua abre `http://la-fragua.localhost:8000/soporte/`. Punto Motor utiliza `http://punto-motor.localhost:8000/soporte/`. Cada página utiliza la empresa del host y la sesión; un ID enviado por formulario no permite aprobar solicitudes de otra empresa.
 
 ## Permisos separados

@@ -62,6 +62,7 @@ def decidir_acceso(request, acceso_id, accion):
     with transaction.atomic(using='central'):
         atencion = AtencionSoporte.objects.using('central').select_for_update(of=('self',)).select_related('empresa', 'tecnico', 'tecnico__rol').get(pk=base.atencion_id)
         acceso = AccesoSoporte.objects.using('central').select_for_update().get(pk=acceso_id)
+        reemplazados = 0
         if accion == 'revocar':
             if acceso.estado not in ('pendiente', 'aprobado'):
                 raise ValidationError('Este acceso ya no puede revocarse.')
@@ -79,8 +80,15 @@ def decidir_acceso(request, acceso_id, accion):
             acceso.aprobador_id, acceso.aprobador_email = request.user.pk, request.user.email
             if accion == 'aprobar':
                 acceso.expira_en = acceso.decidido_en + timedelta(minutes=acceso.minutos)
+                # Una atención mantiene una sola autorización efectiva. Así,
+                # revocar la actual no deja lecturas habilitadas por una vieja.
+                reemplazados = AccesoSoporte.objects.using('central').filter(
+                    atencion=atencion, estado='aprobado').exclude(pk=acceso.pk).update(estado='revocado')
         acceso.save(using='central')
-        auditar_soporte(request, atencion, 'UPDATE', f'Acceso {acceso.pk}: {acceso.estado}; permisos: {", ".join(acceso.alcances)}')
+        detalle = f'Acceso {acceso.pk}: {acceso.estado}; permisos: {", ".join(acceso.alcances)}'
+        if reemplazados:
+            detalle += f'; {reemplazados} autorizaciones anteriores de esta atención revocadas'
+        auditar_soporte(request, atencion, 'UPDATE', detalle)
         transaction.on_commit(lambda: avisar_tecnico(atencion, 'Permisos de soporte actualizados',
             f'{atencion.empresa.nombre}: solicitud {acceso.get_estado_display().lower()}.'), using='central', robust=True)
     return acceso

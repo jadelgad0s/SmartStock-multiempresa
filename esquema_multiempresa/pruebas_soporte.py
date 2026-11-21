@@ -154,6 +154,18 @@ class PermisosSoporteTests(TestCase):
         acceso.refresh_from_db(using='central')
         self.assertEqual(acceso.expira_en, vencimiento)
 
+    def test_renovar_reemplaza_permisos_previos_y_revocar_no_recupera_una_autorizacion_anterior(self):
+        anterior = self.conceder()
+        actual = self.solicitar(anterior.atencion, alcances=['bodegas'])
+        self.aprobar(actual)
+        anterior.refresh_from_db(using='central')
+        self.assertEqual(anterior.estado, 'revocado')
+        self.assertEqual(self.consultar(actual).status_code, 403)
+        self.assertEqual(self.consultar(actual, 'bodegas').status_code, 200)
+        self.assertEqual(self.post(self.cliente_fragua, '/soporte/', {'accion': 'revocar', 'acceso': str(actual.pk)}).status_code, 302)
+        self.assertEqual(self.consultar(anterior).status_code, 403)
+        self.assertEqual(self.consultar(actual, 'bodegas').status_code, 403)
+
     def test_otra_empresa_operador_o_usuario_central_no_pueden_aprobar(self):
         acceso = self.solicitar(self.caso())
         self.assertEqual(self.post(self.cliente_motor, '/soporte/', {'accion': 'aprobar', 'acceso': str(acceso.pk)}).status_code, 403)
