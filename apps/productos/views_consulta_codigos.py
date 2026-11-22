@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
 from apps.core.responses import error_response, success_response
+from apps.core.empresa import empresa_actual
 from apps.usuarios.permissions import TienePermiso
 from .consulta_codigos import consultar_open_food_facts, interpretar_codigo, procedencia, productos_registrados
 
@@ -30,7 +31,6 @@ def consultar_codigo(request):
     if not consulta.is_valid():
         return error_response(mensaje='Escribe o escanea un código válido.', errores=consulta.errors)
     codigo = consulta.validated_data['codigo']
-    gtin, _ = interpretar_codigo(codigo)
     encontrados = productos_registrados(codigo)
     if len(encontrados) > 1:
         return error_response(mensaje='Este código coincide con más de un producto. Revisa sus SKU y códigos asociados.', status_code=409)
@@ -39,6 +39,13 @@ def consultar_codigo(request):
         return success_response(data={'estado': 'existente', 'codigo': codigo, 'producto': {
             'id': p.pk, 'sku': p.sku, 'nombre': p.nombre, 'activo': p.activo,
         }}, mensaje='Este producto ya está registrado en SmartStock.')
+    if empresa_actual() is not None:
+        return success_response(data={'estado': 'no_encontrado', 'codigo': codigo}, mensaje=(
+            'Este código no está registrado en el catálogo de tu empresa. '
+            'Completa los datos y pulsa Crear producto para guardarlo. '
+            'Si el producto ya existe con otro código, abre su ficha para añadir este código.'
+        ))
+    gtin, _ = interpretar_codigo(codigo)
     if not gtin:
         return success_response(data={'estado': 'no_compatible', 'codigo': codigo}, mensaje=(
             'No encontramos este código en SmartStock. La consulta externa admite EAN/UPC válidos y QR GS1 Digital Link. Puedes completar el producto manualmente.'

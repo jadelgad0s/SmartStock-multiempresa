@@ -9,10 +9,11 @@ from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from django.db.models import Q
+from django.conf import settings
 from django.utils import timezone
 from django.utils.html import strip_tags
 
-from apps.core.empresa import transaccion_operativa
+from apps.core.empresa import empresa_actual, transaccion_operativa
 from .models import CodigoBarra, CupoConsultaExterna, FichaProductoExterna, Producto
 
 PROVEEDOR = 'open_food_facts'
@@ -41,7 +42,11 @@ def interpretar_codigo(codigo):
         if url.scheme not in ('https', 'http') or not url.hostname or url.username or url.password:
             return None, None
         # QR internos: mismo buscador del catálogo, resuelto por SKU exacto.
-        if url.hostname.lower() in ('smartstockchile.cl', 'www.smartstockchile.cl', 'localhost', '127.0.0.1') and url.path == '/productos/':
+        hosts_internos = {'smartstockchile.cl', 'www.smartstockchile.cl', 'localhost', '127.0.0.1'}
+        empresa = empresa_actual()
+        if empresa is not None:
+            hosts_internos.add(f'{empresa.codigo}.{getattr(settings, "DOMINIO_EMPRESAS", "localhost")}')
+        if url.hostname.lower() in hosts_internos and url.path == '/productos/':
             params = parse_qs(url.query)
             valores = params.get('sku', params.get('q', []))
             if len(valores) == 1 and re.fullmatch(r'[A-Za-z0-9_-]{1,50}', valores[0]):

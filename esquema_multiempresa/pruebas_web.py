@@ -2,6 +2,8 @@
 from io import StringIO
 from tempfile import TemporaryDirectory
 from uuid import uuid4
+from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.cache import cache
 from django.core.files.base import ContentFile
@@ -11,11 +13,12 @@ from django.core.management.base import CommandError
 from django.db import connections
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.core.empresa import empresa_actual, transaccion_operativa, usar_empresa
 from apps.core.models import Auditoria
-from apps.productos.models import Bodega, Producto, StockBodega
+from apps.productos.models import Bodega, CodigoBarra, CupoConsultaExterna, FichaProductoExterna, Producto, StockBodega
 from apps.usuarios.models import Rol, Usuario
 from apps.usuarios.tokens import token_recuperacion
 from .models import Empresa
@@ -122,6 +125,77 @@ class AccesoPorEmpresaTests(TestCase):
         self.assertIn('Otra empresa', marca)
         self.assertNotIn('branding/empresas/', marca)
         self.assertIn('branding/smartstock-mark.png', marca)
+
+    @patch('apps.productos.views_consulta_codigos.consultar_open_food_facts')
+    def test_consulta_de_empresa_solo_busca_su_catalogo_sin_red_ni_altas(self, proveedor):
+        for empresa in (self.fragua, self.motor):
+            cliente, _ = self.ingresar(empresa)
+            pantalla = cliente.get('/productos/')
+            self.assertNotContains(pantalla, 'Open Food Facts')
+            self.assertContains(pantalla, 'Busca únicamente entre los productos de tu empresa.')
+            for codigo in ('3017620422003', 'TORNILLO-M8', 'https://marca.example/01/03017620422003'):
+                respuesta = cliente.get('/api/v1/productos/consultar-codigo/', {'codigo': codigo})
+                self.assertEqual(respuesta.status_code, 200, respuesta.data)
+                self.assertEqual(respuesta.data['data'], {'estado': 'no_encontrado', 'codigo': codigo})
+            with usar_empresa(empresa):
+                self.assertEqual(Producto.objects.count(), 2)
+                self.assertFalse(CodigoBarra.objects.exists())
+                self.assertFalse(FichaProductoExterna.objects.exists())
+                self.assertFalse(CupoConsultaExterna.objects.exists())
+        proveedor.assert_not_called()
+
+    @patch('apps.productos.views_consulta_codigos.consultar_open_food_facts')
+    def test_busca_sku_codigos_secundarios_gtin_y_qr_de_la_empresa_incluidos_inactivos(self, proveedor):
+        for empresa in (self.fragua, self.motor):
+            with usar_empresa(empresa):
+                CodigoBarra.objects.create(producto_id=10, codigo='3017620422003', es_principal=True)
+                CodigoBarra.objects.create(producto_id=10, codigo='CODIGO-SECUNDARIO')
+                Producto.objects.filter(pk=11).update(activo=False)
+                CodigoBarra.objects.create(producto_id=11, codigo='INACTIVO-11')
+            cliente, _ = self.ingresar(empresa)
+            for codigo in ('qa-uno', '3017620422003', '03017620422003', 'CODIGO-SECUNDARIO',
+                           f'http://{empresa.codigo}.localhost:8000/productos/?sku=QA-UNO'):
+                respuesta = cliente.get('/api/v1/productos/consultar-codigo/', {'codigo': codigo})
+                self.assertEqual(respuesta.data['data']['producto']['nombre'], empresa.nombre)
+            inactivo = cliente.get('/api/v1/productos/consultar-codigo/', {'codigo': 'INACTIVO-11'})
+            self.assertEqual(inactivo.data['data']['producto']['activo'], False)
+            otra = self.motor if empresa.pk == self.fragua.pk else self.fragua
+            qr_ajeno = cliente.get('/api/v1/productos/consultar-codigo/', {
+                'codigo': f'http://{otra.codigo}.localhost:8000/productos/?sku=QA-UNO'})
+            self.assertEqual(qr_ajeno.data['data']['estado'], 'no_encontrado')
+        proveedor.assert_not_called()
+
+    def test_codigo_nuevo_se_guarda_al_confirmar_y_no_permite_duplicados_en_la_empresa(self):
+        for empresa in (self.fragua, self.motor):
+            cliente, _ = self.ingresar(empresa)
+            codigo = 'HERRAMIENTA-M8'
+            resultado = cliente.get('/api/v1/productos/consultar-codigo/', {'codigo': codigo})
+            self.assertEqual(resultado.data['data']['estado'], 'no_encontrado')
+            datos = {'sku': 'FER-M8', 'nombre': 'Tornillo M8', 'precio_referencia': '150',
+                     'codigos_barra': [{'codigo': codigo, 'tipo': 'BARRA', 'es_principal': True}]}
+            creado = cliente.post('/api/v1/productos/', datos, format='json')
+            self.assertEqual(creado.status_code, 201, creado.data)
+            repetido = cliente.post('/api/v1/productos/', {**datos, 'sku': 'OTRO-M8'}, format='json')
+            self.assertEqual(repetido.status_code, 400, repetido.data)
+            with usar_empresa(empresa):
+                self.assertEqual(Producto.objects.count(), 3)
+                self.assertIsNone(Producto.objects.get(sku='FER-M8').ficha_externa_id)
+                self.assertEqual(CodigoBarra.objects.get(codigo=codigo).producto.sku, 'FER-M8')
+
+    @patch('apps.productos.views_consulta_codigos.consultar_open_food_facts')
+    def test_cache_externa_anterior_no_autocompleta_ni_se_asocia_a_altas_de_empresa(self, proveedor):
+        cliente, _ = self.ingresar(self.fragua)
+        with usar_empresa(self.fragua):
+            ficha = FichaProductoExterna.objects.create(gtin='03017620422003',
+                datos={'nombre': 'Ficha pública anterior'}, vence=timezone.now() + timedelta(days=1))
+        resultado = cliente.get('/api/v1/productos/consultar-codigo/', {'codigo': '3017620422003'})
+        self.assertEqual(resultado.data['data']['estado'], 'no_encontrado')
+        respuesta = cliente.post('/api/v1/productos/', {'sku': 'NUEVO', 'nombre': 'Alta manual',
+            'precio_referencia': '100', 'ficha_externa_id': ficha.pk,
+            'codigos_barra': [{'codigo': '3017620422003', 'tipo': 'BARRA', 'es_principal': True}]}, format='json')
+        self.assertEqual(respuesta.status_code, 400, respuesta.data)
+        self.assertIn('ficha_externa_id', respuesta.data['errores'])
+        proveedor.assert_not_called()
 
     def test_un_usuario_exclusivo_ingresa_solo_en_su_empresa(self):
         with usar_empresa(self.fragua):
