@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from apps.core.models import Auditoria
 from apps.core.registro_auditoria import crear_evento
-from apps.usuarios.models import Usuario
+from apps.usuarios.models import Rol, Usuario
 from . import pruebas_soporte as soporte
 from .models import AccesoSoporte, AtencionSoporte
 
@@ -201,6 +201,43 @@ class AuditoriaInvestigacionTests(TestCase):
         self.assertEqual(self.post(self.raiz_web, f'/sistema/auditoria/{evento.pk}/', {'descripcion': 'CAMBIO'}).status_code, 405)
         evento.refresh_from_db(using='central')
         self.assertNotEqual(evento.descripcion, 'CAMBIO')
+
+    def test_desactivar_y_reactivar_empresa_tienen_accion_y_titulo_concretos(self):
+        ruta = '/sistema/empresas/la-fragua/editar/'
+        datos = {'nombre': self.fragua.nombre, 'codigo': self.fragua.codigo,
+                 'contacto_email': self.fragua.contacto_email}
+        for activa, accion, titulo in ((False, 'DEACTIVATE', 'Empresa desactivada'),
+                                       (True, 'REACTIVATE', 'Empresa reactivada')):
+            respuesta = self.post(self.raiz_web, ruta, {**datos, **({'activa': 'on'} if activa else {})})
+            self.assertEqual(respuesta.status_code, 302)
+            evento = Auditoria.objects.using('central').filter(modelo='Empresa', accion=accion).latest('id')
+            self.assertEqual(evento.operacion, titulo)
+            self.assertEqual(evento.cambios['activa'], {'antes': not activa, 'despues': activa})
+            self.assertContains(self.raiz_web.get(f'/sistema/auditoria/{evento.pk}/'), titulo)
+
+    def test_cambiar_perfil_del_equipo_identifica_el_cambio_y_conserva_ambos_valores(self):
+        respuesta = self.post(self.raiz_web, f'/sistema/cuentas/{self.soporte.pk}/', {
+            'nombres': self.soporte.nombres, 'apellidos': 'De prueba', 'email': self.soporte.email,
+            'activo': 'on', 'perfil': 'administrador_plataforma'})
+        self.assertEqual(respuesta.status_code, 302)
+        evento = Auditoria.objects.using('central').filter(modelo='Usuario', objeto_id=str(self.soporte.pk)).latest('id')
+        self.assertEqual(evento.operacion, 'Perfil de acceso cambiado')
+        self.assertEqual(evento.cambios['perfil'], {'antes': 'Soporte técnico', 'despues': 'Administrador de plataforma'})
+        self.assertEqual(evento.resultado, 'completada')
+
+    def test_cambiar_rol_de_empresa_identifica_el_cambio_sin_cruzar_identidades(self):
+        acceso = self.conceder(tecnico=self.plataforma, alcances=['usuarios', 'gestionar_usuarios'])
+        cliente = self.cliente(self.plataforma)
+        rol = Rol.objects.using('ferreteria').get(codigo='encargado_bodega')
+        respuesta = self.post(cliente, f'/sistema/empresas/la-fragua/usuarios/91/?atencion={acceso.atencion_id}', {
+            'nombres': 'Operador', 'apellidos': 'De prueba', 'activo': 'on', 'rol': str(rol.pk)})
+        self.assertEqual(respuesta.status_code, 302)
+        evento = Auditoria.objects.using('ferreteria').filter(modelo='Usuario', objeto_id='91').latest('id')
+        self.assertEqual(evento.operacion, 'Rol de usuario cambiado')
+        self.assertEqual(evento.cambios['perfil'], {'antes': 'Operador', 'despues': rol.nombre})
+        self.assertEqual(evento.actor['email'], self.plataforma.email)
+        self.assertIsNone(evento.usuario_id)
+        self.assertFalse(Auditoria.objects.using('repuestos').filter(objeto_id='91').exists())
 
     def test_lista_25_no_hace_consultas_por_fila_ni_lee_otras_bases(self):
         for _ in range(26):

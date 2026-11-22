@@ -220,7 +220,8 @@ def editar_empresa(request, codigo=None):
                     accion = 'REACTIVATE' if guardada.activa else 'DEACTIVATE'
                 auditar_gestion(request, 'central', accion, 'Empresa', guardada,
                     f'Empresa guardada · {guardada.nombre}',
-                    operacion='Empresa creada' if nueva else 'Ficha de empresa actualizada',
+                    operacion={'CREATE': 'Empresa creada', 'DEACTIVATE': 'Empresa desactivada',
+                               'REACTIVATE': 'Empresa reactivada'}.get(accion, 'Ficha de empresa actualizada'),
                     cambios=diferencias(antes, estado_auditable(guardada)))
         except IntegrityError:
             formulario.add_error(None, 'El RUT, el código o la base ya están vinculados a otra empresa. Revisa los datos.')
@@ -311,7 +312,6 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
         raise PermissionDenied
     opciones = {'alias': alias} if empresa else {'actor': request.user}
     clase = UsuarioEmpresaForm if empresa else CuentaTecnicaForm
-    estaba_activo = usuario.activo
     era_admin_empresa = bool(empresa and usuario.pk and usuario.activo and usuario.rol_id and usuario.rol.codigo == 'administrador')
     with usar_empresa(empresa):
         iniciales = {}
@@ -333,14 +333,18 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
                         auditar_soporte(request, request._atencion_soporte, 'UPDATE', 'Gestión autorizada de una cuenta de empresa')
                     guardado = formulario.save()
                     accion = 'CREATE' if es_nueva else 'UPDATE'
-                    if not es_nueva and estaba_activo != guardado.activo:
+                    if not es_nueva and antes.get('activo') != guardado.activo:
                         accion = 'REACTIVATE' if guardado.activo else 'DEACTIVATE'
                     detalle = f'Cuenta guardada · {guardado.email}'
                     if empresa is None:
                         detalle += f' · Perfil: {nombre_perfil_personal(guardado)}'
+                    cambios = diferencias(antes, estado_auditable(guardado))
+                    operacion = {'CREATE': 'Cuenta creada', 'DEACTIVATE': 'Cuenta desactivada',
+                                 'REACTIVATE': 'Cuenta reactivada'}.get(accion, 'Cuenta actualizada')
+                    if accion == 'UPDATE' and 'perfil' in cambios:
+                        operacion = 'Rol de usuario cambiado' if empresa else 'Perfil de acceso cambiado'
                     auditar_gestion(request, alias, accion, 'Usuario', guardado, detalle,
-                        operacion={'CREATE': 'Cuenta creada', 'DEACTIVATE': 'Cuenta desactivada', 'REACTIVATE': 'Cuenta reactivada'}.get(accion, 'Cuenta actualizada'),
-                        cambios=diferencias(antes, estado_auditable(guardado)))
+                        operacion=operacion, cambios=cambios)
             except IntegrityError:
                 formulario.add_error(None, 'Ya existe una cuenta con esos datos. Revisa el correo electrónico.')
             except ValidationError:
