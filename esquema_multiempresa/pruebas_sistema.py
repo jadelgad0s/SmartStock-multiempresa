@@ -132,6 +132,8 @@ class PanelSmartStockTests(TestCase):
                                             ('punto-motor', self.motor.nombre, self.fragua.nombre, 4)):
             panel = self.cliente.get('/sistema/inventario/', {'empresa': codigo})
             self.assertEqual(panel.status_code, 200)
+            self.assertContains(panel, 'branding/smartstock-mark.png')
+            self.assertNotContains(panel, 'branding/empresas/')
             self.assertEqual(panel.context['dashboard']['kpi_stock'], stock)
             catalogo = self.cliente.get('/sistema/catalogo/', {'empresa': codigo})
             self.assertEqual(catalogo.status_code, 200)
