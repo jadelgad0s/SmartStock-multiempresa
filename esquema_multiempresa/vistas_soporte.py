@@ -74,18 +74,21 @@ def detalle_atencion(request, atencion_id):
                     actual.estado, actual.cerrada_en, actual.resolucion = 'cerrada', timezone.now(), cierre.cleaned_data['resolucion']
                     actual.save(using='central')
                     revocar_accesos(actual)
-                    auditar_soporte(request, actual, 'UPDATE', 'Atención cerrada: ' + actual.resolucion)
+                    auditar_soporte(request, actual, 'UPDATE', 'Atención cerrada: ' + actual.resolucion,
+                        operacion='Atención de soporte cerrada', cambios={'estado': {'antes': 'abierta', 'despues': 'cerrada'}})
             elif accion == 'asignar' and es_administrador_plataforma(request.user) and asignar.is_valid():
                 with transaction.atomic(using='central'):
                     actual = AtencionSoporte.objects.using('central').select_for_update().get(pk=atencion.pk)
                     if actual.estado != 'abierta':
                         raise ValidationError('Esta atención ya está cerrada.')
                     nuevo_tecnico = asignar.cleaned_data['tecnico']
+                    anterior = actual.tecnico_id
                     if actual.tecnico_id != getattr(nuevo_tecnico, 'pk', None):
                         revocar_accesos(actual)
                     actual.tecnico = asignar.cleaned_data['tecnico']
                     actual.save(using='central', update_fields=['tecnico'])
-                    auditar_soporte(request, actual, 'UPDATE', 'Responsable de la atención actualizado')
+                    auditar_soporte(request, actual, 'UPDATE', 'Responsable de la atención actualizado',
+                        cambios={'tecnico': {'antes': anterior, 'despues': actual.tecnico_id}})
                     avisar_tecnico(actual, 'Atención asignada', actual.asunto)
             elif accion == 'retirar':
                 with transaction.atomic(using='central'):
@@ -95,9 +98,11 @@ def detalle_atencion(request, atencion_id):
                     acceso = get_object_or_404(AccesoSoporte.objects.using('central'), pk=request.POST.get('acceso'), atencion=actual)
                     if acceso.estado not in ('pendiente', 'aprobado'):
                         raise ValidationError('Esta solicitud ya está resuelta.')
+                    anterior = acceso.estado
                     acceso.estado = 'revocado'
                     acceso.save(using='central', update_fields=['estado'])
-                    auditar_soporte(request, actual, 'UPDATE', f'Acceso {acceso.pk} retirado por el equipo')
+                    auditar_soporte(request, actual, 'UPDATE', f'Acceso {acceso.pk} retirado por el equipo',
+                        operacion='Acceso de soporte retirado', cambios={'estado': {'antes': anterior, 'despues': 'revocado'}})
             else:
                 accion = None
             if accion:
@@ -151,8 +156,10 @@ def invitar_administrador(request, codigo):
                 if usuario._state.adding:
                     usuario.set_unusable_password()
                 usuario.save(using=empresa.alias_bd)
-            Auditoria.objects.using('central').create(usuario_id=request.user.pk, accion='CREATE', modelo='Empresa', objeto_id=str(empresa.pk),
-                descripcion=f'Administrador inicial invitado a {empresa.contacto_email}; verificación del contacto confirmada por {request.user.email}')
+            from apps.core.registro_auditoria import crear_evento
+            crear_evento(alias='central', request=request, empresa=empresa, accion='CREATE', modelo='Empresa', objeto_id=empresa.pk,
+                operacion='Cuenta de administrador inicial preparada',
+                descripcion=f'Administrador inicial preparado para {empresa.contacto_email}; verificación del contacto confirmada por {request.user.email}')
             try:
                 enviado = enviar_enlace(request, empresa, usuario)
                 mensaje = 'Invitación enviada al contacto principal.' if enviado else 'Ya se envió un enlace recientemente. Espera dos minutos antes de reintentar.'
@@ -173,7 +180,8 @@ def recuperar_usuario_empresa(request, codigo, usuario_id):
     empresa = empresa_del_panel(codigo, request)
     acceso_para(request, empresa, 'recuperar_acceso')
     usuario = get_object_or_404(Usuario.objects.using(empresa.alias_bd), pk=usuario_id, activo=True, is_superuser=False, is_staff=False)
-    auditar_soporte(request, request._atencion_soporte, 'UPDATE', f'Recuperación solicitada para usuario {usuario.pk}; correo de destino registrado')
+    auditar_soporte(request, request._atencion_soporte, 'UPDATE', f'Recuperación solicitada para usuario {usuario.pk}; correo de destino registrado',
+        operacion='Recuperación de acceso solicitada', resultado='solicitada')
     try:
         enviado = enviar_enlace(request, empresa, usuario)
         mensaje = 'El enlace fue enviado al correo registrado del usuario.' if enviado else 'Ya se solicitó un enlace recientemente. Espera dos minutos.'

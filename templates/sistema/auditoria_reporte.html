@@ -1,0 +1,9 @@
+{% load static %}
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Auditoría · {{ ambito_nombre }}</title><link rel="stylesheet" href="{% static 'css/auditoria_impresion.css' %}"></head><body>
+<header><h1>Auditoría · {{ ambito_nombre }}</h1><p>{{ total }} evento{{ total|pluralize }} · {{ zona_horaria }} · Generado {{ generado|date:'d/m/Y H:i:s' }} por {{ generado_por }}</p>
+<dl>{% for nombre, valor in filtros.items %}<div><dt>{{ nombre }}</dt><dd>{{ valor }}</dd></div>{% endfor %}</dl>
+<button type="button" id="auditoria-imprimir">Imprimir / Guardar como PDF</button></header>
+<table><thead><tr><th>Evento / fecha</th><th>Usuario / empresa</th><th>Acción / resultado</th><th>Descripción</th></tr></thead><tbody>
+{% for e in eventos %}<tr><td>#{{ e.id }}<br>{{ e.fecha }}</td><td>{{ e.usuario }}<br>{{ e.usuario_email }}<br>{{ e.perfil }}<br>{{ e.empresa_nombre }}</td><td>{{ e.operacion }}<br>{{ e.modulo_mostrado }}<br>{{ e.resultado_etiqueta }}</td><td>{{ e.descripcion }}{% if e.atencion_id %}<p>Atención: {{ e.atencion_id }}</p>{% endif %}{% for cambio in e.cambios %}<p>{{ cambio.campo }}: {{ cambio.antes }} → {{ cambio.despues }}</p>{% endfor %}</td></tr>
+{% empty %}<tr><td colspan="4">No hay eventos para estos filtros.</td></tr>{% endfor %}</tbody></table>
+<script src="{% static 'js/auditoria_impresion.js' %}" defer></script></body></html>

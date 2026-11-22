@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.core.models import Auditoria
+from apps.core.registro_auditoria import crear_evento
 from .models import AccesoSoporte, AtencionSoporte, Empresa
 from .permisos import es_administrador_plataforma, es_personal_smartstock
 
@@ -21,7 +21,7 @@ LECTURAS = {
 }
 ALCANCES = {**LECTURAS, 'recuperar_acceso': 'Enviar recuperación al correo actual del usuario',
             'gestionar_usuarios': 'Crear, editar, asignar roles y suspender usuarios de la empresa',
-            'exportar': 'Exportar reportes CSV o PDF'}
+            'exportar': 'Exportar reportes o auditoría CSV / PDF'}
 EXTRAS_GESTION = {'gestionar_usuarios', 'exportar'}
 
 
@@ -37,14 +37,13 @@ def atenciones_visibles(usuario):
     return consulta if es_administrador_plataforma(usuario) else consulta.filter(tecnico_id=usuario.pk)
 
 
-def auditar_soporte(request, atencion, accion, detalle):
-    cliente = getattr(request, 'empresa', None)
+def auditar_soporte(request, atencion, accion, detalle, *, operacion='', cambios=None, resultado='completada'):
     actor = request.user
-    Auditoria.objects.using('central').create(
-        usuario_id=actor.pk if cliente is None else None, accion=accion, modelo='AtencionSoporte', objeto_id=str(atencion.pk),
+    return crear_evento(alias='central', request=request, usuario=actor, atencion=atencion,
+        empresa=atencion.empresa, accion=accion, modelo='AtencionSoporte', objeto_id=str(atencion.pk),
         descripcion=(f'Soporte · {actor.email} · Empresa {atencion.empresa.codigo} · '
                      f'Atención {atencion.pk} · {detalle}')[:2000],
-        ip_address=request.META.get('REMOTE_ADDR'))
+        operacion=operacion or detalle.split(':')[0][:120], cambios=cambios, resultado=resultado)
 
 
 def accesos_vigentes(usuario, empresa=None):

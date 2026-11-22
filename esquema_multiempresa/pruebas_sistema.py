@@ -869,7 +869,8 @@ class MigracionFichaEmpresaTests(TransactionTestCase):
             self.assertIsNotNone(nueva.creada_en)
             self.assertIsNotNone(nueva.actualizada_en)
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0009_soporte_temporal')])
+            restaurar = MigrationExecutor(conexion)
+            restaurar.migrate(restaurar.loader.graph.leaf_nodes())
 
 
 class MigracionPerfilesEquipoTests(TransactionTestCase):
@@ -919,7 +920,8 @@ class MigracionPerfilesEquipoTests(TransactionTestCase):
                 self.assertEqual(list(Usuario.objects.using(alias).values('id', 'email', 'password', 'rol_id')), datos)
                 self.assertEqual(list(Rol.objects.using(alias).values_list('codigo', flat=True)), ['administrador'])
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0009_soporte_temporal')])
+            restaurar = MigrationExecutor(conexion)
+            restaurar.migrate(restaurar.loader.graph.leaf_nodes())
 
 
 class MigracionApellidosContactoTests(TransactionTestCase):
