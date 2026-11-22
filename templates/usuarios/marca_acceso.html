@@ -1,7 +1,7 @@
 {% load static %}
 {% if request.empresa.logo_estatico %}
 <a href="/" class="ss-auth-brand ss-company-brand" aria-label="{{ request.empresa.nombre }}, inicio de sesión">
-  <img src="{% static request.empresa.logo_estatico %}" alt="Logo de {{ request.empresa.nombre }}" class="ss-company-logo" width="220" height="200" decoding="async">
+  <img src="{% static request.empresa.logo_estatico %}?v=2" alt="Logo de {{ request.empresa.nombre }}" class="ss-company-logo" width="344" height="129" decoding="async">
 </a>
 {% else %}
 <a href="/" class="ss-auth-brand" aria-label="SmartStock, inicio de sesión">

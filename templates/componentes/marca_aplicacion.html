@@ -1,7 +1,7 @@
 {% load static %}
 {% if request.empresa.logo_estatico %}
 <a href="/" data-ss-inicio class="ss-company-brand ss-company-brand-menu" aria-label="Ir al inicio de {{ request.empresa.nombre }}">
-  <img src="{% static request.empresa.logo_estatico %}" alt="Logo de {{ request.empresa.nombre }}" class="ss-company-logo" width="196" height="172" decoding="async">
+  <img src="{% static request.empresa.logo_estatico %}?v=2" alt="Logo de {{ request.empresa.nombre }}" class="ss-company-logo" width="208" height="78" decoding="async">
 </a>
 {% else %}
 <a href="/" data-ss-inicio aria-label="Ir al inicio de {% firstof request.empresa.nombre 'SmartStock' %}" class="d-flex align-items-center mb-4 text-decoration-none px-2 mt-2">

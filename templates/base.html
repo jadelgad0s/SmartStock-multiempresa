@@ -6,15 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}SmartStock{% endblock %}{% if request.empresa %} · {{ request.empresa.nombre }}{% endif %}</title>
     {% if request.empresa.logo_estatico %}
-    <link rel="icon" href="{% static request.empresa.logo_estatico %}" type="image/png">
-    <link rel="shortcut icon" href="{% static request.empresa.logo_estatico %}" type="image/png">
+    <link rel="icon" href="{% static request.empresa.logo_estatico %}?v=2" type="image/png">
+    <link rel="shortcut icon" href="{% static request.empresa.logo_estatico %}?v=2" type="image/png">
     {% else %}
     <link rel="icon" href="{% static 'branding/smartstock-mark.png' %}" type="image/png" sizes="48x48">
     <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
     {% endif %}
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{% static 'css/branding_empresas.css' %}?v=1">
+    <link rel="stylesheet" href="{% static 'css/branding_empresas.css' %}?v=3">
     <style>
         :root {
             --teal-600: #0f766e;

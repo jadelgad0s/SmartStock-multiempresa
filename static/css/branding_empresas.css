@@ -1,9 +1,12 @@
 /* Imágenes originales de cada empresa: se contienen completas y conservan sus colores. */
 .ss-company-brand { display: flex; align-items: center; justify-content: center; min-width: 0; background: #fff; border-radius: .65rem; padding: .5rem; text-decoration: none; }
-.ss-company-brand-menu { flex: 0 0 auto; margin: .25rem 0 1rem; }
-.ss-company-logo { display: block; width: 100%; height: 172px; max-width: 208px; object-fit: contain; }
+.ss-company-brand-menu { flex: 0 0 auto; margin: .25rem 0 .5rem; }
+.ss-company-brand-menu + .ss-sidebar-links > .text-sidebar-muted:first-child { margin-top: .5rem; }
+.ss-company-logo { display: block; width: 100%; height: auto; aspect-ratio: 8 / 3; max-width: 208px; object-fit: contain; }
 .ss-company-brand:focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; }
-.ss-auth-brand.ss-company-brand { width: min(100%, 240px); align-self: flex-start; }
-.ss-auth-brand.ss-company-brand .ss-company-logo { max-width: 220px; height: 200px; }
-.ss-auth-mobile-brand .ss-company-brand { margin-inline: auto; }
-.ss-auth-mobile-brand .ss-company-brand .ss-company-logo { height: 160px; }
+.ss-auth-brand.ss-company-brand { width: min(100%, 360px); align-self: flex-start; }
+.ss-auth-brand.ss-company-brand .ss-company-logo { max-width: 344px; }
+.ss-auth-mobile-brand .ss-company-brand { width: min(100%, 320px); margin-inline: auto; }
+@media screen and (max-width: 991.98px) {
+  .ss-company-brand-menu { margin-inline-end: 3rem; }
+}
