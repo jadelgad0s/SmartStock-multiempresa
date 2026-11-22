@@ -757,9 +757,18 @@ class MarcasEmpresaEnChromeTests(StaticLiveServerTestCase):
         self.assertTrue(navegador.execute_script("""
             const img=arguments[0], r=img.getBoundingClientRect(), padre=img.parentElement.getBoundingClientRect();
             return getComputedStyle(img).objectFit==='contain'
+                && img.naturalWidth/img.naturalHeight>2 && r.width/r.height>2
                 && r.left>=padre.left && r.right<=padre.right && r.top>=padre.top && r.bottom<=padre.bottom
                 && getComputedStyle(img.parentElement).backgroundColor==='rgb(255, 255, 255)';
         """, imagen))
+        if selector.startswith('#ss-navigation'):
+            self.assertLess(imagen.find_element(By.XPATH, '..').size['height'], 110,
+                            'El logo horizontal debe dejar un encabezado compacto.')
+            self.assertTrue(navegador.execute_script("""
+                const cerrar=document.querySelector('.ss-sidebar-close');
+                return !cerrar || !cerrar.getClientRects().length
+                    || arguments[0].getBoundingClientRect().right<=cerrar.getBoundingClientRect().left;
+            """, imagen), 'El botón de cerrar debe quedar fuera del logo.')
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
 
     def test_logos_por_host_en_acceso_menu_movil_y_modo_oscuro(self):
@@ -784,6 +793,7 @@ class MarcasEmpresaEnChromeTests(StaticLiveServerTestCase):
             navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-acceso.png')
             navegador.set_window_size(390, 844)
             self.comprobar_logo(navegador, '.ss-auth-mobile-brand .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-acceso-movil.png')
             navegador.set_window_size(1440, 1000)
             navegador.find_element(By.ID, 'email').send_keys('marca@example.invalid')
             navegador.find_element(By.ID, 'password').send_keys(clave)
