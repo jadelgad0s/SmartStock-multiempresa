@@ -742,3 +742,67 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         self.assertIn('1 evento', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertIn('QA-AUD Cuenta de prueba suspendida', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertNotIn('QA-AUD Consulta de empresas', navegador.find_element(By.TAG_NAME, 'body').text)
+
+
+@override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
+class MarcasEmpresaEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+    pulsar = ContactoEnChromeTests.pulsar
+
+    def comprobar_logo(self, navegador, selector, codigo):
+        espera = WebDriverWait(navegador, 20)
+        imagen = espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+        espera.until(lambda d: d.execute_script('return arguments[0].complete && arguments[0].naturalWidth>0;', imagen))
+        self.assertEqual(urlsplit(imagen.get_attribute('src')).path, f'/static/branding/empresas/{codigo}.png')
+        self.assertTrue(navegador.execute_script("""
+            const img=arguments[0], r=img.getBoundingClientRect(), padre=img.parentElement.getBoundingClientRect();
+            return getComputedStyle(img).objectFit==='contain'
+                && r.left>=padre.left && r.right<=padre.right && r.top>=padre.top && r.bottom<=padre.bottom
+                && getComputedStyle(img.parentElement).backgroundColor==='rgb(255, 255, 255)';
+        """, imagen))
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+
+    def test_logos_por_host_en_acceso_menu_movil_y_modo_oscuro(self):
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        clave = 'Fixture-marcas-2026!'
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        for codigo in ('la-fragua', 'punto-motor'):
+            empresa = Empresa.objects.get(codigo=codigo)
+            call_command('seed_empresa', codigo, sin_admin=True, stdout=StringIO())
+            with usar_empresa(empresa):
+                Usuario.objects.create_user(email='marca@example.invalid', password=clave,
+                    nombres='Empresa de prueba', rol=Rol.objects.get(codigo='administrador'))
+            origen = f'http://{codigo}.localhost:{urlsplit(self.live_server_url).port}'
+            navegador.set_window_size(1440, 1000)
+            navegador.get(origen + '/')
+            self.comprobar_logo(navegador, '.ss-auth-brand-panel .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-acceso.png')
+            navegador.set_window_size(390, 844)
+            self.comprobar_logo(navegador, '.ss-auth-mobile-brand .ss-company-logo', codigo)
+            navegador.set_window_size(1440, 1000)
+            navegador.find_element(By.ID, 'email').send_keys('marca@example.invalid')
+            navegador.find_element(By.ID, 'password').send_keys(clave)
+            self.pulsar(navegador, By.ID, 'login-submit')
+            espera.until(EC.url_contains('/dashboard/'))
+            self.comprobar_logo(navegador, '#ss-navigation .ss-company-logo', codigo)
+            espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == '0')
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-escritorio.png')
+            self.pulsar(navegador, By.CSS_SELECTOR, '.ss-theme-toggle')
+            espera.until(lambda d: d.find_element(By.TAG_NAME, 'html').get_attribute('data-bs-theme') == 'dark')
+            self.comprobar_logo(navegador, '#ss-navigation .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-oscuro.png')
+            navegador.set_window_size(390, 844)
+            espera.until(lambda d: d.execute_script('return document.getElementById("ss-navigation").getBoundingClientRect().right<=1'))
+            self.pulsar(navegador, By.CSS_SELECTOR, '.ss-menu-toggle')
+            espera.until(lambda d: d.execute_script('return document.getElementById("ss-navigation").getBoundingClientRect().left>=0'))
+            self.comprobar_logo(navegador, '#ss-navigation .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-movil.png')
+        navegador.set_window_size(1440, 1000)
+        navegador.get(self.live_server_url + '/?empresa=la-fragua')
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.ss-company-logo'))
+        self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, '.ss-auth-brand .ss-brand-logo'))

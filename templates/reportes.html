@@ -7,12 +7,7 @@
     <!-- SIDEBAR CORPORATIVA -->
     <div id="ss-navigation" role="navigation" aria-label="Menú principal" class="bg-sidebar d-flex flex-column flex-shrink-0 p-3 ss-sidebar" style="width: 250px;">
         <button type="button" class="ss-sidebar-close" aria-label="Cerrar menú"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-        <a href="/" data-ss-inicio aria-label="Ir al inicio de SmartStock" class="d-flex align-items-center mb-4 text-decoration-none px-2 mt-2">
-            <div class="bg-primary-soft rounded p-2 me-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-                <img src="{% static 'branding/smartstock-mark.png' %}" alt="Logo SmartStock" class="ss-brand-logo" width="28" height="28">
-            </div>
-            <span class="fs-5 fw-bold" style="color: #0f172a; letter-spacing: -0.02em;">SmartStock</span>
-        </a>
+        {% include "componentes/marca_aplicacion.html" %}
 
         <ul class="nav nav-pills flex-column ss-sidebar-links mb-2">
             <div class="text-sidebar-muted">Visión General</div>
