@@ -8,6 +8,7 @@ La versión multiempresa separa el directorio y las cuentas de SmartStock de los
 
 | Quiero… | Dónde revisar |
 | --- | --- |
+| Revisar el repositorio durante la presentación | [Recorrido de revisión académica](docs/presentacion.md) |
 | Entender el proyecto y sus componentes | [Arquitectura y organización](docs/desarrollo/arquitectura.md) |
 | Instalar y ejecutar la versión multiempresa | [Preparación en Windows y conexión a Neon](docs/desarrollo/multiempresa.md) |
 | Entender un módulo o sus permisos | [Índice de documentación](docs/README.md) |

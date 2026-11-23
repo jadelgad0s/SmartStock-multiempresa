@@ -2,6 +2,8 @@
 
 Este índice organiza las guías del repositorio. Para una primera revisión, comienza con el [README principal](../README.md), continúa con la arquitectura y termina con las pruebas.
 
+El [recorrido de revisión académica](presentacion.md) relaciona las funciones que se pueden demostrar con el código y las pruebas que las comprueban.
+
 ## Desarrollo y ejecución
 
 | Documento | Para qué sirve |
