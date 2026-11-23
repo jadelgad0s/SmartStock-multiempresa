@@ -18,7 +18,7 @@ from .soporte_empresa import soporte_empresa
 def archivo_empresa(request, path):
     try:
         archivo = default_storage.open(path, 'rb')
-    except (FileNotFoundError, SuspiciousFileOperation):
+    except (FileNotFoundError, IsADirectoryError, NotADirectoryError, SuspiciousFileOperation):
         raise Http404('Archivo no disponible.') from None
     tipo = mimetypes.guess_type(path)[0] or 'application/octet-stream'
     return FileResponse(archivo, content_type=tipo,

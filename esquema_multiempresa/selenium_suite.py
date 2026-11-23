@@ -606,7 +606,11 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             navegador.find_element(By.ID,'password').send_keys(clave)
             self.pulsar(navegador, By.ID, 'login-submit')
             espera.until(lambda d: '/sistema/' in d.current_url or '/contacto/bandeja/' in d.current_url)
-        def cerrar_confirmacion():
+        def cerrar_confirmacion(documento_anterior):
+            # La escritura en BD puede terminar antes de la redirección del POST.
+            # Espera el documento nuevo antes de consultar su confirmación.
+            espera.until(EC.staleness_of(documento_anterior))
+            espera.until(lambda d: d.execute_script('return document.readyState') == 'complete')
             espera.until(EC.visibility_of_element_located((By.ID,'sistema-confirmacion')))
             self.pulsar(navegador, By.ID, 'sistema-confirmacion-cerrar')
             espera.until(EC.invisibility_of_element_located((By.ID,'sistema-confirmacion')))
@@ -619,9 +623,10 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             espera.until(EC.url_contains('/sistema/contacto/conexion/'))
             for nombre, valor in [('client_id','client-navegador-fixture'),('client_secret','secret-navegador-fixture'),('codigo','code-navegador-fixture')]:
                 navegador.find_element(By.ID,'id_' + nombre).send_keys(valor)
+            documento = navegador.find_element(By.TAG_NAME, 'html')
             self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="conectar"]')
             espera.until(lambda d: BuzonContacto.objects.using('central').filter(conexion_estado='conectado').exists())
-            cerrar_confirmacion()
+            cerrar_confirmacion(documento)
             self.assertEqual(len(envios), 0)
             self.pulsar(navegador, By.CSS_SELECTOR, 'button[form="ss-cerrar-sesion"]')
             espera.until(EC.visibility_of_element_located((By.ID,'email')))
@@ -638,8 +643,9 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
                 'receivedtime':str(int(timezone.now().timestamp() * 1000) - 15000),
                 'summary':'Necesito ayuda con mi acceso','hasAttachment':'0'})
             antes = sum(url.endswith('/messages/search') for _,url in llamadas)
+            documento = navegador.find_element(By.TAG_NAME, 'html')
             self.pulsar(navegador, By.ID, 'contacto-actualizar')
-            cerrar_confirmacion()
+            cerrar_confirmacion(documento)
             self.assertGreater(sum(url.endswith('/messages/search') for _,url in llamadas), antes)
             self.assertIn('Correo de prueba recibido', navegador.find_element(By.TAG_NAME,'body').text)
             self.comprobar_menu(navegador)
@@ -661,11 +667,13 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             editor.clear()
             self.pulsar(navegador, By.CSS_SELECTOR, 'a[href="#contacto-responder"]')
             navegador.find_element(By.CSS_SELECTOR,'[data-borrador-editor] textarea').send_keys('Gracias por escribirnos. Te ayudaremos a recuperar el acceso.')
+            documento = navegador.find_element(By.TAG_NAME, 'html')
             self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="borrador"]')
-            cerrar_confirmacion()
+            cerrar_confirmacion(documento)
             self.assertTrue(navegador.find_element(By.CSS_SELECTOR,'[data-respuesta-enviar]').is_enabled())
+            documento = navegador.find_element(By.TAG_NAME, 'html')
             self.pulsar(navegador, By.CSS_SELECTOR, '[data-respuesta-enviar]')
-            cerrar_confirmacion()
+            cerrar_confirmacion(documento)
             self.assertEqual(len(envios), 1)
             self.assertEqual(envios[0]['fromAddress'], CORREO_CONTACTO)
             self.assertEqual(envios[0]['toAddress'],'consulta@example.invalid')

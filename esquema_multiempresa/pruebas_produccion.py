@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -11,6 +12,8 @@ from botocore.stub import Stubber
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, SuspiciousFileOperation
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.management import call_command
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
@@ -258,3 +261,20 @@ class AccesoPublicoTests(TestCase):
                     f'https://{empresa.codigo}.smartstockchile.cl/api/v1/alertas-sms/twilio/estado/{identificador}/')
         with self.assertRaises(ImproperlyConfigured):
             callback_url(identificador)
+
+    def test_archivo_privado_sigue_funcionando_en_local_y_directorios_no_se_publican(self):
+        empresa = Empresa.objects.get(alias_bd='ferreteria')
+        cliente = APIClient(HTTP_HOST='la-fragua.smartstockchile.cl', HTTP_X_FORWARDED_PROTO='https')
+        with TemporaryDirectory() as raiz, self.settings(MEDIA_ROOT=raiz):
+            with usar_empresa(empresa):
+                usuario = Usuario.objects.get(email='cuenta@example.invalid')
+                cliente.force_login(usuario)
+                nombre = default_storage.save('productos/ficha.txt', ContentFile(b'archivo privado'))
+            respuesta = cliente.get('/media/' + nombre)
+            self.assertEqual(respuesta.status_code, 200)
+            self.assertEqual(b''.join(respuesta.streaming_content), b'archivo privado')
+            self.assertIn('no-store', respuesta['Cache-Control'])
+            self.assertEqual(cliente.get('/media/productos/').status_code, 404)
+            self.assertEqual(cliente.get('/media/productos/ficha.txt/otra').status_code, 404)
+            anonimo = APIClient(HTTP_HOST='la-fragua.smartstockchile.cl', HTTP_X_FORWARDED_PROTO='https')
+            self.assertEqual(anonimo.get('/media/' + nombre).status_code, 302)
