@@ -41,6 +41,8 @@ Las cuentas internas de SmartStock gestionan la plataforma y las atenciones de s
 | esquema_multiempresa.settings | Inspección del esquema con conexiones de lectura. |
 | esquema_multiempresa.migracion | Preparación y migraciones explícitas de las bases de prueba. |
 | esquema_multiempresa.testing | Pruebas con bases desechables, sin credenciales de Neon. |
+| esquema_multiempresa.production | Servidor público multiempresa, conexiones privadas de Neon y archivos externos. |
+| esquema_multiempresa.migracion_produccion | Migraciones por alias con las conexiones directas del entorno público. |
 | config.settings.testing | Pruebas de las aplicaciones generales. |
 | config.settings.production | Configuración del sitio anterior, con una sola conexión principal. |
 

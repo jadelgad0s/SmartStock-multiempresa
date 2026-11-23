@@ -114,7 +114,15 @@ def mensaje_sms(producto, bodega, cantidad, minimo, nivel):
 
 
 def callback_url(envio_id):
-    return settings.TWILIO_PUBLIC_BASE_URL.rstrip('/') + reverse('sms-twilio-estado', kwargs={'envio_id': envio_id})
+    origen = settings.TWILIO_PUBLIC_BASE_URL.rstrip('/')
+    if getattr(settings, 'SMS_ORIGEN_POR_EMPRESA', False):
+        from apps.core.empresa import empresa_actual
+        from django.core.exceptions import ImproperlyConfigured
+        empresa = empresa_actual()
+        if empresa is None:
+            raise ImproperlyConfigured('Selecciona una empresa para procesar sus alertas SMS.')
+        origen = f'https://{empresa.codigo}.{settings.DOMINIO_EMPRESAS}'
+    return origen + reverse('sms-twilio-estado', kwargs={'envio_id': envio_id})
 
 
 @transaccion_operativa()

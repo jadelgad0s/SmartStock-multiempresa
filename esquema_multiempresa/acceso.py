@@ -30,7 +30,8 @@ class EmpresaMiddleware:
     def __call__(self, request):
         host, _ = split_domain_port(request.get_host())
         dominio = settings.DOMINIO_EMPRESAS
-        if host in (dominio, '127.0.0.1', '[::1]'):
+        centrales = getattr(settings, 'HOSTS_CENTRALES', (dominio, '127.0.0.1', '[::1]'))
+        if host in centrales:
             request.empresa = None
             request.urlconf = 'esquema_multiempresa.urls_central'
             with usar_empresa(None):
