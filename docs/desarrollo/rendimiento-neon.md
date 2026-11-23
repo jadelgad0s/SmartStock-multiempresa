@@ -7,16 +7,13 @@ El servidor `esquema_multiempresa.web` sigue utilizando las tres conexiones de N
 Detén el servidor y, desde el proyecto en CMD:
 
 ```bat
-git fetch origin
-git switch mejora/rendimiento-neon
-git pull --ff-only
 call .venv\Scripts\activate.bat
 python -m pip install -r requirements-web.txt
 python manage.py check --settings=esquema_multiempresa.web
 python manage.py runserver 127.0.0.1:8000 --settings=esquema_multiempresa.web
 ```
 
-Se añade la dependencia `psycopg[pool]`; por eso es necesario actualizar los requisitos. No hay migraciones nuevas. Las instalaciones anteriores deben tener aplicadas las migraciones de su versión antes de iniciar el servidor.
+La dependencia `psycopg[pool]` está incluida en requirements-web.txt; por eso es necesario actualizar los requisitos. La optimización de conexiones no requiere una migración propia. La versión consolidada incluye core.0006 de auditoría: sigue la [guía de actualización](../modulos/auditoria.md) antes de iniciar una instalación anterior.
 
 ## Qué se optimiza
 

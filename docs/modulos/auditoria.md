@@ -4,18 +4,18 @@ El panel /sistema/auditoria/ permite consultar la plataforma o una empresa autor
 
 ## Actualización en Windows
 
-Esta rama se apoya en mejora/rendimiento-neon. Con el servidor detenido, desde CMD:
+Con la [instalación multiempresa preparada](../desarrollo/multiempresa.md), el código actualizado y el servidor detenido, activa el entorno de CMD. La migración core.0006 incorpora datos de identidad histórica, empresa, atención, módulo, operación, resultado, cambios e índices para ordenar el historial. En una instalación anterior se aplica en las tres bases de ensayo de Neon antes de iniciar esta versión:
 
-    git fetch origin
-    git switch mejora/auditoria-claridad
-    git pull --ff-only
-    call .venv\Scripts\activate.bat
-    python manage.py check --settings=esquema_multiempresa.web
-    python manage.py runserver 127.0.0.1:8000 --settings=esquema_multiempresa.web
+```bat
+call .venv\Scripts\activate.bat
+python manage.py migrate --database=central --settings=esquema_multiempresa.migracion
+python manage.py migrate --database=ferreteria --settings=esquema_multiempresa.migracion
+python manage.py migrate --database=repuestos --settings=esquema_multiempresa.migracion
+python manage.py check --settings=esquema_multiempresa.web
+python manage.py runserver 127.0.0.1:8000 --settings=esquema_multiempresa.web
+```
 
-Esta revisión no añade migraciones ni requiere modificar las conexiones de Neon.
-
-La migración existente core.0006 incorpora datos de identidad histórica, empresa, atención, módulo, operación, resultado, cambios e índices para ordenar el historial. Se aplica en las tres bases de Neon antes de iniciar la versión nueva. No reconstruye resultados, roles ni cambios de eventos antiguos.
+La migración conserva los eventos anteriores. No reconstruye resultados, roles ni cambios que esos eventos no hubieran capturado. La [guía de pruebas](../desarrollo/pruebas.md) permite comprobar este comportamiento con bases desechables.
 
 ## Consulta
 

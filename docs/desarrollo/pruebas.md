@@ -9,7 +9,7 @@ Las pruebas crean sus propias bases desechables y simulan proveedores externos. 
 | apps/core/test_*.py | Auditoría y comportamiento compartido de las pantallas. |
 | apps/productos/test_*.py | API, permisos, stock, movimientos, mermas, bodegas, ubicaciones y reportes. |
 | apps/usuarios/test_*.py | Cuentas, roles, permisos, autenticación y recuperación. |
-| esquema_multiempresa/pruebas_*.py | Separación de empresas, login central, panel interno, soporte y contacto. |
+| esquema_multiempresa/pruebas_*.py | Separación de empresas, login central, panel interno, soporte, contacto, rendimiento y auditoría. |
 | apps/core/selenium_suite.py y esquema_multiempresa/selenium_suite.py | Recorridos completos en Chrome. |
 | tests/js | Comportamiento de la interfaz con respuestas HTTP controladas. |
 | tests/desktop | Página de prueba que usa el ejecutable en Windows. |
@@ -23,7 +23,7 @@ set "SS_TEST_POSTGRES="
 python manage.py check --settings=esquema_multiempresa.testing
 python manage.py makemigrations --check --dry-run --settings=esquema_multiempresa.testing
 python manage.py test --settings=config.settings.testing --verbosity 2
-python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login esquema_multiempresa.pruebas_sistema esquema_multiempresa.pruebas_contacto esquema_multiempresa.pruebas_soporte --settings=esquema_multiempresa.testing --verbosity 2
+python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login esquema_multiempresa.pruebas_sistema esquema_multiempresa.pruebas_contacto esquema_multiempresa.pruebas_soporte esquema_multiempresa.pruebas_rendimiento esquema_multiempresa.pruebas_auditoria --settings=esquema_multiempresa.testing --verbosity 2
 ~~~
 
 Con SS_TEST_POSTGRES desactivado, estos perfiles usan SQLite desechable únicamente para QA. Esta opción permite revisar el proyecto sin acceso a los datos de las empresas.
