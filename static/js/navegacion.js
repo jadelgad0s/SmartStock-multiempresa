@@ -14,6 +14,8 @@
         return tarea();
     });
     const ruta = location.pathname.replace(/\/?$/, '/');
+    let inicial = null;
+    try { inicial = JSON.parse(document.getElementById('ss-navegacion-inicial')?.textContent || 'null'); } catch (_) {}
     reintentar.addEventListener('click', () => location.reload());
 
     function cerrarSesion() {
@@ -54,7 +56,9 @@
         estado.hidden = true;
         reintentar.hidden = true;
         try {
-            const {data} = await conCarga('Comprobando tu acceso a SmartStock…', () =>
+            const recibida = inicial;
+            inicial = null;
+            const {data} = recibida ? {data: recibida} : await conCarga('Comprobando tu acceso a SmartStock…', () =>
                 window.SmartStockReportes.json('/api/v1/auth/navegacion/'));
             if (!Array.isArray(data?.modulos) || !data.usuario?.id ||
                 data.inicio !== '/' && (!/^\/[a-z-]+\/$/.test(data.inicio) || !data.modulos.includes(data.inicio))) {
@@ -87,6 +91,6 @@
     const navegacion = {lista: comprobar()};
     window.SmartStockNavegacion = navegacion;
     window.addEventListener('pageshow', evento => {
-        if (evento.persisted) navegacion.lista = comprobar();
+        if (evento.persisted) { inicial = null; navegacion.lista = comprobar(); }
     });
 })();

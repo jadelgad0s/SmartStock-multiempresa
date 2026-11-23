@@ -1,18 +1,69 @@
 {% extends 'sistema/base.html' %}
+{% load static %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/sistema_auditoria.css' %}?v=2">{% endblock %}
+{% block acciones %}{% if exportacion_permitida %}<div class="ss-sistema-acciones">
+  <a class="btn btn-outline-secondary" href="{{ exportar_url }}" download><i class="fa-solid fa-download" aria-hidden="true"></i> Exportar CSV</a>
+  <a class="btn btn-outline-secondary" href="{{ imprimir_url }}" target="_blank" rel="noopener">Imprimir / PDF</a>
+</div>{% endif %}{% endblock %}
 {% block panel_content %}
-{% include 'sistema/selector_empresa.html' %}
-{% if requiere_empresa %}<p class="text-muted">Selecciona una empresa para consultar su auditoría.</p>{% else %}
-<form method="get" class="card ss-sistema-filtros" data-ss-loading="Consultando auditoría…">
-  {% if empresa_seleccionada %}<input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}">{% endif %}
+<p class="ss-aud-ambito"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> {{ ambito_nombre }} · Historial de solo lectura</p>
+<form method="get" class="card ss-aud-filtros" data-ss-loading="Consultando auditoría…">
   {% include 'soporte/campo_contexto.html' %}
-  <div><label for="buscar-evento">Buscar evento</label><input id="buscar-evento" type="search" name="search" maxlength="200" value="{{ request.GET.search }}" class="form-control" placeholder="Usuario o descripción"></div>
+  <div class="ss-aud-campo-ambito"><label for="auditoria-ambito">Ámbito de auditoría</label>
+    {% if acceso_soporte %}<input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}"><p>{{ empresa_seleccionada.nombre }}</p>
+    {% else %}<select id="auditoria-ambito" name="empresa" class="form-select"><option value="">Plataforma SmartStock</option>
+      {% for empresa in empresas_disponibles %}<option value="{{ empresa.codigo }}"{% if empresa.pk == empresa_seleccionada.pk %} selected{% endif %}>{{ empresa.nombre }}</option>{% endfor %}
+    </select>{% endif %}
+  </div>
+  <div class="ss-aud-busqueda"><label for="buscar-evento">Buscar evento</label><input id="buscar-evento" type="search" name="search" maxlength="200" value="{{ request.GET.search }}" class="form-control" placeholder="Nombre, correo, empresa o descripción"></div>
   <div><label for="auditoria-desde">Desde</label><input id="auditoria-desde" type="date" name="desde" value="{{ request.GET.desde }}" class="form-control"></div>
   <div><label for="auditoria-hasta">Hasta</label><input id="auditoria-hasta" type="date" name="hasta" value="{{ request.GET.hasta }}" class="form-control"></div>
-  <button type="submit" class="btn btn-primary">Filtrar</button>
+  <div class="ss-aud-periodos" aria-label="Períodos rápidos">{% for periodo in periodos %}<a href="{{ periodo.url }}">{{ periodo.nombre }}</a>{% endfor %}</div>
+  <div class="ss-aud-filtro-acciones">
+    <details class="ss-aud-avanzados"{% if filtros_avanzados_activos %} open{% endif %}>
+      <summary>Más filtros{% if filtros_avanzados_activos %}<span>{{ filtros_avanzados_activos }} activo{{ filtros_avanzados_activos|pluralize }}</span>{% endif %}</summary>
+      <div class="ss-aud-avanzados-campos">
+        <div><label for="auditoria-usuario">Usuario</label><select id="auditoria-usuario" name="actor" class="form-select"><option value="">Todos los usuarios de este historial</option>
+          {% for actor in actores %}<option value="{{ actor.valor }}"{% if actor.valor == request.GET.actor %} selected{% endif %}>{{ actor.etiqueta }}</option>{% endfor %}
+        </select></div>
+        <div><label for="auditoria-accion">Acción</label><select id="auditoria-accion" name="accion" class="form-select"><option value="">Todas</option>
+          {% for valor, etiqueta in acciones %}<option value="{{ valor }}"{% if valor == request.GET.accion %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+        </select></div>
+        <div><label for="auditoria-modulo">Módulo</label><select id="auditoria-modulo" name="modulo" class="form-select"><option value="">Todos</option>
+          {% for nombre in modulos %}<option value="{{ nombre }}"{% if nombre == request.GET.modulo %} selected{% endif %}>{{ nombre }}</option>{% endfor %}
+        </select></div>
+        <div><label for="auditoria-resultado">Resultado</label><select id="auditoria-resultado" name="resultado" class="form-select"><option value="">Todos</option><option value="sin_registro"{% if request.GET.resultado == 'sin_registro' %} selected{% endif %}>No registrado</option>
+          {% for valor, etiqueta in resultados %}<option value="{{ valor }}"{% if valor == request.GET.resultado %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+        </select></div>
+      </div>
+      {% if request.GET.usuario %}<input type="hidden" name="usuario" value="{{ request.GET.usuario }}"><p class="ss-aud-nota">Usuario del historial: {{ request.GET.usuario }}.</p>{% endif %}
+      {% if request.GET.modelo %}<input type="hidden" name="modelo" value="{{ request.GET.modelo }}"><p class="ss-aud-nota">Elemento filtrado: {{ request.GET.modelo }}.</p>{% endif %}
+    </details>
+    <input type="hidden" name="vista" value="{{ vista }}"><input type="hidden" name="agrupar" value="0">
+    <label class="ss-aud-check"><input type="checkbox" name="agrupar" value="1"{% if agrupar %} checked{% endif %}> Agrupar consultas repetidas en esta página</label>
+    <button class="btn btn-primary" type="submit">Aplicar filtros</button><a class="btn btn-outline-secondary" href="{{ limpiar_url }}">Limpiar filtros</a>
+  </div>
 </form>
-<div class="card"><div class="table-responsive"><table class="table table-custom mb-0">
-  <thead><tr><th>Fecha / hora</th><th>Usuario</th><th>Acción</th><th>Módulo</th><th>Descripción</th></tr></thead>
-  <tbody>{% for evento in eventos %}<tr><td>{{ evento.fecha }}</td><td>{{ evento.usuario }}</td><td>{{ evento.accion_etiqueta }}</td><td>{{ evento.modelo }}</td><td>{{ evento.descripcion }}</td></tr>{% empty %}<tr><td colspan="5" class="text-center text-muted py-4">No hay eventos para esta consulta.</td></tr>{% endfor %}</tbody>
-</table></div>{% include 'sistema/paginacion.html' %}</div>
-{% endif %}
+{% if formulario_auditoria.errors %}<div class="alert alert-danger" role="alert"><strong>Revisa los filtros.</strong>{{ formulario_auditoria.errors }}</div>{% endif %}
+<nav class="ss-aud-vistas" aria-label="Tipos de eventos">{% for opcion in vistas %}<a href="{{ opcion.url }}"{% if vista == opcion.valor %} aria-current="page"{% endif %}>{{ opcion.nombre }}</a>{% endfor %}</nav>
+{% if pagina %}<div class="ss-aud-resumen" role="status">{{ pagina.paginator.count }} evento{{ pagina.paginator.count|pluralize }} encontrado{{ pagina.paginator.count|pluralize }} · Fechas y horas en {{ TIME_ZONE|default:'America/Santiago' }}</div>{% endif %}
+<section class="card ss-aud-historial" aria-label="Eventos de auditoría">
+  <div class="ss-aud-cabecera ss-aud-cuadricula" aria-hidden="true"><span>Fecha / hora</span><span>Usuario</span><span>Empresa</span><span>Acción y resumen</span><span>Módulo</span><span>Resultado</span><span>Detalle</span></div>
+  <ol class="ss-aud-lista">
+    {% for grupo in grupos_eventos %}<li>
+      {% if grupo.eventos|length > 1 %}<details class="ss-aud-grupo"><summary><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span class="ss-aud-grupo-texto"><strong>{{ grupo.eventos|length }} consultas{% if grupo.cantidad_empresas %} · {{ grupo.cantidad_empresas }} empresa{{ grupo.cantidad_empresas|pluralize }}{% endif %} · {{ grupo.eventos.0.modulo_mostrado }}</strong><small>{{ grupo.eventos.0.usuario }} · {{ grupo.eventos.0.usuario_email }} · {{ grupo.eventos.0.perfil|default:'Perfil no registrado' }}</small><small>{{ grupo.intervalo }} · Ver eventos individuales</small></span><span class="ss-aud-resultado ss-aud-{{ grupo.eventos.0.resultado|default:'anterior' }}"{% if grupo.eventos.0.resultado_ayuda %} title="{{ grupo.eventos.0.resultado_ayuda }}"{% endif %}>{{ grupo.eventos.0.resultado_etiqueta }}</span></summary>
+        {% for evento in grupo.eventos %}{% include 'sistema/auditoria_evento.html' %}{% endfor %}
+      </details>{% else %}{% with evento=grupo.eventos.0 %}{% include 'sistema/auditoria_evento.html' %}{% endwith %}{% endif %}
+    </li>{% empty %}<li class="ss-sistema-vacio"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i><h2>No hay eventos para esta consulta</h2><p>Prueba otro período o limpia los filtros. El historial muestra únicamente los eventos que puedes consultar.</p></li>{% endfor %}
+  </ol>
+  {% if pagina %}<div class="ss-sistema-paginacion">
+    <p class="small text-muted mb-0">{{ pagina.start_index }}–{{ pagina.end_index }} de {{ pagina.paginator.count }} registros · Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</p>
+    <nav class="ss-aud-paginas" aria-label="Páginas de auditoría">
+      {% if anterior_url %}<a class="btn btn-outline-secondary" href="{{ anterior_url }}">Anterior</a>{% else %}<button class="btn btn-outline-secondary" disabled>Anterior</button>{% endif %}
+      {% for item in paginas %}{% if item.salto %}<span>…</span>{% elif item.numero == pagina.number %}<span class="btn btn-primary" aria-current="page">{{ item.numero }}</span>{% else %}<a class="btn btn-outline-secondary" href="{{ item.url }}" aria-label="Página {{ item.numero }}">{{ item.numero }}</a>{% endif %}{% endfor %}
+      {% if siguiente_url %}<a class="btn btn-outline-secondary" href="{{ siguiente_url }}">Siguiente</a>{% else %}<button class="btn btn-outline-secondary" disabled>Siguiente</button>{% endif %}
+    </nav>
+  </div>{% endif %}
+</section>
+<p class="small text-muted mt-3">La agrupación reúne consultas consecutivas del mismo usuario y módulo en intervalos de cinco minutos, dentro de estos 25 registros. Cada evento conserva su fecha, empresa y detalle.</p>
 {% endblock %}

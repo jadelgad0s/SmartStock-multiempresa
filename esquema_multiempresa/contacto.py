@@ -5,7 +5,7 @@ from uuid import UUID
 from django.contrib.auth import update_session_auth_hash
 from django.conf import settings
 from django.core.paginator import Paginator
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connections, transaction
 from django.db.models import Count, F, Max, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
 
 from apps.usuarios.models import Usuario
+from apps.core.registro_auditoria import crear_evento, diferencias, estado_auditable
 from .buzon_contacto import enviar_respuesta, sincronizar_buzon
 from .forms import CuentaContactoForm
 from .forms_contacto import BorradorForm, ConexionZohoForm, NotaForm, SeguimientoForm
@@ -40,8 +41,9 @@ def datos_bandeja():
         vencidos=Count('pk', filter=~Q(estado='resuelto') & Q(seguimiento__lte=hoy)))
     datos['sin-leer'] = datos.pop('sin_leer')
     datos['seguimiento'] = datos.pop('en_seguimiento')
-    datos['borradores'] = RespuestaContacto.objects.using('central').filter(estado='borrador').count()
-    datos['enviados'] = RespuestaContacto.objects.using('central').filter(estado='enviada').count()
+    datos.update(RespuestaContacto.objects.using('central').aggregate(
+        borradores=Count('pk', filter=Q(estado='borrador')),
+        enviados=Count('pk', filter=Q(estado='enviada'))))
     return datos
 
 
@@ -54,7 +56,7 @@ def contexto_contacto(request, titulo, vista='todos'):
         'identidad_panel': 'Atención de SmartStock', 'perfil_personal': 'Contacto',
         'inicio_panel': reverse('contacto_bandeja'), 'perfil_panel': reverse('contacto_mi_cuenta'),
         'confirmaciones': confirmaciones_para_pagina(request),
-        'zoho_configurado': zoho_configurado(),
+        'zoho_configurado': zoho_configurado(buzon=buzon),
         'buzon': buzon, 'datos_disponibles': conocidos, 'contadores': datos,
         'secciones_menu': [{'nombre': 'Atención', 'enlaces': [
             {'nombre': nombre, 'icono': icono, 'activo': clave == vista,
@@ -63,7 +65,7 @@ def contexto_contacto(request, titulo, vista='todos'):
             for clave, nombre, icono in VISTAS]}],
     }
     try:
-        contexto['zoho_url'] = servidores()[1] + '/'
+        contexto['zoho_url'] = servidores(buzon=buzon)[1] + '/'
     except ErrorZoho:
         contexto['zoho_url'] = 'https://mail.zoho.com/'
     return contexto
@@ -134,9 +136,10 @@ def formulario_contacto(request, cuenta, *, propia, contexto):
     if request.method == 'POST' and formulario.is_valid():
         try:
             with transaction.atomic(using='central'):
+                antes = estado_auditable(Usuario.objects.using('central').select_for_update(of=('self',)).select_related('rol').get(pk=cuenta.pk)) if not nueva else {}
                 guardada = formulario.save()
                 auditar_gestion(request, 'central', 'CREATE' if nueva else 'UPDATE', 'Usuario', guardada,
-                                'Cuenta exclusiva de contacto actualizada')
+                    'Cuenta exclusiva de contacto actualizada', cambios=diferencias(antes, estado_auditable(guardada)))
         except IntegrityError:
             formulario.add_error(None, 'La cuenta de contacto ya existe. Recarga esta página para editarla.')
         else:
@@ -146,8 +149,9 @@ def formulario_contacto(request, cuenta, *, propia, contexto):
                                mensaje='Los datos de la cuenta de contacto se guardaron correctamente.', link=destino)
             return redirect(destino)
     contexto.update(formulario=formulario, propia=propia,
-                    zoho_configurado=zoho_configurado(),
                     volver=reverse('contacto_bandeja' if propia else 'sistema_cuentas'))
+    if 'zoho_configurado' not in contexto:
+        contexto['zoho_configurado'] = zoho_configurado()
     return render(request, 'contacto/cuenta.html', contexto)
 
 
@@ -217,8 +221,8 @@ def sincronizar(request):
     return redirect(destino)
 
 
-def confirmar_accion(request, mensaje, titulo, texto):
-    auditar_gestion(request, 'central', 'UPDATE', 'MensajeContacto', mensaje, titulo)
+def confirmar_accion(request, mensaje, titulo, texto, *, cambios=None):
+    auditar_gestion(request, 'central', 'UPDATE', 'MensajeContacto', mensaje, titulo, cambios=cambios)
     confirmar_guardado(request, alias='central', titulo=titulo, mensaje=texto,
                        link=reverse('contacto_mensaje', args=[mensaje.pk]))
     return redirect('contacto_mensaje', mensaje_id=mensaje.pk)
@@ -248,13 +252,11 @@ def guardar_borrador(mensaje, formulario):
 @require_http_methods(['GET', 'POST'])
 def detalle_mensaje(request, mensaje_id):
     mensaje = get_object_or_404(MensajeContacto.objects.using('central'), pk=mensaje_id)
+    antes_seguimiento = estado_auditable(mensaje)
     error = ''
     seguimiento = SeguimientoForm(instance=mensaje)
     nota = NotaForm()
-    borrador = mensaje.respuestas.filter(estado='borrador').first()
-    respuesta_form = BorradorForm(initial={
-        'texto': borrador.texto if borrador else '', 'version': borrador.version if borrador else 0,
-        'borrador': borrador.pk if borrador else None})
+    respuesta_form = None
     if request.method == 'POST':
         accion = request.POST.get('accion')
         try:
@@ -265,7 +267,8 @@ def detalle_mensaje(request, mensaje_id):
                     if not MensajeContacto.objects.using('central').filter(pk=mensaje.pk, version=datos['version']).update(
                             estado=datos['estado'], categoria=datos['categoria'], seguimiento=datos['seguimiento'], version=F('version') + 1):
                         raise ErrorZoho('El seguimiento cambió en otra pestaña. Recarga antes de guardar.')
-                    return confirmar_accion(request, mensaje, 'Seguimiento actualizado', 'La consulta quedó actualizada.')
+                    return confirmar_accion(request, mensaje, 'Seguimiento actualizado', 'La consulta quedó actualizada.',
+                        cambios=diferencias(antes_seguimiento, estado_auditable(mensaje)))
             elif accion == 'nota':
                 nota = NotaForm(request.POST)
                 if nota.is_valid():
@@ -300,19 +303,51 @@ def detalle_mensaje(request, mensaje_id):
                 raise ErrorZoho('La acción solicitada no es válida.')
         except ErrorZoho as fallo:
             error = str(fallo)
-    if not mensaje.contenido_cargado and zoho_configurado():
-        try:
-            contenido = ClienteZoho().contenido(mensaje)
-            MensajeContacto.objects.using('central').filter(pk=mensaje.pk).update(contenido=contenido, contenido_cargado=True)
-        except ErrorZoho as fallo:
-            error = error or str(fallo)
-    if request.method == 'GET':
+            crear_evento(alias='central', request=request, accion='UPDATE', modelo='MensajeContacto',
+                objeto_id=mensaje.pk, operacion='Acción de correo no completada', resultado='fallida',
+                descripcion='La operación del buzón no pudo completarse. No se registra el texto del correo.')
+    # La página se muestra sin esperar a Zoho. Su contenido se solicita aparte
+    # y queda guardado en la misma base central de Neon.
+    if request.method == 'GET' and not mensaje.leido:
         MensajeContacto.objects.using('central').filter(pk=mensaje.pk).update(leido=True)
-    mensaje.refresh_from_db(using='central')
+        mensaje.leido = True
+    elif request.method == 'POST':
+        mensaje.refresh_from_db(using='central')
+    respuestas = list(mensaje.respuestas.all())
+    borrador = next((r for r in respuestas if r.estado == 'borrador'), None)
+    if respuesta_form is None:
+        respuesta_form = BorradorForm(initial={'texto': borrador.texto if borrador else '',
+            'version': borrador.version if borrador else 0, 'borrador': borrador.pk if borrador else None})
     contexto = contexto_contacto(request, mensaje.asunto or 'Sin asunto')
     contexto.update(mensaje=mensaje, seguimiento_form=seguimiento, nota_form=nota, respuesta_form=respuesta_form,
-                    respuestas=list(mensaje.respuestas.all()), borrador=mensaje.respuestas.filter(estado='borrador').first(),
+                    respuestas=respuestas, borrador=borrador,
                     notas=list(mensaje.notas.all()), error_consulta=error,
-                    sin_confirmar=mensaje.respuestas.filter(estado__in=('enviando', 'incierta')).exists(),
+                    sin_confirmar=any(r.estado in ('enviando', 'incierta') for r in respuestas),
                     corte_revision=timezone.now() - timedelta(minutes=3))
     return render(request, 'contacto/mensaje.html', contexto)
+
+
+@requiere_contacto
+@require_POST
+def contenido_mensaje(request, mensaje_id):
+    mensaje = get_object_or_404(MensajeContacto.objects.using('central'), pk=mensaje_id)
+    if not mensaje.contenido_cargado:
+        try:
+            from .zoho_contacto import configuracion_zoho
+            configuracion = configuracion_zoho()
+            conexion = connections['central']
+            # Zoho puede tardar: devolver la conexión al pool durante la espera
+            # deja capacidad para navegar por el resto de SmartStock.
+            if conexion.settings_dict['OPTIONS'].get('pool') and not conexion.in_atomic_block:
+                conexion.close()
+            contenido = ClienteZoho(configuracion).contenido(mensaje)
+        except ErrorZoho as error:
+            return JsonResponse({'success': False, 'mensaje': str(error)}, status=502)
+        actualizados = MensajeContacto.objects.using('central').filter(pk=mensaje.pk, contenido_cargado=False).update(
+            contenido=contenido, contenido_cargado=True)
+        if actualizados:
+            mensaje.contenido = contenido
+        else:
+            mensaje.refresh_from_db(using='central', fields=['contenido'])
+    return JsonResponse({'success': True, 'data': {'usuario_id': request.user.pk,
+        'mensaje_id': mensaje.pk, 'contenido': mensaje.contenido}})

@@ -132,6 +132,8 @@ class PanelSmartStockTests(TestCase):
                                             ('punto-motor', self.motor.nombre, self.fragua.nombre, 4)):
             panel = self.cliente.get('/sistema/inventario/', {'empresa': codigo})
             self.assertEqual(panel.status_code, 200)
+            self.assertContains(panel, 'branding/smartstock-mark.png')
+            self.assertNotContains(panel, 'branding/empresas/')
             self.assertEqual(panel.context['dashboard']['kpi_stock'], stock)
             catalogo = self.cliente.get('/sistema/catalogo/', {'empresa': codigo})
             self.assertEqual(catalogo.status_code, 200)
@@ -263,7 +265,7 @@ class PanelSmartStockTests(TestCase):
 
     def test_un_error_de_empresa_muestra_un_estado_y_el_panel_sigue_disponible(self):
         self.entrar()
-        with patch('esquema_multiempresa.sistema.Usuario.objects.filter', side_effect=OperationalError('base indisponible')):
+        with patch('esquema_multiempresa.sistema.Usuario.objects.aggregate', side_effect=OperationalError('base indisponible')):
             pagina = self.cliente.get('/sistema/')
         self.assertContains(pagina, 'Sin conexión con la empresa')
         self.assertEqual(self.cliente.get('/sistema/mi-cuenta/').status_code, 200)
@@ -869,7 +871,8 @@ class MigracionFichaEmpresaTests(TransactionTestCase):
             self.assertIsNotNone(nueva.creada_en)
             self.assertIsNotNone(nueva.actualizada_en)
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0009_soporte_temporal')])
+            restaurar = MigrationExecutor(conexion)
+            restaurar.migrate(restaurar.loader.graph.leaf_nodes())
 
 
 class MigracionPerfilesEquipoTests(TransactionTestCase):
@@ -919,7 +922,8 @@ class MigracionPerfilesEquipoTests(TransactionTestCase):
                 self.assertEqual(list(Usuario.objects.using(alias).values('id', 'email', 'password', 'rol_id')), datos)
                 self.assertEqual(list(Rol.objects.using(alias).values_list('codigo', flat=True)), ['administrador'])
         finally:
-            MigrationExecutor(conexion).migrate([('empresas', '0009_soporte_temporal')])
+            restaurar = MigrationExecutor(conexion)
+            restaurar.migrate(restaurar.loader.graph.leaf_nodes())
 
 
 class MigracionApellidosContactoTests(TransactionTestCase):

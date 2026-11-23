@@ -41,6 +41,14 @@ class Empresa(models.Model):
         return super().save(*args, **kwargs)
 
     @property
+    def logo_estatico(self):
+        # La marca procede de la empresa resuelta por el servidor, no de parámetros del navegador.
+        return {
+            'la-fragua': 'branding/empresas/la-fragua.png',
+            'punto-motor': 'branding/empresas/punto-motor.png',
+        }.get(self.codigo, '')
+
+    @property
     def datos_pendientes(self):
         campos = [('razon_social', 'razón social o titular'), ('rut', 'RUT'), ('rubro', 'rubro'),
                   ('contacto_nombre', 'nombre del contacto'), ('contacto_apellidos', 'apellidos del contacto'),

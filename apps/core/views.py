@@ -3,7 +3,7 @@ from functools import wraps
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 
-from apps.usuarios.navegacion import cuenta_habilitada, inicio_usuario, modulos_usuario
+from apps.usuarios.navegacion import cuenta_habilitada, datos_navegacion, inicio_usuario, modulos_usuario
 
 
 def requiere_modulo(vista):
@@ -15,6 +15,7 @@ def requiere_modulo(vista):
         modulos = modulos_usuario(request.user)
         if request.path_info not in modulos:
             return redirect(inicio_usuario(request.user, modulos))
+        request.navegacion_verificada = datos_navegacion(request.user, modulos)
         return vista(request, *args, **kwargs)
     return protegida
 

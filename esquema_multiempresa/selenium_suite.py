@@ -4,6 +4,7 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event
 from urllib.parse import urlsplit
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -12,6 +13,7 @@ from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.core.management import call_command
 from django.utils import timezone
+from django.test import override_settings
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -21,6 +23,7 @@ from selenium.webdriver.support.ui import Select
 from apps.core.empresa import usar_empresa
 from apps.productos.models import Bodega, Producto, StockBodega
 from apps.core.models import Auditoria
+from apps.core.registro_auditoria import crear_evento
 from apps.usuarios.models import Usuario
 from esquema_multiempresa.models import AccesoSoporte, AtencionSoporte, BuzonContacto, Empresa, MensajeContacto, NotaContacto, NotificacionSistema, RespuestaContacto
 from esquema_multiempresa.permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO
@@ -108,6 +111,8 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
             self.assertEqual(urlsplit(navegador.current_url).hostname, codigo + '.localhost')
             self.assertIn(empresa.nombre, navegador.title)
             espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == str(cantidad))
+            self.assertTrue(navegador.find_elements(By.ID, 'ss-navegacion-inicial'))
+            self.assertEqual(navegador.execute_script("return performance.getEntriesByType('resource').filter(r=>new URL(r.name).pathname==='/api/v1/auth/navegacion/').length"), 0)
 
         navegador.switch_to.window(pestanas[0])
         espera.until(EC.element_to_be_clickable((By.ID, 'btn-logout'))).click()
@@ -568,6 +573,7 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
         rol, _ = Rol.objects.using('central').get_or_create(codigo=CONTACTO, defaults={'nombre':'Contacto','es_sistema':True})
         Usuario.objects.db_manager('central').create_user(email=CORREO_CONTACTO, password=clave, nombres='Contacto', is_staff=True, rol=rol)
         llamadas, envios, recibidos = [], [], []
+        contenido_iniciado, entregar_contenido = Event(), Event()
         def resultado(data):
             return SimpleNamespace(status_code=200, content=b'{}', json=lambda:{'status':{'code':200},'data':data})
         def api(metodo, url, **opciones):
@@ -580,6 +586,9 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
                 self.assertEqual(opciones['params']['searchKey'], 'in:Inbox::groupResult:false')
                 return resultado(list(recibidos))
             if url.endswith('/messages/201/content'):
+                contenido_iniciado.set()
+                if not entregar_contenido.wait(timeout=15):
+                    raise AssertionError('La página debe permitir usar el editor antes de recibir el contenido de Zoho.')
                 return resultado({'content':'<p>Necesito ayuda con mi acceso.</p>'})
             if metodo == 'POST' and url.endswith('/messages/201'):
                 envios.append(opciones['json'])
@@ -637,10 +646,19 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             self.comprobar_carga(navegador, '.ss-sidebar-links a[href="/contacto/bandeja/?vista=sin-leer"]', 'Cargando Sin leer…')
             self.comprobar_carga(navegador, 'a.ss-sistema-perfil', 'Abriendo mi cuenta…')
             self.comprobar_carga(navegador, '.ss-contacto-fila', 'Abriendo correo…')
+
             mensaje = MensajeContacto.objects.using('central').get(mensaje_zoho='201')
             self.pulsar(navegador, By.CSS_SELECTOR, f'a[href="/contacto/mensajes/{mensaje.pk}/"]')
             espera.until(EC.url_contains(f'/contacto/mensajes/{mensaje.pk}/'))
-            self.assertIn('Necesito ayuda con mi acceso.', navegador.find_element(By.CSS_SELECTOR,'.ss-contacto-texto').text)
+            self.assertTrue(contenido_iniciado.wait(timeout=10))
+            editor = navegador.find_element(By.CSS_SELECTOR, '[data-borrador-editor] textarea')
+            self.assertTrue(editor.is_enabled())
+            self.assertIsNone(navegador.find_element(By.ID, 'ss-carga').get_attribute('open'))
+            editor.send_keys('Borrador mientras llega el contenido')
+            entregar_contenido.set()
+            espera.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR,'.ss-contacto-texto'), 'Necesito ayuda con mi acceso.'))
+            self.assertEqual(editor.get_attribute('value'), 'Borrador mientras llega el contenido')
+            editor.clear()
             self.pulsar(navegador, By.CSS_SELECTOR, 'a[href="#contacto-responder"]')
             navegador.find_element(By.CSS_SELECTOR,'[data-borrador-editor] textarea').send_keys('Gracias por escribirnos. Te ayudaremos a recuperar el acceso.')
             self.pulsar(navegador, By.CSS_SELECTOR, 'button[value="borrador"]')
@@ -657,3 +675,177 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             navegador.set_window_size(390,844)
             self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= window.innerWidth'))
             self.comprobar_carga(navegador, '.ss-contacto-fila', 'Abriendo correo…')
+
+
+@override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
+class AuditoriaEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+    pulsar = ContactoEnChromeTests.pulsar
+
+    def test_filtros_grupos_detalle_y_documento_en_escritorio_y_movil(self):
+        clave = 'Cuenta-fixture-auditoria-2026!'
+        raiz = Usuario.objects.db_manager('central').create_superuser(
+            email='raiz-auditoria@example.invalid', password=clave, nombres='Javier', apellidos='De prueba')
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        empresa = Empresa.objects.using('central').get(codigo='la-fragua')
+        motor = Empresa.objects.using('central').get(codigo='punto-motor')
+        consultas = []
+        for empresa_consultada in (empresa, motor, empresa):
+            consultas.append(crear_evento(alias='central', usuario=raiz, empresa=empresa_consultada, accion='CONSULTA', modelo='Empresa',
+                descripcion='QA-AUD Consulta de empresas', operacion='Consulta de Empresas', resultado='solicitada'))
+        fecha = timezone.localtime().replace(minute=0, second=0, microsecond=0)
+        for indice, consulta in enumerate(consultas):
+            Auditoria.objects.using('central').filter(pk=consulta.pk).update(fecha_creacion=fecha.replace(microsecond=indice * 100))
+        evento = crear_evento(alias='central', usuario=raiz, accion='DEACTIVATE', modelo='Usuario',
+            descripcion='QA-AUD Cuenta de prueba suspendida. Descripción completa del evento.',
+            operacion='Cuenta desactivada', cambios={'activo': {'antes': True, 'despues': False}})
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1700,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys(raiz.email)
+        navegador.find_element(By.ID, 'password').send_keys(clave)
+        self.pulsar(navegador, By.ID, 'login-submit')
+        espera.until(EC.url_contains('/sistema/'))
+        navegador.get(self.live_server_url + '/sistema/auditoria/?search=QA-AUD')
+        espera.until(EC.visibility_of_element_located((By.ID, 'buscar-evento')))
+        self.assertFalse(navegador.find_element(By.ID, 'auditoria-usuario').is_displayed())
+        self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento')), 4)
+        self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-grupo')), 1)
+        grupo = navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary').text
+        self.assertIn('3 consultas · 2 empresas', grupo)
+        self.assertIn(raiz.email, grupo)
+        self.assertIn('Superusuario técnico', grupo)
+        self.assertIn('Solicitud registrada', grupo)
+        self.assertIn(fecha.strftime('%d/%m/%Y · %H:%M:%S') + ' · Ver eventos individuales', grupo)
+        navegador.save_screenshot('/tmp/ss-auditoria-filtros-compactos.png')
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-grupo summary')
+        self.assertEqual(len([e for e in navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento') if e.is_displayed()]), 4)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.execute_script('scrollTo({top:0,behavior:"instant"});')
+        navegador.save_screenshot('/tmp/ss-auditoria-escritorio.png')
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-avanzados summary')
+        Select(navegador.find_element(By.ID, 'auditoria-accion')).select_by_value('DEACTIVATE')
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-filtros button[type="submit"]')
+        espera.until(lambda d: 'accion=DEACTIVATE' in d.current_url)
+        self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento')), 1)
+        self.assertEqual(navegador.find_element(By.CSS_SELECTOR, '.ss-aud-evento dl > div:nth-child(3) dd').text, 'SmartStock')
+        self.assertTrue(navegador.find_element(By.ID, 'auditoria-accion').is_displayed())
+        self.assertEqual(Select(navegador.find_element(By.ID, 'auditoria-accion')).first_selected_option.get_attribute('value'), 'DEACTIVATE')
+        self.assertIn('1 activo', navegador.find_element(By.CSS_SELECTOR, '.ss-aud-avanzados summary').text)
+        navegador.execute_script('scrollTo({top:0,behavior:"instant"});')
+        navegador.save_screenshot('/tmp/ss-auditoria-filtros-activos.png')
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-ver-detalle')
+        espera.until(EC.url_contains(f'/sistema/auditoria/{evento.pk}/'))
+        self.assertIn('Descripción completa del evento.', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('Cuenta activa', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('Superusuario técnico', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.set_window_size(390, 844)
+        espera.until(lambda d: d.execute_script('return document.getElementById("ss-navigation").getBoundingClientRect().right<=1'))
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.save_screenshot('/tmp/ss-auditoria-detalle-movil.png')
+        self.pulsar(navegador, By.LINK_TEXT, 'Volver al historial')
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/auditoria/')
+        self.assertIn('accion=DEACTIVATE', navegador.current_url)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-avanzados summary')
+        self.assertFalse(navegador.find_element(By.ID, 'auditoria-accion').is_displayed())
+        self.assertIn('1 activo', navegador.find_element(By.CSS_SELECTOR, '.ss-aud-avanzados summary').text)
+        navegador.execute_script('document.querySelector(".ss-aud-evento").scrollIntoView({block:"start",behavior:"instant"});')
+        navegador.save_screenshot('/tmp/ss-auditoria-listado-movil.png')
+        pestana = navegador.current_window_handle
+        self.pulsar(navegador, By.LINK_TEXT, 'Imprimir / PDF')
+        espera.until(lambda d: len(d.window_handles) == 2)
+        navegador.switch_to.window(next(p for p in navegador.window_handles if p != pestana))
+        espera.until(EC.visibility_of_element_located((By.ID, 'auditoria-imprimir')))
+        self.assertIn('1 evento', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertIn('QA-AUD Cuenta de prueba suspendida', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertNotIn('QA-AUD Consulta de empresas', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.close()
+        navegador.switch_to.window(pestana)
+        navegador.get(self.live_server_url + '/sistema/auditoria/?search=QA-AUD&vista=consultas')
+        espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.ss-aud-grupo summary')))
+        self.assertIn(raiz.email, navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary').text)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.execute_script('scrollTo({top:0,behavior:"instant"});')
+        navegador.save_screenshot('/tmp/ss-auditoria-filtros-movil.png')
+        navegador.execute_script('arguments[0].scrollIntoView({block:"center",behavior:"instant"});',
+                                 navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary'))
+        navegador.save_screenshot('/tmp/ss-auditoria-grupo-movil.png')
+
+
+@override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
+class MarcasEmpresaEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+    pulsar = ContactoEnChromeTests.pulsar
+
+    def comprobar_logo(self, navegador, selector, codigo):
+        espera = WebDriverWait(navegador, 20)
+        imagen = espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+        espera.until(lambda d: d.execute_script('return arguments[0].complete && arguments[0].naturalWidth>0;', imagen))
+        self.assertEqual(urlsplit(imagen.get_attribute('src')).path, f'/static/branding/empresas/{codigo}.png')
+        self.assertTrue(navegador.execute_script("""
+            const img=arguments[0], r=img.getBoundingClientRect(), padre=img.parentElement.getBoundingClientRect();
+            return getComputedStyle(img).objectFit==='contain'
+                && img.naturalWidth/img.naturalHeight>2 && r.width/r.height>2
+                && r.left>=padre.left && r.right<=padre.right && r.top>=padre.top && r.bottom<=padre.bottom
+                && getComputedStyle(img.parentElement).backgroundColor==='rgb(255, 255, 255)';
+        """, imagen))
+        if selector.startswith('#ss-navigation'):
+            self.assertLess(imagen.find_element(By.XPATH, '..').size['height'], 110,
+                            'El logo horizontal debe dejar un encabezado compacto.')
+            self.assertTrue(navegador.execute_script("""
+                const cerrar=document.querySelector('.ss-sidebar-close');
+                return !cerrar || !cerrar.getClientRects().length
+                    || arguments[0].getBoundingClientRect().right<=cerrar.getBoundingClientRect().left;
+            """, imagen), 'El botón de cerrar debe quedar fuera del logo.')
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+
+    def test_logos_por_host_en_acceso_menu_movil_y_modo_oscuro(self):
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        clave = 'Fixture-marcas-2026!'
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        for codigo in ('la-fragua', 'punto-motor'):
+            empresa = Empresa.objects.get(codigo=codigo)
+            call_command('seed_empresa', codigo, sin_admin=True, stdout=StringIO())
+            with usar_empresa(empresa):
+                Usuario.objects.create_user(email='marca@example.invalid', password=clave,
+                    nombres='Empresa de prueba', rol=Rol.objects.get(codigo='administrador'))
+            origen = f'http://{codigo}.localhost:{urlsplit(self.live_server_url).port}'
+            navegador.set_window_size(1440, 1000)
+            navegador.get(origen + '/')
+            self.comprobar_logo(navegador, '.ss-auth-brand-panel .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-acceso.png')
+            navegador.set_window_size(390, 844)
+            self.comprobar_logo(navegador, '.ss-auth-mobile-brand .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-acceso-movil.png')
+            navegador.set_window_size(1440, 1000)
+            navegador.find_element(By.ID, 'email').send_keys('marca@example.invalid')
+            navegador.find_element(By.ID, 'password').send_keys(clave)
+            self.pulsar(navegador, By.ID, 'login-submit')
+            espera.until(EC.url_contains('/dashboard/'))
+            self.comprobar_logo(navegador, '#ss-navigation .ss-company-logo', codigo)
+            espera.until(lambda d: d.find_element(By.ID, 'kpi-stock').text == '0')
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-escritorio.png')
+            self.pulsar(navegador, By.CSS_SELECTOR, '.ss-theme-toggle')
+            espera.until(lambda d: d.find_element(By.TAG_NAME, 'html').get_attribute('data-bs-theme') == 'dark')
+            self.comprobar_logo(navegador, '#ss-navigation .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-oscuro.png')
+            navegador.set_window_size(390, 844)
+            espera.until(lambda d: d.execute_script('return document.getElementById("ss-navigation").getBoundingClientRect().right<=1'))
+            self.pulsar(navegador, By.CSS_SELECTOR, '.ss-menu-toggle')
+            espera.until(lambda d: d.execute_script('return document.getElementById("ss-navigation").getBoundingClientRect().left>=0'))
+            self.comprobar_logo(navegador, '#ss-navigation .ss-company-logo', codigo)
+            navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-movil.png')
+        navegador.set_window_size(1440, 1000)
+        navegador.get(self.live_server_url + '/?empresa=la-fragua')
+        self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.ss-company-logo'))
+        self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, '.ss-auth-brand .ss-brand-logo'))

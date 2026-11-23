@@ -22,3 +22,19 @@ jobs:
       - name: Probar dos empresas en el mismo navegador
         if: ${{ !cancelled() }}
         run: python manage.py test esquema_multiempresa.selenium_suite --settings=esquema_multiempresa.testing --verbosity 2 --noinput
+      - name: Guardar capturas de auditoría con datos de prueba
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: auditoria-capturas
+          path: /tmp/ss-auditoria-*.png
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Guardar capturas de logos de empresas con datos de prueba
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: marcas-empresas-capturas
+          path: /tmp/ss-empresa-*.png
+          if-no-files-found: ignore
+          retention-days: 3

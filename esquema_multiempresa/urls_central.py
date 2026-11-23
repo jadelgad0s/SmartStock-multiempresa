@@ -6,7 +6,8 @@ from apps.usuarios.views_recuperacion import (
     RecuperacionEnviadaView, EstablecerNuevaClaveView, ClaveActualizadaView,
 )
 from .admin_central import sitio_sistema
-from .contacto import bandeja, conexion_contacto, cuenta_contacto, detalle_mensaje, mi_cuenta_contacto, sincronizar
+from .auditoria_sistema import detalle as detalle_auditoria_sistema, exportar as exportar_auditoria_sistema, reporte as reporte_auditoria_sistema
+from .contacto import bandeja, conexion_contacto, contenido_mensaje, cuenta_contacto, detalle_mensaje, mi_cuenta_contacto, sincronizar
 from .login import LoginCentralView, login_central
 from .recuperacion_central import SolicitarRecuperacionCentralView
 from .consultas_sistema import consulta_sistema, inventario_sistema
@@ -26,6 +27,7 @@ urlpatterns = [
     path('contacto/bandeja/', bandeja, name='contacto_bandeja'),
     path('contacto/sincronizar/', sincronizar, name='contacto_sincronizar'),
     path('contacto/mensajes/<int:mensaje_id>/', detalle_mensaje, name='contacto_mensaje'),
+    path('contacto/mensajes/<int:mensaje_id>/contenido/', contenido_mensaje, name='contacto_contenido'),
     path('contacto/mi-cuenta/', mi_cuenta_contacto, name='contacto_mi_cuenta'),
     path('cerrar-sesion/', logout_web, name='logout_web'),
     path('recuperar-clave/', SolicitarRecuperacionCentralView.as_view(), name='recuperar_clave'),
@@ -56,6 +58,9 @@ urlpatterns = [
     path('sistema/notificaciones/leer-todas/', leer_todas, name='sistema_notificaciones_leer_todas'),
     path('sistema/notificaciones/<uuid:identificador>/leer/', leer_notificacion, name='sistema_notificacion_leer'),
     path('sistema/auditoria/', auditoria_sistema, name='sistema_auditoria'),
+    path('sistema/auditoria/exportar/', exportar_auditoria_sistema, name='sistema_auditoria_exportar'),
+    path('sistema/auditoria/reporte/', reporte_auditoria_sistema, name='sistema_auditoria_reporte'),
+    path('sistema/auditoria/<int:evento_id>/', detalle_auditoria_sistema, name='sistema_auditoria_detalle'),
     path('sistema/inventario/', inventario_sistema, name='sistema_inventario'),
     path('sistema/catalogo/', consulta_sistema, {'modulo': 'catalogo'}, name='sistema_catalogo'),
     path('sistema/bodegas/', consulta_sistema, {'modulo': 'bodegas'}, name='sistema_bodegas'),

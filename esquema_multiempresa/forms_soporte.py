@@ -49,8 +49,8 @@ class SolicitudAccesoForm(FormularioPanel, forms.Form):
     def clean(self):
         datos = super().clean()
         alcances = datos.get('alcances', [])
-        if 'exportar' in alcances and 'reportes' not in alcances:
-            self.add_error('alcances', 'Para exportar, solicita también Consultar reportes.')
+        if 'exportar' in alcances and not {'reportes', 'auditoria'}.intersection(alcances):
+            self.add_error('alcances', 'Para exportar, solicita también Consultar reportes o Consultar auditoría.')
         if any(k in alcances for k in ('gestionar_usuarios', 'recuperar_acceso')) and 'usuarios' not in alcances:
             self.add_error('alcances', 'Para gestionar o recuperar acceso, solicita también Consultar usuarios.')
         return datos

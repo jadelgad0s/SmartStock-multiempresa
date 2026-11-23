@@ -9,7 +9,8 @@ from django.core.files.storage import default_storage
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connections
-from django.test import TestCase, override_settings
+from django.template.loader import render_to_string
+from django.test import RequestFactory, TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.core.empresa import empresa_actual, transaccion_operativa, usar_empresa
@@ -85,6 +86,42 @@ class AccesoPorEmpresaTests(TestCase):
                 self.assertEqual(portal.get('/', HTTP_HOST=codigo + '.localhost').status_code, 404)
         Empresa.objects.filter(pk=self.fragua.pk).update(activa=False)
         self.assertEqual(portal.get('/', HTTP_HOST='la-fragua.localhost').status_code, 404)
+
+    def test_marca_de_empresa_en_todos_los_modulos_no_se_cambia_por_parametros(self):
+        rutas = ('dashboard', 'productos', 'bodegas', 'ubicaciones', 'reportes', 'movimientos',
+                 'transferencias', 'mermas', 'auditoria', 'usuarios', 'alertas-sms', 'soporte')
+        for propia, ajena in ((self.fragua, self.motor), (self.motor, self.fragua)):
+            cliente, _ = self.ingresar(propia)
+            for ruta in rutas:
+                with self.subTest(empresa=propia.codigo, ruta=ruta):
+                    respuesta = cliente.get(f'/{ruta}/', {'empresa': ajena.codigo})
+                    self.assertContains(respuesta, f'/static/branding/empresas/{propia.codigo}.png')
+                    self.assertContains(respuesta, f'alt="Logo de {propia.nombre}"')
+                    self.assertNotContains(respuesta, f'/static/branding/empresas/{ajena.codigo}.png')
+                    self.assertNotContains(respuesta, 'branding/smartstock-mark.png')
+
+    def test_acceso_y_recuperacion_muestran_solo_la_marca_del_host(self):
+        for propia, ajena in ((self.fragua, self.motor), (self.motor, self.fragua)):
+            cliente = self.cliente(propia)
+            for ruta in ('/', '/recuperar-clave/'):
+                with self.subTest(empresa=propia.codigo, ruta=ruta):
+                    respuesta = cliente.get(ruta, {'empresa': ajena.codigo})
+                    self.assertContains(respuesta, f'/static/branding/empresas/{propia.codigo}.png')
+                    self.assertNotContains(respuesta, f'/static/branding/empresas/{ajena.codigo}.png')
+        portal = APIClient(HTTP_HOST='127.0.0.1:8000')
+        for ruta in ('/', '/recuperar-clave/'):
+            respuesta = portal.get(ruta, {'empresa': self.fragua.codigo})
+            self.assertContains(respuesta, 'branding/smartstock-mark.png')
+            self.assertNotContains(respuesta, 'branding/empresas/')
+
+    def test_empresa_sin_logo_propio_tiene_alternativa_sin_consultas_extra(self):
+        request = RequestFactory().get('/dashboard/')
+        request.empresa = Empresa(codigo='otra-empresa', nombre='Otra empresa')
+        with self.assertNumQueries(0, using='central'):
+            marca = render_to_string('componentes/marca_aplicacion.html', request=request)
+        self.assertIn('Otra empresa', marca)
+        self.assertNotIn('branding/empresas/', marca)
+        self.assertIn('branding/smartstock-mark.png', marca)
 
     def test_un_usuario_exclusivo_ingresa_solo_en_su_empresa(self):
         with usar_empresa(self.fragua):

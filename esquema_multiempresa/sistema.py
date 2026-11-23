@@ -1,5 +1,4 @@
 """Panel web del equipo de SmartStock y gestión de las cuentas de cada empresa."""
-from types import SimpleNamespace
 from urllib.parse import urlencode
 from smtplib import SMTPException
 
@@ -8,14 +7,13 @@ from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import DatabaseError, IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from apps.core.empresa import usar_empresa
-from apps.core.models import Auditoria
-from apps.core.views_auditoria import consulta_filtrada, datos_evento
+from apps.core.registro_auditoria import crear_evento, diferencias, estado_auditable
 from apps.productos.models import Bodega, Producto
 from apps.usuarios.models import Rol, Usuario
 from rest_framework.exceptions import ValidationError
@@ -35,8 +33,20 @@ from .permisos import (
 
 
 def empresa_del_panel(codigo, request=None):
+    if request is not None:
+        empresa = next((e for e in empresas_del_menu(request) if e.codigo == codigo), None)
+        if empresa is None:
+            from django.http import Http404
+            raise Http404
+        return empresa
     consulta = empresas_visibles(request.user) if request else Empresa.objects.filter(alias_bd__in=settings.BASES_EMPRESA)
     return get_object_or_404(consulta, codigo=codigo)
+
+
+def empresas_del_menu(request):
+    if not hasattr(request, '_empresas_menu'):
+        request._empresas_menu = list(empresas_visibles(request.user).order_by('nombre', 'id'))
+    return request._empresas_menu
 
 
 def contexto_sistema(request, modulo, titulo, empresa=None):
@@ -47,7 +57,7 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
     acceso = getattr(request, '_acceso_soporte', None)
     contexto = {
         'titulo': titulo, 'modulo': modulo, 'empresa_seleccionada': empresa,
-        'empresas_disponibles': list(empresas_visibles(request.user).order_by('nombre', 'id')),
+        'empresas_disponibles': empresas_del_menu(request),
         'es_superusuario': es_superusuario_smartstock(request.user),
         'puede_gestionar_empresas': es_administrador_plataforma(request.user),
         'perfil_personal': nombre_perfil_personal(request.user),
@@ -112,14 +122,14 @@ def parametros_consulta(request):
     return parametros
 
 
-def auditar_gestion(request, alias, accion, modelo, objeto, descripcion):
+def auditar_gestion(request, alias, accion, modelo, objeto, descripcion, *, operacion='', cambios=None, resultado='completada'):
     # Las cuentas del equipo pertenecen a la central. En una empresa el actor
     # queda identificado en la descripción, sin una FK entre bases distintas.
-    Auditoria.objects.using(alias).create(
-        usuario=request.user if alias == 'central' else None,
+    return crear_evento(alias=alias, request=request,
         accion=accion, modelo=modelo, objeto_id=str(objeto.pk),
         descripcion=f'SmartStock · {request.user.email} · {descripcion}',
-        ip_address=request.META.get('REMOTE_ADDR'),
+        operacion=operacion or descripcion.split(' · ')[0], cambios=cambios, resultado=resultado,
+        empresa=objeto if modelo == 'Empresa' else None,
     )
 
 
@@ -130,18 +140,26 @@ def resumen_empresa(empresa, request=None):
     if request is not None and not es_administrador_plataforma(request.user):
         # La ficha asignada procede del directorio central; consultar las
         # cuentas del cliente requiere su autorización específica.
+        registrar_empresa_consultada(request, empresa, 'completada')
         return datos
     if empresa.alias_bd not in settings.BASES_EMPRESA:
         datos['disponible'] = False
+        if request is not None:
+            registrar_empresa_consultada(request, empresa, 'fallida')
         return datos
     try:
         with usar_empresa(empresa):
-            datos.update(usuarios=Usuario.objects.filter(is_superuser=False).count(),
-                administrador=Usuario.objects.filter(activo=True, rol__codigo='administrador', rol__activo=True)
-                    .exclude(password__startswith='!').exclude(password='').exists(),
-                puede_invitar=puede_invitar_inicial(empresa))
+            clave_usable = ~Q(password__startswith='!') & ~Q(password='')
+            conteos = Usuario.objects.aggregate(
+                usuarios=Count('pk', filter=Q(is_superuser=False)),
+                administradores=Count('pk', filter=Q(activo=True, rol__codigo='administrador', rol__activo=True) & clave_usable),
+                con_acceso=Count('pk', filter=clave_usable))
+            datos.update(usuarios=conteos['usuarios'], administrador=bool(conteos['administradores']),
+                         puede_invitar=not conteos['con_acceso'])
     except DatabaseError:
         datos['disponible'] = False
+    if request is not None:
+        registrar_empresa_consultada(request, empresa, 'completada' if datos['disponible'] else 'fallida')
     return datos
 
 
@@ -196,13 +214,20 @@ def editar_empresa(request, codigo=None):
         nueva = empresa._state.adding
         try:
             with transaction.atomic(using='central'):
+                antes = estado_auditable(Empresa.objects.using('central').select_for_update().get(pk=empresa.pk)) if not nueva else {}
                 guardada = formulario.save(commit=False)
                 guardada.save(using='central')
                 if not guardada.activa:
                     AccesoSoporte.objects.using('central').filter(atencion__empresa=guardada,
                         estado__in=['pendiente', 'aprobado']).update(estado='revocado')
-                auditar_gestion(request, 'central', 'CREATE' if nueva else 'UPDATE', 'Empresa', guardada,
-                                f'Empresa guardada · {guardada.nombre}')
+                accion = 'CREATE' if nueva else 'UPDATE'
+                if not nueva and antes.get('activa') != guardada.activa:
+                    accion = 'REACTIVATE' if guardada.activa else 'DEACTIVATE'
+                auditar_gestion(request, 'central', accion, 'Empresa', guardada,
+                    f'Empresa guardada · {guardada.nombre}',
+                    operacion={'CREATE': 'Empresa creada', 'DEACTIVATE': 'Empresa desactivada',
+                               'REACTIVATE': 'Empresa reactivada'}.get(accion, 'Ficha de empresa actualizada'),
+                    cambios=diferencias(antes, estado_auditable(guardada)))
         except IntegrityError:
             formulario.add_error(None, 'El RUT, el código o la base ya están vinculados a otra empresa. Revisa los datos.')
         else:
@@ -234,6 +259,7 @@ def ficha_empresa(request, codigo):
                                    bodegas=Bodega.objects.filter(activa=True).count(), inventario_autorizado=True)
         except DatabaseError:
             resumen['disponible'] = False
+            registrar_empresa_consultada(request, empresa, 'fallida')
     contexto = contexto_sistema(request, 'empresas', 'Ficha de empresa', empresa=empresa)
     contexto['resumen'] = resumen
     return render(request, 'sistema/empresa_ficha.html', contexto)
@@ -258,7 +284,9 @@ def usuarios_sistema(request):
                 if texto:
                     consulta = consulta.filter(Q(email__icontains=texto) | Q(nombres__icontains=texto) | Q(apellidos__icontains=texto))
                 contexto['usuarios_empresa'] = list(paginar(request, contexto, consulta))
+                registrar_empresa_consultada(request, empresa, 'completada')
         except DatabaseError:
+            registrar_empresa_consultada(request, empresa, 'fallida')
             contexto['error_consulta'] = 'No pudimos consultar los usuarios de esta empresa. Vuelve a intentarlo.'
     return render(request, 'sistema/usuarios.html', contexto)
 
@@ -292,7 +320,6 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
         raise PermissionDenied
     opciones = {'alias': alias} if empresa else {'actor': request.user}
     clase = UsuarioEmpresaForm if empresa else CuentaTecnicaForm
-    estaba_activo = usuario.activo
     era_admin_empresa = bool(empresa and usuario.pk and usuario.activo and usuario.rol_id and usuario.rol.codigo == 'administrador')
     with usar_empresa(empresa):
         iniciales = {}
@@ -302,6 +329,7 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
         if request.method == 'POST' and formulario.is_valid():
             try:
                 with transaction.atomic(using=alias):
+                    antes = estado_auditable(consulta.select_for_update(of=('self',)).get(pk=usuario.pk)) if not es_nueva else {}
                     if empresa:
                         Rol.objects.using(alias).select_for_update().filter(codigo='administrador').first()
                         datos = formulario.cleaned_data
@@ -313,12 +341,18 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
                         auditar_soporte(request, request._atencion_soporte, 'UPDATE', 'Gestión autorizada de una cuenta de empresa')
                     guardado = formulario.save()
                     accion = 'CREATE' if es_nueva else 'UPDATE'
-                    if not es_nueva and estaba_activo != guardado.activo:
+                    if not es_nueva and antes.get('activo') != guardado.activo:
                         accion = 'REACTIVATE' if guardado.activo else 'DEACTIVATE'
                     detalle = f'Cuenta guardada · {guardado.email}'
                     if empresa is None:
                         detalle += f' · Perfil: {nombre_perfil_personal(guardado)}'
-                    auditar_gestion(request, alias, accion, 'Usuario', guardado, detalle)
+                    cambios = diferencias(antes, estado_auditable(guardado))
+                    operacion = {'CREATE': 'Cuenta creada', 'DEACTIVATE': 'Cuenta desactivada',
+                                 'REACTIVATE': 'Cuenta reactivada'}.get(accion, 'Cuenta actualizada')
+                    if accion == 'UPDATE' and 'perfil' in cambios:
+                        operacion = 'Rol de usuario cambiado' if empresa else 'Perfil de acceso cambiado'
+                    auditar_gestion(request, alias, accion, 'Usuario', guardado, detalle,
+                        operacion=operacion, cambios=cambios)
             except IntegrityError:
                 formulario.add_error(None, 'Ya existe una cuenta con esos datos. Revisa el correo electrónico.')
             except ValidationError:
@@ -357,6 +391,8 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
         if empresa:
             volver = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo, **parametros_atencion(request)})
         contexto.update(formulario=formulario, volver=volver)
+        if empresa:
+            registrar_empresa_consultada(request, empresa, 'completada')
         return render(request, 'sistema/formulario.html', contexto)
 
 
@@ -383,22 +419,8 @@ def mi_cuenta(request):
 @requiere_personal
 @require_http_methods(['GET'])
 def auditoria_sistema(request):
-    empresa = empresa_para_consulta(request, 'auditoria')
-    contexto = contexto_sistema(request, 'auditoria', 'Auditoría', empresa)
-    try:
-        with usar_empresa(empresa):
-            consulta, _ = consulta_filtrada(SimpleNamespace(query_params=parametros_consulta(request)))
-            if empresa is None and not es_superusuario_smartstock(request.user):
-                propias = Q(usuario=request.user) | Q(modelo='AtencionSoporte', objeto_id__in=[str(pk) for pk in atenciones_visibles(request.user).values_list('pk', flat=True)])
-                if es_administrador_plataforma(request.user):
-                    propias |= Q(modelo='Empresa')
-                consulta = consulta.filter(propias)
-            contexto['eventos'] = [datos_evento(evento) for evento in paginar(request, contexto, consulta)]
-    except ValidationError:
-        contexto['error_consulta'] = 'Revisa las fechas y los filtros de la consulta.'
-    except DatabaseError:
-        contexto['error_consulta'] = 'No pudimos consultar la auditoría. Vuelve a intentarlo.'
-    return render(request, 'sistema/auditoria.html', contexto)
+    from .auditoria_sistema import listado
+    return listado(request)
 
 
 @requiere_personal
