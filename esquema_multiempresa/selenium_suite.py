@@ -689,12 +689,14 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         call_command('registrar_empresas_prueba', stdout=StringIO())
         empresa = Empresa.objects.using('central').get(codigo='la-fragua')
         motor = Empresa.objects.using('central').get(codigo='punto-motor')
+        consultas = []
         for empresa_consultada in (empresa, motor, empresa):
-            crear_evento(alias='central', usuario=raiz, empresa=empresa_consultada, accion='CONSULTA', modelo='Empresa',
-                descripcion='QA-AUD Consulta de empresas', operacion='Consulta de Empresas', resultado='solicitada')
-        Auditoria.objects.using('central').filter(accion='CONSULTA').update(
-            fecha_creacion=timezone.now().replace(minute=0, second=0, microsecond=0))
-        evento = crear_evento(alias='central', usuario=raiz, empresa=empresa, accion='DEACTIVATE', modelo='Usuario',
+            consultas.append(crear_evento(alias='central', usuario=raiz, empresa=empresa_consultada, accion='CONSULTA', modelo='Empresa',
+                descripcion='QA-AUD Consulta de empresas', operacion='Consulta de Empresas', resultado='solicitada'))
+        fecha = timezone.localtime().replace(minute=0, second=0, microsecond=0)
+        for indice, consulta in enumerate(consultas):
+            Auditoria.objects.using('central').filter(pk=consulta.pk).update(fecha_creacion=fecha.replace(microsecond=indice * 100))
+        evento = crear_evento(alias='central', usuario=raiz, accion='DEACTIVATE', modelo='Usuario',
             descripcion='QA-AUD Cuenta de prueba suspendida. Descripción completa del evento.',
             operacion='Cuenta desactivada', cambios={'activo': {'antes': True, 'despues': False}})
         opciones = webdriver.ChromeOptions()
@@ -718,6 +720,7 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         self.assertIn(raiz.email, grupo)
         self.assertIn('Superusuario técnico', grupo)
         self.assertIn('Solicitud registrada', grupo)
+        self.assertIn(fecha.strftime('%d/%m/%Y · %H:%M:%S') + ' · Ver eventos individuales', grupo)
         navegador.save_screenshot('/tmp/ss-auditoria-filtros-compactos.png')
         self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-grupo summary')
         self.assertEqual(len([e for e in navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento') if e.is_displayed()]), 4)
@@ -729,6 +732,7 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-filtros button[type="submit"]')
         espera.until(lambda d: 'accion=DEACTIVATE' in d.current_url)
         self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento')), 1)
+        self.assertEqual(navegador.find_element(By.CSS_SELECTOR, '.ss-aud-evento dl > div:nth-child(3) dd').text, 'SmartStock')
         self.assertTrue(navegador.find_element(By.ID, 'auditoria-accion').is_displayed())
         self.assertEqual(Select(navegador.find_element(By.ID, 'auditoria-accion')).first_selected_option.get_attribute('value'), 'DEACTIVATE')
         self.assertIn('1 activo', navegador.find_element(By.CSS_SELECTOR, '.ss-aud-avanzados summary').text)

@@ -166,6 +166,15 @@ def presentar(evento, empresa=None, empresas=None):
         anterior = empresas.get(evento.objeto_id)
         if anterior:
             datos.update(empresa_nombre=anterior.nombre, empresa_codigo=anterior.codigo)
+    datos['empresa_mostrada'] = datos['empresa_nombre'] or datos['empresa_codigo'] or 'No registrada'
+    # El actor central no basta: una consulta de cliente o una denegación sin
+    # destino registrado no prueba que la empresa relacionada sea SmartStock.
+    interno = (evento.modelo in ('Usuario', 'Rol', 'MensajeContacto', 'BuzonContacto')
+               and datos['accion'] in ('LOGIN', 'LOGOUT', 'CREATE', 'UPDATE', 'DEACTIVATE', 'REACTIVATE', 'DELETE')
+               or evento.modelo == 'Auditoria' and datos['accion'] == 'EXPORT')
+    if (not datos['empresa_nombre'] and not datos['empresa_codigo'] and not evento.atencion_id
+            and evento._state.db == 'central' and datos['origen_actor'] == 'smartstock' and interno):
+        datos['empresa_mostrada'] = 'SmartStock'
     # El resumen nunca sustituye la descripción completa del detalle.
     resumen = evento.descripcion
     if resumen.startswith('SmartStock · ') and len(resumen.split(' · ', 2)) == 3:
@@ -226,7 +235,7 @@ def grupos(eventos, agrupar):
         empresas = {('codigo', e['empresa_codigo']) if e['empresa_codigo'] else ('nombre', e['empresa_nombre'])
                     for e in filas if e['empresa_codigo'] or e['empresa_nombre']}
         fechas = sorted(datetime.fromisoformat(e['fecha_iso']) for e in filas)
-        inicio, fin = fechas[0], fechas[-1]
+        inicio, fin = (fecha.replace(microsecond=0) for fecha in (fechas[0], fechas[-1]))
         intervalo = inicio.strftime('%d/%m/%Y · %H:%M:%S')
         if fin != inicio:
             intervalo += '–' + fin.strftime('%H:%M:%S' if inicio.date() == fin.date() else '%d/%m/%Y %H:%M:%S')
@@ -351,7 +360,7 @@ def exportar(request):
                     e = presentar(registro, empresa)
                     cambios = '; '.join(f'{c["campo"]}: {c["antes"]} → {c["despues"]}' for c in e['cambios'])
                     yield escritor.writerow([celda_csv(v) for v in [e['id'], e['fecha'], e['zona_horaria'],
-                        e['usuario'], e['usuario_email'], e['perfil'], e['empresa_nombre'], e['operacion'],
+                        e['usuario'], e['usuario_email'], e['perfil'], e['empresa_mostrada'], e['operacion'],
                         e['modulo_mostrado'], e['resultado_etiqueta'], e['descripcion'], e['atencion_id'],
                         e['ip_address'], e['user_agent'], cambios]])
                 ultimo = lote[-1]

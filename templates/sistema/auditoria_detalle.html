@@ -11,7 +11,7 @@
     <div><dt>Usuario</dt><dd>{{ evento.usuario }}<small>{{ evento.usuario_email }}</small></dd></div>
     <div><dt>Perfil al registrar el evento</dt><dd>{{ evento.perfil|default:'No registrado' }}</dd></div>
     <div><dt>Ámbito consultado</dt><dd>{{ ambito_nombre }}</dd></div>
-    <div><dt>Empresa relacionada</dt><dd>{{ evento.empresa_nombre|default:'No registrada' }}{% if evento.empresa_codigo %} · {{ evento.empresa_codigo }}{% endif %}</dd></div>
+    <div><dt>Empresa relacionada</dt><dd>{{ evento.empresa_mostrada }}{% if evento.empresa_codigo %} · {{ evento.empresa_codigo }}{% endif %}</dd></div>
     <div><dt>Módulo</dt><dd>{{ evento.modulo_mostrado }}</dd></div>
     <div><dt>Elemento afectado</dt><dd>{{ evento.modelo }}{% if evento.objeto_id %} · {{ evento.objeto_id }}{% endif %}</dd></div>
     <div><dt>Código de acción registrado</dt><dd>{{ evento.accion_registrada }}</dd></div>

@@ -109,12 +109,16 @@ class AuditoriaInvestigacionTests(TestCase):
 
     def test_vistas_y_agrupacion_visual_conservan_todos_los_eventos(self):
         Auditoria.objects.using('central').all().delete()
-        for _ in range(3):
-            self.evento(accion='CONSULTA', operacion='Consulta de Empresas', resultado='solicitada')
-        Auditoria.objects.using('central').update(fecha_creacion=datetime(2026, 11, 21, 16, 0, tzinfo=utc.utc))
+        for microsegundos in (100, 500, 900):
+            evento = self.evento(accion='CONSULTA', operacion='Consulta de Empresas', resultado='solicitada')
+            Auditoria.objects.using('central').filter(pk=evento.pk).update(
+                fecha_creacion=datetime(2026, 11, 21, 16, 0, microsecond=microsegundos, tzinfo=utc.utc))
         pagina = self.raiz_web.get('/sistema/auditoria/', {'vista': 'consultas'})
         self.assertEqual(len(pagina.context['grupos_eventos']), 1)
         self.assertEqual(len(pagina.context['grupos_eventos'][0]['eventos']), 3)
+        self.assertEqual(pagina.context['grupos_eventos'][0]['intervalo'], '21/11/2026 · 13:00:00')
+        self.assertEqual([f.microsecond for f in Auditoria.objects.using('central').order_by('id').values_list('fecha_creacion', flat=True)],
+                         [100, 500, 900])
         self.assertEqual(pagina.context['pagina'].paginator.count, 3)
         self.assertContains(pagina, '>Ver detalle</a>', count=3)
         sin_grupo = self.raiz_web.get('/sistema/auditoria/', {'vista': 'consultas', 'agrupar': '0'})
@@ -147,6 +151,44 @@ class AuditoriaInvestigacionTests(TestCase):
         pagina = self.raiz_web.get('/sistema/auditoria/', {'vista': 'consultas'})
         self.assertEqual([len(g['eventos']) for g in pagina.context['grupos_eventos']], [1, 1, 2])
         self.assertEqual(pagina.context['pagina'].paginator.count, 4)
+
+    def test_etiqueta_smartstock_solo_en_eventos_internos_y_conserva_historicos_en_cada_salida(self):
+        texto = 'QA-EMPRESA-MOSTRADA'
+        interno = self.evento(modelo='Usuario', empresa=None, accion='LOGIN', descripcion=texto)
+        historico = Auditoria.objects.using('central').create(
+            usuario=self.raiz, modelo='Usuario', accion='UPDATE', descripcion=texto)
+        consulta = self.evento(modelo='Empresa', empresa=None, accion='CONSULTA', objeto_id='999999', descripcion=texto)
+        denegado = self.evento(modelo='Acceso', empresa=None, accion='ACCESS_DENIED', descripcion=texto)
+        cliente = Usuario.objects.using('ferreteria').select_related('rol').get(pk=90)
+        ajeno = self.evento(usuario=cliente, modelo='Usuario', empresa=None, descripcion=texto)
+        relacionado = self.evento(modelo='Usuario', descripcion=texto)
+        registros = [interno, historico, consulta, denegado, ajeno, relacionado]
+        antes = list(Auditoria.objects.using('central').filter(pk__in=[r.pk for r in registros]).order_by('id').values())
+        esperados = {interno.pk: 'SmartStock', historico.pk: 'No registrada', consulta.pk: 'No registrada',
+                     denegado.pk: 'No registrada', ajeno.pk: 'No registrada', relacionado.pk: self.fragua.nombre}
+        pagina = self.raiz_web.get('/sistema/auditoria/', {'search': texto, 'agrupar': '0'})
+        self.assertEqual({e['id']: e['empresa_mostrada'] for e in pagina.context['eventos']}, esperados)
+        for registro in (interno, historico):
+            detalle = self.raiz_web.get(f'/sistema/auditoria/{registro.pk}/')
+            self.assertContains(detalle, f'<dt>Empresa relacionada</dt><dd>{esperados[registro.pk]}</dd>', html=True)
+        filas = self.csv(self.raiz_web.get('/sistema/auditoria/exportar/', {'search': texto}))
+        self.assertEqual({int(f[0]): f[6] for f in filas}, esperados)
+        documento = self.raiz_web.get('/sistema/auditoria/reporte/', {'search': texto})
+        self.assertContains(documento, '<br>Superusuario técnico<br>SmartStock</td>')
+        self.assertContains(documento, '<br><br>No registrada</td>')
+        despues = list(Auditoria.objects.using('central').filter(pk__in=esperados).order_by('id').values())
+        self.assertEqual(despues, antes)
+
+    def test_etiqueta_empresa_usa_el_ambito_autorizado_y_no_el_origen_del_actor(self):
+        acceso = self.conceder(tecnico=self.raiz, alcances=['auditoria'])
+        evento = self.evento(alias='ferreteria', usuario=self.raiz, empresa=None, modelo='Usuario', descripcion='QA-AMBITO')
+        parametros = {'empresa': 'la-fragua', 'atencion': str(acceso.atencion_id), 'search': 'QA-AMBITO'}
+        pagina = self.raiz_web.get('/sistema/auditoria/', parametros)
+        self.assertEqual(pagina.context['eventos'][0]['empresa_mostrada'], self.fragua.nombre)
+        detalle = self.raiz_web.get(f'/sistema/auditoria/{evento.pk}/', parametros)
+        self.assertEqual(detalle.context['evento']['empresa_mostrada'], self.fragua.nombre)
+        evento.refresh_from_db(using='ferreteria')
+        self.assertEqual(evento.empresa_nombre, '')
 
     def test_solicitud_antigua_se_aclara_sin_reescribir_y_conserva_descripcion_en_salidas(self):
         texto = 'SmartStock · raiz@example.invalid · Solicitud de consulta de Empresas · TEXTO ORIGINAL LARGO ' + 'histórico ' * 30
