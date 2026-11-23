@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import DatabaseError
 from django.http.request import split_domain_port
 from django.shortcuts import redirect, render
+from django.templatetags.static import static
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.utils.decorators import method_decorator
@@ -134,6 +135,7 @@ class LoginCentralView(APIView):
                 )
                 destinos.append({
                     'nombre': empresa.nombre,
+                    'logo': static(empresa.logo_estatico) if empresa.logo_estatico else '',
                     'url': direccion_empresa(request, empresa) + '/acceder/',
                     'ticket': str(ticket.pk),
                 })
