@@ -38,3 +38,11 @@ jobs:
           path: /tmp/ss-empresa-*.png
           if-no-files-found: ignore
           retention-days: 3
+      - name: Guardar capturas del registro de productos por empresa
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalogo-empresa-capturas
+          path: /tmp/ss-catalogo-empresa-*.png
+          if-no-files-found: ignore
+          retention-days: 3

@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let sesion;
     try { sesion = JSON.parse(localStorage.getItem('usuario') || '{}') || {}; } catch (_) { sesion = {}; }
     const el = id => document.getElementById(id);
+    const soloEmpresa = document.querySelector('.ss-code-lookup')?.dataset.soloEmpresa === 'true';
     const conCarga = window.SmartStockCarga || ((_, tarea) => tarea());
     const nodo = (tag, clase, texto) => {
         const n = document.createElement(tag); if (clase) n.className = clase;
@@ -254,10 +255,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         s.submit.textContent = s.pendiente ? 'Guardando...' : s.nuevo ? 'Crear producto' : 'Guardar cambios';
         if (s.nuevo) {
-            s.submit.disabled ||= consultaCodigo.pendiente;
+            s.submit.disabled ||= consultaCodigo.pendiente || (soloEmpresa && consultaCodigo.resultado?.estado === 'existente');
             el('buscarDatosProducto').disabled ||= consultaCodigo.pendiente;
             s.modal.querySelector('[data-target="consultaCodigoProducto"]').disabled ||= consultaCodigo.pendiente;
-            el('buscarDatosProducto').textContent = consultaCodigo.pendiente ? 'Buscando...' : 'Buscar datos';
+            el('buscarDatosProducto').textContent = consultaCodigo.pendiente ? 'Buscando...' : soloEmpresa ? 'Buscar en catálogo' : 'Buscar datos';
         }
         s.form.setAttribute('aria-busy', String(s.pendiente || s.cargando));
     }
@@ -353,7 +354,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const json = await api('/api/v1/productos/consultar-codigo/?' + new URLSearchParams({codigo}), {signal: consultaCodigo.controlador.signal});
             if (version !== consultaCodigo.version || !s.abierto || el('consultaCodigoProducto').value.trim() !== codigo) return;
             const d = json.data;
-            if (!d || d.codigo !== codigo || !['existente', 'externo', 'no_compatible', 'no_encontrado', 'indisponible', 'limite'].includes(d.estado)) throw new Error('No se pudo leer el resultado de la consulta.');
+            const estados = soloEmpresa ? ['existente', 'no_encontrado'] : ['existente', 'externo', 'no_compatible', 'no_encontrado', 'indisponible', 'limite'];
+            if (!d || d.codigo !== codigo || !estados.includes(d.estado)) throw new Error('No se pudo leer el resultado de la consulta.');
             consultaCodigo.resultado = d; aviso('estadoConsultaCodigo', json.mensaje); mostrarConsulta(d);
         } catch (error) { if (version === consultaCodigo.version && s.abierto) aviso('estadoConsultaCodigo', error.message); }
         finally { if (version === consultaCodigo.version) { consultaCodigo.pendiente = false; bloquear(s); } }
@@ -361,6 +363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     el('buscarDatosProducto').addEventListener('click', buscarDatosProducto);
     el('consultaCodigoProducto').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarDatosProducto(); } });
     el('consultaCodigoProducto').addEventListener('input', () => {
+        if (soloEmpresa) retirarSugerenciaAnterior(estadosForm[0]);
         cancelarConsulta(); consultaCodigo.resultado = null; consultaCodigo.tipo = /^https?:\/\//i.test(el('consultaCodigoProducto').value) ? 'QR' : 'BARRA';
         el('resultadoConsultaCodigo').hidden = true; aviso('estadoConsultaCodigo', ''); bloquear(estadosForm[0]);
     });
@@ -470,7 +473,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (principal && s.codigos.length) s.codigos[0].es_principal = true; renderCodigos(s);
         });
         s.form.addEventListener('submit', async e => {
-            e.preventDefault(); if (!s.abierto || s.pendiente || s.completo || s.cargando || (s.nuevo && consultaCodigo.pendiente) || (!s.nuevo && !s.producto) || !permisoFormulario(s)) return;
+            e.preventDefault(); if (!s.abierto || s.pendiente || s.completo || s.cargando || (s.nuevo && (consultaCodigo.pendiente || soloEmpresa && consultaCodigo.resultado?.estado === 'existente')) || (!s.nuevo && !s.producto) || !permisoFormulario(s)) return;
             const payload = validarFormulario(s); if (!payload) return;
             if (!s.nuevo && !Object.keys(payload).length) { s.completo = true; bootstrap.Modal.getOrCreateInstance(s.modal).hide(); return; }
             s.pendiente = true; bloquear(s);

@@ -849,3 +849,64 @@ class MarcasEmpresaEnChromeTests(StaticLiveServerTestCase):
         navegador.get(self.live_server_url + '/?empresa=la-fragua')
         self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.ss-company-logo'))
         self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, '.ss-auth-brand .ss-brand-logo'))
+
+
+@override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
+class CatalogoEmpresaEnChromeTests(StaticLiveServerTestCase):
+    databases = {'central', 'ferreteria', 'repuestos'}
+    pulsar = ContactoEnChromeTests.pulsar
+
+    @patch('apps.productos.views_consulta_codigos.consultar_open_food_facts')
+    def test_codigo_nuevo_se_confirma_y_existente_inactivo_no_se_duplica_en_dos_empresas(self, proveedor):
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1440,1000')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        codigo_barra = '3017620422003'
+        for codigo in ('la-fragua', 'punto-motor'):
+            empresa = Empresa.objects.get(codigo=codigo)
+            call_command('seed_empresa', codigo, sin_admin=True, stdout=StringIO())
+            with usar_empresa(empresa):
+                Usuario.objects.create_user(email='catalogo@example.invalid', password='Catalogo-fixture-2026!',
+                    nombres='Catálogo de prueba', rol=Rol.objects.get(codigo='administrador'))
+            origen = f'http://{codigo}.localhost:{urlsplit(self.live_server_url).port}'
+            navegador.set_window_size(1440, 1000)
+            navegador.get(origen + '/')
+            navegador.find_element(By.ID, 'email').send_keys('catalogo@example.invalid')
+            navegador.find_element(By.ID, 'password').send_keys('Catalogo-fixture-2026!')
+            self.pulsar(navegador, By.ID, 'login-submit')
+            espera.until(EC.url_contains('/dashboard/'))
+            navegador.get(origen + '/productos/')
+            self.pulsar(navegador, By.ID, 'btnNuevoProducto')
+            espera.until(EC.visibility_of_element_located((By.ID, 'consultaCodigoProducto')))
+            self.assertNotIn('Open Food Facts', navegador.find_element(By.ID, 'modalNuevoProducto').text)
+            self.assertEqual(navegador.find_element(By.ID, 'buscarDatosProducto').text, 'Buscar en catálogo')
+            if codigo == 'punto-motor':
+                navegador.set_window_size(390, 844)
+            navegador.find_element(By.ID, 'consultaCodigoProducto').send_keys(codigo_barra)
+            self.pulsar(navegador, By.ID, 'buscarDatosProducto')
+            espera.until(lambda d: 'no está registrado' in d.find_element(By.ID, 'estadoConsultaCodigo').text)
+            self.assertFalse(Producto.objects.using(empresa.alias_bd).exists())
+            self.assertEqual(navegador.find_element(By.CSS_SELECTOR, '#listaCodigosNuevo input').get_attribute('value'), codigo_barra)
+            self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+            navegador.save_screenshot(f'/tmp/ss-catalogo-empresa-{codigo}-codigo-nuevo.png')
+            for campo, valor in (('inputSku', 'HER-1'), ('inputNombre', 'Tornillo hexagonal M8'), ('inputPrecio', '150')):
+                navegador.find_element(By.ID, campo).send_keys(valor)
+            self.pulsar(navegador, By.ID, 'guardarNuevoProducto')
+            espera.until(EC.invisibility_of_element_located((By.ID, 'modalNuevoProducto')))
+            self.assertEqual(Producto.objects.using(empresa.alias_bd).count(), 1)
+            Producto.objects.using(empresa.alias_bd).filter(sku='HER-1').update(activo=False)
+            self.pulsar(navegador, By.ID, 'btnNuevoProducto')
+            espera.until(EC.visibility_of_element_located((By.ID, 'consultaCodigoProducto'))).send_keys(codigo_barra)
+            self.pulsar(navegador, By.ID, 'buscarDatosProducto')
+            espera.until(EC.visibility_of_element_located((By.ID, 'verProductoEncontrado')))
+            self.assertIn('Inactivo', navegador.find_element(By.ID, 'resultadoConsultaCodigo').text)
+            self.assertFalse(navegador.find_element(By.ID, 'guardarNuevoProducto').is_enabled())
+            navegador.save_screenshot(f'/tmp/ss-catalogo-empresa-{codigo}-existente.png')
+            self.pulsar(navegador, By.ID, 'verProductoEncontrado')
+            espera.until(EC.visibility_of_element_located((By.ID, 'modalDetalleProducto')))
+            espera.until(lambda d: 'Tornillo hexagonal M8' in d.find_element(By.ID, 'modalDetalleProducto').text)
+        proveedor.assert_not_called()

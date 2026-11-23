@@ -6,8 +6,7 @@ const path = require('node:path');
 const {JSDOM} = require('jsdom');
 
 const root = path.resolve(__dirname, '../..');
-const html = readFileSync(path.join(root, 'templates/productos.html'), 'utf8')
-    .replace(/{%[\s\S]*?%}/g, '');
+const plantilla = readFileSync(path.join(root, 'templates/productos.html'), 'utf8');
 const codigo = readFileSync(path.join(root, 'static/js/productos.js'), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
@@ -28,6 +27,8 @@ function datos(count = 55, pagina = 1) {
 }
 
 async function catalogo(t, query = '', config = {}) {
+    const html = plantilla.replace(/{% if request\.empresa %}([\s\S]*?){% else %}([\s\S]*?){% endif %}/g,
+        (_, empresa, general) => config.empresa ? empresa : general).replace(/{%[\s\S]*?%}/g, '');
     const dom = new JSDOM(html, {
         url: `http://localhost/productos/${query}`,
         runScripts: 'outside-only', pretendToBeVisual: true,
@@ -113,6 +114,56 @@ const resultadoExterno = (extra = {}) => ({
         fuente: {nombre: 'Open Food Facts', url: 'https://world.openfoodfacts.org/product/03017620422003', licencia: 'ODbL'}, ...extra},
 });
 function consultarCodigo(c, codigo = codigoConsulta) { c.campo('consultaCodigoProducto', codigo); c.el('buscarDatosProducto').click(); }
+
+test('empresa busca solo en su catálogo y conserva el código sin registrar hasta confirmar', async t => {
+    const c = await catalogo(t, '', {empresa: true}); await c.responder(0); c.el('btnNuevoProducto').click();
+    assert.doesNotMatch(c.el('ayudaConsultaCodigo').textContent, /Open Food Facts/);
+    assert.equal(c.el('buscarDatosProducto').textContent, 'Buscar en catálogo');
+    c.campo('inputNombre', 'Tornillo M8'); consultarCodigo(c);
+    await c.responder(1, {success: true, mensaje: 'Completa los datos y pulsa Crear producto para guardarlo.',
+        data: {estado: 'no_encontrado', codigo: codigoConsulta}});
+    assert.equal(c.el('inputNombre').value, 'Tornillo M8');
+    assert.equal(c.el('listaCodigosNuevo').querySelector('input').value, codigoConsulta);
+    assert.ok(c.requests.every(r => r.url.origin === 'http://localhost'));
+    assert.equal(c.requests.length, 2);
+    c.campo('inputSku', 'M8'); c.campo('inputPrecio', '150'); c.enviar('formCrearProducto');
+    assert.equal(c.requests[2].options.method, 'POST');
+    const payload = JSON.parse(c.requests[2].options.body);
+    assert.equal(payload.ficha_externa_id, undefined);
+    assert.equal(payload.codigos_barra[0].codigo, codigoConsulta);
+});
+
+test('empresa muestra el producto inactivo existente y bloquea un alta duplicada', async t => {
+    const c = await catalogo(t, '', {empresa: true}); await c.responder(0); c.completarNuevo(); consultarCodigo(c);
+    await c.responder(1, {success: true, mensaje: 'Este producto ya está registrado.', data: {
+        estado: 'existente', codigo: codigoConsulta, producto: {id: 1, nombre: 'Herramienta', sku: 'HER-1', activo: false}}});
+    assert.match(c.el('resultadoConsultaCodigo').textContent, /Herramienta.*Inactivo/);
+    assert.equal(c.el('guardarNuevoProducto').disabled, true);
+    c.enviar('formCrearProducto'); assert.equal(c.requests.length, 2);
+    c.el('verProductoEncontrado').click();
+    assert.equal(c.requests[2].url.pathname, '/api/v1/productos/1/');
+});
+
+test('empresa descarta sugerencias externas de una respuesta antigua sin descargar sus imágenes', async t => {
+    const c = await catalogo(t, '', {empresa: true}); await c.responder(0); c.el('btnNuevoProducto').click(); consultarCodigo(c);
+    await c.responder(1, resultadoExterno());
+    assert.match(c.el('estadoConsultaCodigo').textContent, /No se pudo leer/);
+    assert.equal(c.el('inputNombre').value, '');
+    assert.equal(c.el('resultadoConsultaCodigo').querySelector('img'), null);
+    assert.equal(c.el('listaCodigosNuevo').querySelectorAll('input').length, 0);
+});
+
+test('cambiar el código consultado en empresa retira el automático y conserva códigos y datos manuales', async t => {
+    const c = await catalogo(t, '', {empresa: true}); await c.responder(0); c.el('btnNuevoProducto').click(); consultarCodigo(c);
+    await c.responder(1, {data: {estado: 'no_encontrado', codigo: codigoConsulta}});
+    c.campo('inputNombre', 'Nombre manual'); c.campo('inputCodigoBarra', 'SECUNDARIO'); c.el('agregarCodigoNuevo').click();
+    consultarCodigo(c, 'OTRO-CODIGO');
+    assert.deepEqual([...c.el('listaCodigosNuevo').querySelectorAll('[data-campo-codigo="codigo"]')].map(n => n.value), ['SECUNDARIO']);
+    await c.responder(2, {success: false, mensaje: 'Sin conexión.'}, 503);
+    assert.equal(c.el('inputNombre').value, 'Nombre manual');
+    assert.deepEqual([...c.el('listaCodigosNuevo').querySelectorAll('[data-campo-codigo="codigo"]')].map(n => n.value), ['SECUNDARIO']);
+    assert.match(c.el('estadoConsultaCodigo').textContent, /Sin conexión/);
+});
 
 test('buscar desde nuevo producto completa vacíos y asocia código, sin guardar ni cambiar SKU o precio', async t => {
     const c = await catalogo(t); await c.responder(0); c.el('btnNuevoProducto').click();
