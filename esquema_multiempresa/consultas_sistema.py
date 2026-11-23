@@ -18,7 +18,7 @@ from apps.productos.stock import anotar_stock
 from apps.productos.views_dashboard import datos_resumen_dashboard
 from apps.productos.views_reportes import archivo_reporte, documento_reporte
 from .forms import ConsultaInventarioForm
-from .permisos import es_administrador_plataforma, requiere_personal
+from .permisos import es_administrador_plataforma, registrar_empresa_consultada, requiere_personal
 from .sistema import contexto_sistema, paginar, parametros_consulta
 from .autorizacion_soporte import acceso_para, alcances_actuales, empresa_para_consulta, parametros_atencion, auditar_soporte
 
@@ -38,9 +38,12 @@ def inventario_sistema(request):
                 contexto['dashboard'] = datos_resumen_dashboard(SimpleNamespace(query_params=request.GET, user=request.user))
                 dashboard = contexto['dashboard']
                 contexto['hay_movimientos_periodo'] = any(dashboard['chart_entradas']) or any(dashboard['chart_salidas'])
+                registrar_empresa_consultada(request, empresa, 'completada')
         except ValidationError:
+            registrar_empresa_consultada(request, empresa, 'fallida')
             contexto['error_consulta'] = 'Selecciona una bodega activa y un período de 7 o 30 días.'
         except DatabaseError:
+            registrar_empresa_consultada(request, empresa, 'fallida')
             contexto['error_consulta'] = 'No pudimos consultar el inventario de esta empresa. Vuelve a intentarlo.'
     return render(request, 'sistema/inventario.html', contexto)
 
@@ -146,10 +149,15 @@ def consulta_sistema(request, modulo):
                 contexto['formulario_consulta'] = formulario
                 if formulario.is_valid():
                     if modulo == 'reportes' and request.GET.get('exportar') in ('csv', 'pdf'):
-                        auditar_soporte(request, request._atencion_soporte, 'CONSULTA',
-                            f'Exportación {request.GET["exportar"]}; reporte {parametros.get("informe")}')
                         exportador = archivo_reporte if request.GET['exportar'] == 'csv' else documento_reporte
-                        return exportador(parametros, request.user.email, empresa.nombre)
+                        respuesta = exportador(parametros, request.user.email, empresa.nombre)
+                        # Estos exportadores preparan todos los datos antes de devolver
+                        # el archivo. Registrar preparación, sin afirmar su descarga.
+                        auditar_soporte(request, request._atencion_soporte, 'CONSULTA',
+                            f'Reporte {request.GET["exportar"].upper()} preparado; informe {parametros.get("informe")}',
+                            operacion=f'Archivo de reporte {request.GET["exportar"].upper()} preparado', resultado='completada')
+                        registrar_empresa_consultada(request, empresa, 'completada')
+                        return respuesta
                     consultas = {'catalogo': tabla_catalogo, 'bodegas': tabla_bodegas,
                                  'transferencias': tabla_transferencias, 'sms': tabla_sms}
                     if modulo in consultas:
@@ -157,13 +165,18 @@ def consulta_sistema(request, modulo):
                     else:
                         tabla_reporte(request, contexto, parametros)
                     contexto['hay_acciones'] = any(fila.get('url') for fila in contexto.get('filas', []))
+                    registrar_empresa_consultada(request, empresa, 'completada')
+                else:
+                    registrar_empresa_consultada(request, empresa, 'fallida')
         except ValidationError as error:
+            registrar_empresa_consultada(request, empresa, 'fallida')
             detalles = error.detail.values() if isinstance(error.detail, dict) else error.detail
             contexto['error_consulta'] = ' '.join(
                 ' '.join(str(mensaje) for mensaje in detalle) if isinstance(detalle, list) else str(detalle)
                 for detalle in detalles
             )
         except DatabaseError:
+            registrar_empresa_consultada(request, empresa, 'fallida')
             contexto.pop('formulario_consulta', None)
             contexto['error_consulta'] = 'No pudimos consultar esta empresa. Vuelve a intentarlo.'
     return render(request, 'sistema/consulta.html', contexto)

@@ -8,12 +8,7 @@
     <!-- SIDEBAR CORPORATIVA -->
     <div id="ss-navigation" role="navigation" aria-label="Menú principal" class="bg-sidebar d-flex flex-column flex-shrink-0 p-3 ss-sidebar" style="width: 250px;">
         <button type="button" class="ss-sidebar-close" aria-label="Cerrar menú"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-        <a href="/" data-ss-inicio aria-label="Ir al inicio de SmartStock" class="d-flex align-items-center mb-4 text-decoration-none px-2 mt-2">
-            <div class="bg-primary-soft rounded p-2 me-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-                <img src="{% static 'branding/smartstock-mark.png' %}" alt="Logo SmartStock" class="ss-brand-logo" width="28" height="28">
-            </div>
-            <span class="fs-5 fw-bold" style="color: #0f172a; letter-spacing: -0.02em;">SmartStock</span>
-        </a>
+        {% include "componentes/marca_aplicacion.html" %}
         
         <ul class="nav nav-pills flex-column ss-sidebar-links mb-2">
             <div class="text-sidebar-muted">Visión General</div>
@@ -111,15 +106,15 @@
             <div class="modal-body">
                 <p id="estadoFormularioProductoNuevo" class="text-muted small" role="status" hidden></p>
                 <div id="errorCrearProducto" class="alert alert-danger" role="alert" hidden></div>
-                <section class="ss-code-lookup" aria-labelledby="tituloConsultaCodigo">
-                    <h6 id="tituloConsultaCodigo">Completar desde un código</h6>
+                <section class="ss-code-lookup" aria-labelledby="tituloConsultaCodigo" data-solo-empresa="{% if request.empresa %}true{% else %}false{% endif %}">
+                    <h6 id="tituloConsultaCodigo">{% if request.empresa %}Buscar código en el catálogo de la empresa{% else %}Completar desde un código{% endif %}</h6>
                     <label for="consultaCodigoProducto">Código de barras, QR o SKU registrado</label>
                     <div class="ss-code-lookup-controls">
                         <input id="consultaCodigoProducto" type="text" class="form-control" maxlength="100" autocomplete="off" placeholder="Escribe o escanea el código" data-codigos-editor="true" aria-describedby="ayudaConsultaCodigo estadoConsultaCodigo">
-                        <button type="button" id="buscarDatosProducto" class="btn btn-primary">Buscar datos</button>
+                        <button type="button" id="buscarDatosProducto" class="btn btn-primary">{% if request.empresa %}Buscar en catálogo{% else %}Buscar datos{% endif %}</button>
                         <button type="button" class="btn btn-outline-secondary ss-scan-code" data-target="consultaCodigoProducto" aria-label="Escanear para completar el producto"><i class="fa-solid fa-camera me-2" aria-hidden="true"></i>Escanear</button>
                     </div>
-                    <p id="ayudaConsultaCodigo" class="form-text mb-0">Busca primero en SmartStock y luego en Open Food Facts para alimentos y bebidas. También puedes completar el formulario manualmente.</p>
+                    <p id="ayudaConsultaCodigo" class="form-text mb-0">{% if request.empresa %}Busca únicamente entre los productos de tu empresa. Si el código es nuevo, completa los datos y confirma Crear producto para guardarlo.{% else %}Busca primero en SmartStock y luego en Open Food Facts para alimentos y bebidas. También puedes completar el formulario manualmente.{% endif %}</p>
                     <p id="estadoConsultaCodigo" class="small mt-2 mb-0" role="status" aria-live="polite" hidden></p>
                     <div id="resultadoConsultaCodigo" class="ss-code-lookup-result" hidden></div>
                 </section>
@@ -215,6 +210,6 @@
 {% endblock %}
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
-<script src="{% static 'js/productos.js' %}?v=carga-1" defer></script>
+<script src="{% static 'js/productos.js' %}?v=codigos-empresa-1" defer></script>
 <script src="{% static 'js/escaneo_camara.js' %}?v=camara-5" defer></script>
 {% endblock %}

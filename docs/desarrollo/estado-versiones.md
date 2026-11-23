@@ -6,9 +6,9 @@ Referencia de organización: 23 de noviembre de 2026.
 
 Este repositorio contiene la evolución multiempresa. El sitio https://smartstockchile.cl/ continúa vinculado al repositorio anterior, [jadelgad0s/SmartStock](https://github.com/jadelgad0s/SmartStock), hasta realizar el cambio de despliegue.
 
-main es la referencia del código integrado. Una instalación local que haya combinado otras ramas puede contener mejoras adicionales. El README y las guías deben leerse junto con la rama que se esté revisando.
+main es la referencia del código integrado. Esta consolidación reúne las mejoras funcionales recientes y conserva la organización documental. El README y las guías deben leerse junto con la rama que se esté revisando.
 
-## Mejoras pendientes de consolidación en esta fecha
+## Mejoras reunidas en esta versión
 
 | Propuesta | Cambio |
 | --- | --- |
@@ -17,13 +17,15 @@ main es la referencia del código integrado. Una instalación local que haya com
 | [PR #12](https://github.com/jadelgad0s/SmartStock-multiempresa/pull/12) | Identidad de empresa en el acceso y ayuda de cuenta. |
 | [PR #13](https://github.com/jadelgad0s/SmartStock-multiempresa/pull/13) | Transición de marca y selector después de validar las credenciales. |
 
-Esta tabla es una referencia fechada. El estado actual de cada propuesta está en su enlace de GitHub.
+Esta tabla identifica las propuestas de origen. Sus commits se conservan en el historial de integración.
 
-La guía de códigos conserva el comportamiento anterior mientras la PR #10 no se integre. La consolidación de estas ramas y la preparación de producción son etapas posteriores a la organización documental del repositorio.
+El catálogo de una empresa consulta únicamente sus productos registrados. La guía de [códigos de producto](../modulos/codigos-producto.md) describe el alta manual de códigos nuevos y la búsqueda privada. El acceso incluye la identidad de la empresa y la transición después de validar las credenciales.
+
+La [auditoría](../modulos/auditoria.md) incorpora identidad histórica y campos estructurados mediante core.0006; una instalación anterior debe aplicar esa migración en sus tres alias antes de iniciar esta versión. El [rendimiento en Neon](rendimiento-neon.md) utiliza psycopg[pool], incluido en requirements-web.txt.
 
 ## Antes de publicar la versión multiempresa
 
-Se debe reunir y comprobar la versión elegida, preparar un perfil de producción multiempresa, configurar los dominios y las conexiones privadas de Neon y validar el despliegue.
+El siguiente paso es preparar un perfil de producción multiempresa, configurar los dominios y las conexiones privadas de Neon y validar el despliegue en un entorno temporal antes de cambiar el servicio público.
 
 El perfil esquema_multiempresa.web usa localhost y la rama de pruebas de Neon. El perfil config.settings.production corresponde al despliegue anterior; no sustituye la preparación multiempresa.
 

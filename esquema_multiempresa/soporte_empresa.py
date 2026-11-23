@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
+from apps.usuarios.navegacion import datos_navegacion
 
 from .autorizacion_soporte import auditar_soporte, usuario_empresa_administrador
 from .forms_soporte import ConsultaClienteForm, personal_disponible
@@ -21,6 +22,7 @@ def soporte_empresa(request):
         return redirect('login_page')
     if not usuario_empresa_administrador(request):
         raise PermissionDenied('Solo el administrador de esta empresa puede decidir los accesos de soporte.')
+    request.navegacion_verificada = datos_navegacion(request.user)
     formulario = ConsultaClienteForm(request.POST if request.POST.get('accion') == 'nueva' else None)
     error = ''
     if request.method == 'POST':

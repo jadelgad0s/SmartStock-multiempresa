@@ -30,8 +30,13 @@ class EnvioIncierto(ErrorZoho):
     pass
 
 
-def zoho_configurado():
-    return bool(BuzonContacto.objects.using('central').exclude(credenciales_cifradas='').exists()
+_BUZON_NO_CARGADO = object()
+
+
+def zoho_configurado(*, buzon=_BUZON_NO_CARGADO):
+    guardada = (BuzonContacto.objects.using('central').exclude(credenciales_cifradas='').exists()
+                if buzon is _BUZON_NO_CARGADO else bool(buzon and buzon.credenciales_cifradas))
+    return bool(guardada
                 or settings.ZOHO_CONTACTO_CLIENT_ID and settings.ZOHO_CONTACTO_CLIENT_SECRET
                 and settings.ZOHO_CONTACTO_REFRESH_TOKEN)
 
@@ -48,8 +53,9 @@ def cifrar_configuracion(datos):
 
 
 @sensitive_variables()
-def configuracion_zoho():
-    cifrada = BuzonContacto.objects.using('central').values_list('credenciales_cifradas', flat=True).first()
+def configuracion_zoho(*, buzon=_BUZON_NO_CARGADO):
+    cifrada = (BuzonContacto.objects.using('central').values_list('credenciales_cifradas', flat=True).first()
+               if buzon is _BUZON_NO_CARGADO else buzon.credenciales_cifradas if buzon else '')
     if cifrada:
         try:
             datos = json.loads(cifrador().decrypt(cifrada.encode()))
@@ -63,8 +69,8 @@ def configuracion_zoho():
             'refresh_token': settings.ZOHO_CONTACTO_REFRESH_TOKEN, 'dc': settings.ZOHO_CONTACTO_DC}
 
 
-def servidores(dc=None):
-    dc = dc or configuracion_zoho()['dc']
+def servidores(dc=None, *, buzon=_BUZON_NO_CARGADO):
+    dc = dc or configuracion_zoho(buzon=buzon)['dc']
     # Nunca se acepta una URL arbitraria suministrada por una petición.
     if dc not in ('com', 'eu', 'in', 'com.au', 'jp'):
         raise ErrorZoho('Revisa el centro de datos de Zoho configurado para este buzón.', codigo='autorizacion')

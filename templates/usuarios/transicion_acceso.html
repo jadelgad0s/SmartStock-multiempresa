@@ -1,0 +1,12 @@
+{% load static %}
+<section id="ss-acceso-transicion" class="ss-auth-transition" role="status" aria-live="polite" aria-atomic="true"
+         data-nombre="{{ request.empresa.nombre|default:'SmartStock' }}" data-marca-base="{% get_static_prefix %}branding/"{% if not acceso_preparado %} hidden{% endif %}>
+  <div class="ss-auth-transition-brand">
+    <img id="ss-acceso-logo" src="{% if request.empresa.logo_estatico %}{% static request.empresa.logo_estatico %}{% else %}{% static 'branding/smartstock-mark.png' %}{% endif %}"
+         alt="{% if request.empresa %}Logo de {{ request.empresa.nombre }}{% else %}SmartStock{% endif %}" width="248" height="93" decoding="async">
+  </div>
+  <p class="ss-auth-transition-eyebrow">Acceso verificado</p>
+  <h2 id="ss-acceso-titulo" tabindex="-1">Abriendo {{ request.empresa.nombre|default:'SmartStock' }}…</h2>
+  <p id="ss-acceso-descripcion" class="ss-auth-note">Estamos preparando tu sesión.</p>
+  <span id="ss-acceso-indicador" class="ss-auth-transition-spinner" aria-hidden="true"></span>
+</section>

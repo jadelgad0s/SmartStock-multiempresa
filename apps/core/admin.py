@@ -8,7 +8,9 @@ class AuditoriaAdmin(admin.ModelAdmin):
     list_filter = ('accion', 'modelo', 'fecha_creacion')
     search_fields = ('usuario__email', 'modelo', 'objeto_id', 'descripcion')
     readonly_fields = ('fecha_creacion', 'fecha_modificacion', 'usuario', 'accion',
-                       'modelo', 'objeto_id', 'descripcion', 'ip_address', 'user_agent')
+                       'modelo', 'objeto_id', 'descripcion', 'ip_address', 'user_agent',
+                       'actor', 'empresa_codigo', 'empresa_nombre', 'atencion_id',
+                       'modulo', 'operacion', 'resultado', 'cambios')
     date_hierarchy = 'fecha_creacion'
     ordering = ('-fecha_creacion',)
 

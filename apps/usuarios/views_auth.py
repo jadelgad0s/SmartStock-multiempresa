@@ -17,7 +17,7 @@ from rest_framework_simplejwt.settings import api_settings
 from apps.core.responses import success_response, error_response
 from apps.core.utils import registrar_auditoria
 from .tokens import RenovacionEmpresa
-from .navegacion import cuenta_habilitada, inicio_usuario, modulos_usuario
+from .navegacion import cuenta_habilitada, datos_navegacion, inicio_usuario, modulos_usuario
 from .serializers import (
     CustomTokenObtainPairSerializer,
     RenovarTokenSerializer,
@@ -163,19 +163,7 @@ def navegacion_view(request):
     usuario = request.user
     if not cuenta_habilitada(usuario):
         return error_response('Tu cuenta necesita un rol activo. Contacta al administrador.', status_code=403)
-    modulos = modulos_usuario(usuario)
-    return success_response(data={
-        'inicio': inicio_usuario(usuario, modulos),
-        'modulos': modulos,
-        'usuario': {
-            'id': usuario.pk,
-            'email': usuario.email,
-            'nombre_completo': usuario.nombre_completo,
-            'rol': usuario.rol.codigo if usuario.rol_id else None,
-            'rol_nombre': usuario.rol.nombre if usuario.rol_id else None,
-            'is_superuser': usuario.is_superuser,
-        },
-    })
+    return success_response(data=datos_navegacion(usuario))
 
 
 @api_view(['GET'])

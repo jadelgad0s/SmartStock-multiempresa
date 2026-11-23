@@ -2,11 +2,11 @@
 {% load static %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/password_visibility.css' %}?v=1">
-<link rel="stylesheet" href="{% static 'css/acceso.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/acceso.css' %}?v=3">
 {% endblock %}
 {% block content %}
-<div class="ss-auth-layout">
-  <aside class="ss-auth-brand-panel" aria-label="SmartStock">
+<div class="ss-auth-layout{% if request.empresa.codigo == 'la-fragua' %} ss-auth-la-fragua{% endif %}">
+  <aside class="ss-auth-brand-panel" aria-label="{% if request.empresa %}{{ request.empresa.nombre }}{% else %}SmartStock{% endif %}">
     {% include 'usuarios/marca_acceso.html' %}
     <div class="ss-auth-brand-copy">
       <p class="ss-auth-eyebrow">Gestión de inventario</p>
@@ -16,8 +16,9 @@
     <p class="ss-auth-brand-footer">SmartStock · Gestión de inventario para tu negocio</p>
   </aside>
   <main class="ss-auth-form-panel">
-    <section class="ss-auth-form ss-login-form-card" aria-labelledby="titulo-acceso">
+    <section class="ss-auth-form ss-login-form-card" aria-labelledby="{% block acceso_titulo_id %}titulo-acceso{% endblock %}">
       <div class="ss-auth-mobile-brand d-lg-none">{% include 'usuarios/marca_acceso.html' %}</div>
+      {% if request.empresa %}<p class="ss-auth-company">{{ request.empresa.nombre }}</p>{% endif %}
       {% block acceso_content %}{% endblock %}
     </section>
   </main>

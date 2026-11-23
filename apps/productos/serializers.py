@@ -3,7 +3,7 @@ Serializers del módulo de productos.
 """
 from rest_framework import serializers
 from django.core.validators import RegexValidator
-from apps.core.empresa import transaccion_operativa
+from apps.core.empresa import empresa_actual, transaccion_operativa
 from .models import Producto, CodigoBarra, FichaProductoExterna
 from .consulta_codigos import interpretar_codigo, procedencia, productos_registrados
 from .stock import estado_stock, existencias_producto
@@ -132,6 +132,8 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         ficha = attrs.get('ficha_externa')
+        if ficha and empresa_actual() is not None:
+            raise serializers.ValidationError({'ficha_externa_id': 'En esta empresa los productos se registran directamente en su catálogo.'})
         if ficha:
             codigos = attrs.get('codigos_barra')
             if codigos is None:

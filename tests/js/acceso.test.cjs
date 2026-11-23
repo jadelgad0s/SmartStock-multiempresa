@@ -6,9 +6,10 @@ const {JSDOM,VirtualConsole}=require('jsdom');
 const root=path.resolve(__dirname,'../..');
 const fuente=n=>readFileSync(path.join(root,n),'utf8');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-async function pantalla(t,tipo='login'){
- const plantilla=tipo==='login'?'templates/login.html':tipo==='recuperar'?'templates/usuarios/recuperar_clave.html':'templates/usuarios/nueva_clave.html';
- const dom=new JSDOM(fuente(plantilla).replace(/{%[\s\S]*?%}/g,'').replace(/{{[\s\S]*?}}/g,''),{url:'http://localhost/',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:new VirtualConsole()});
+async function pantalla(t,tipo='login',config={}){
+ const plantilla=tipo==='login'?'templates/login.html':tipo==='completar'?'templates/empresas/completar_acceso.html':tipo==='recuperar'?'templates/usuarios/recuperar_clave.html':'templates/usuarios/nueva_clave.html';
+ const html=fuente(plantilla).replace(/{% include 'usuarios\/transicion_acceso.html'[^%]*%}/g,()=>fuente('templates/usuarios/transicion_acceso.html'));
+ const dom=new JSDOM(html.replace(/{%[\s\S]*?%}/g,'').replace(/{{[\s\S]*?}}/g,''),{url:config.url||'http://localhost/',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:new VirtualConsole()});
  const w=dom.window,requests=[];t.after(()=>w.close());
  if(tipo==='login'){
   const login=w.document.getElementById('login-form');
@@ -18,8 +19,16 @@ async function pantalla(t,tipo='login'){
   Object.assign(csrf,{type:'hidden',name:'csrfmiddlewaretoken',value:'csrf-prueba'});
   login.appendChild(csrf);
  }
+ const panel=w.document.getElementById('ss-acceso-transicion');
+ if(panel){panel.dataset.nombre='SmartStock';panel.dataset.marcaBase='/static/branding/';w.document.getElementById('ss-acceso-logo').src='/static/branding/smartstock-mark.png';}
+ if(tipo==='completar'){
+  const datos=w.document.createElement('script');datos.type='application/json';datos.id='datos-sesion';datos.textContent=JSON.stringify(config.datos||exito().data);w.document.body.appendChild(datos);
+ }
+ w.requestAnimationFrame=callback=>{callback(0);return 1;};
+ w.cancelAnimationFrame=()=>{};
  w.fetch=(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}));
- w.eval(fuente('static/js/password_visibility.js'));w.eval(fuente('static/js/acceso.js'));w.eval(fuente('static/js/login.js'));await tick();
+ config.preparar?.(w);
+ w.eval(fuente('static/js/password_visibility.js'));w.eval(fuente('static/js/acceso.js'));w.eval(fuente('static/js/transicion_acceso.js'));w.eval(fuente('static/js/login.js'));await tick();
  const el=id=>w.document.getElementById(id),form=w.document.querySelector('form');
  const enviar=()=>{const e=new w.Event('submit',{cancelable:true});form.dispatchEvent(e);return e;};
  const campo=(id,value)=>{el(id).value=value;el(id).dispatchEvent(new w.Event('input'));};
@@ -76,9 +85,12 @@ test('las credenciales con varios accesos permiten elegir la empresa después de
   {nombre:'Punto Motor',url:'http://punto-motor.localhost/acceder/',ticket:'b8111111-1111-4111-a111-111111111111'},
  ]}});
  assert.equal(c.form.hidden,true);assert.equal(c.el('opciones-acceso').hidden,false);assert.equal(entregas.length,0);
+ assert.equal(c.el('titulo-acceso').textContent,'Elige tu empresa');assert.equal(c.el('ss-login-intro').hidden,true);
  const botones=c.el('destinos-acceso').querySelectorAll('button');assert.equal(botones.length,2);botones[1].click();botones[1].click();
+ await tick();
  assert.deepEqual(entregas,['http://punto-motor.localhost/acceder/']);
  c.w.dispatchEvent(new c.w.PageTransitionEvent('pageshow',{persisted:true}));assert.equal(c.form.hidden,false);assert.equal(c.el('opciones-acceso').hidden,true);
+ assert.equal(c.el('titulo-acceso').textContent,'Bienvenido de vuelta');assert.equal(c.el('ss-login-intro').hidden,false);
 });
 test('el acceso técnico abre su panel y un destino externo se rechaza',async t=>{
  const tecnico=await pantalla(t);tecnico.completar();tecnico.enviar();await tecnico.responder({success:true,data:{sistema:true,inicio:'/sistema/'}});
@@ -112,4 +124,59 @@ test('nueva contraseña conserva ambos campos en FormData durante el envío',asy
 });
 test('volver por historial restaura los formularios que quedaron en estado de envío',async t=>{
  for(const tipo of ['login','recuperar','nueva']){const c=await pantalla(t,tipo);c.completar();c.enviar();c.w.dispatchEvent(new c.w.PageTransitionEvent('pageshow',{persisted:true}));assert.equal(c.form.getAttribute('aria-busy'),'false');assert.equal(c.form.querySelector('[type=submit]').disabled,false);assert.equal(c.form.querySelector('input:not([type=hidden])').readOnly,false);}
+});
+
+test('la marca solo aparece tras validar y el POST espera al pintado sin enviar la contraseña',async t=>{
+ const fotogramas=[],entregas=[];
+ const c=await pantalla(t,'login',{preparar(w){w.requestAnimationFrame=cb=>{fotogramas.push(cb);return fotogramas.length;};w.setTimeout=()=>1;w.clearTimeout=()=>{};w.HTMLFormElement.prototype.submit=function(){entregas.push([...new w.FormData(this)]);};}});
+ c.completar();c.enviar();assert.equal(c.el('ss-acceso-transicion').hidden,true);
+ await c.responder({success:true,data:{destinos:[{nombre:'Ferretería La Fragua',logo:'/static/branding/empresas/la-fragua.png',url:'http://la-fragua.localhost/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'}]}});
+ assert.equal(c.el('ss-acceso-transicion').hidden,false);assert.equal(c.el('ss-login-contenido').hidden,true);
+ assert.equal(c.el('ss-acceso-titulo').textContent,'Abriendo Ferretería La Fragua…');assert.match(c.el('ss-acceso-logo').src,/\/branding\/empresas\/la-fragua.png$/);
+ assert.equal(c.el('password').value,'');assert.equal(entregas.length,0);
+ fotogramas.shift()();assert.equal(entregas.length,0);fotogramas.shift()();await tick();
+ assert.deepEqual(JSON.parse(JSON.stringify(entregas)),[[['ticket','a8111111-1111-4111-a111-111111111111']]]);
+});
+
+test('correos sin contraseña y credenciales rechazadas no descubren empresas',async t=>{
+ const c=await pantalla(t);c.campo('email','persona@example.com');c.enviar();assert.equal(c.requests.length,0);
+ c.completar();c.enviar();await c.responder({mensaje:'Cuenta privada'},401);
+ assert.equal(c.el('ss-acceso-transicion').hidden,true);assert.equal(c.el('destinos-acceso').children.length,0);assert.doesNotMatch(c.el('alert-box').textContent,/Cuenta privada/);
+});
+
+test('la transición trata los nombres como texto y descarta logos remotos o fuera de branding',async t=>{
+ for(const logo of ['https://otra.example/imagen.png','/privado/foto.png','/static/branding/../../privado/foto.png']){
+  const c=await pantalla(t);c.w.HTMLFormElement.prototype.submit=function(){};c.completar();c.enviar();
+  await c.responder({success:true,data:{destinos:[{nombre:'<img src=x onerror=alert(1)>',logo,url:'http://la-fragua.localhost/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'}]}});
+  assert.equal(c.el('ss-acceso-titulo').querySelector('img'),null);assert.match(c.el('ss-acceso-titulo').textContent,/<img/);assert.match(c.el('ss-acceso-logo').src,/\/branding\/smartstock-mark.png$/);
+ }
+});
+
+test('se rechazan puertos, subdominios anidados y credenciales incrustadas en el destino',async t=>{
+ for(const url of ['http://la-fragua.localhost:8080/acceder/','http://otro.la-fragua.localhost/acceder/','http://cuenta:clave@la-fragua.localhost/acceder/']){
+  const c=await pantalla(t);let enviado=false;c.w.HTMLFormElement.prototype.submit=function(){enviado=true;};c.completar();c.enviar();await c.responder({success:true,data:{destinos:[{nombre:'La Fragua',url,ticket:'a8111111-1111-4111-a111-111111111111'}]}});
+  assert.equal(enviado,false);assert.equal(c.el('ss-acceso-transicion').hidden,true);assert.equal(c.el('login-submit').disabled,false);
+ }
+});
+
+test('el destino utiliza el dominio configurado también en HTTPS',async t=>{
+ const c=await pantalla(t,'login',{url:'https://smartstockchile.cl/'}),entregas=[];c.form.dataset.dominioEmpresas='smartstockchile.cl';c.w.HTMLFormElement.prototype.submit=function(){entregas.push(this.action);};
+ c.completar();c.enviar();await c.responder({success:true,data:{destinos:[{nombre:'La Fragua',url:'https://la-fragua.smartstockchile.cl/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'}]}});
+ assert.deepEqual(entregas,['https://la-fragua.smartstockchile.cl/acceder/']);
+});
+
+test('volver por historial cancela un pase pendiente y una respuesta antigua',async t=>{
+ const fotogramas=[],entregas=[];
+ const c=await pantalla(t,'login',{preparar(w){w.requestAnimationFrame=cb=>{fotogramas.push(cb);return fotogramas.length;};w.setTimeout=()=>1;w.clearTimeout=()=>{};w.HTMLFormElement.prototype.submit=function(){entregas.push(this.action);};}});
+ c.completar();c.enviar();await c.responder({success:true,data:{destinos:[{nombre:'La Fragua',url:'http://la-fragua.localhost/acceder/',ticket:'a8111111-1111-4111-a111-111111111111'}]}});
+ c.w.dispatchEvent(new c.w.PageTransitionEvent('pageshow',{persisted:true}));while(fotogramas.length)fotogramas.shift()();await tick();
+ assert.equal(entregas.length,0);assert.equal(c.el('ss-acceso-transicion').hidden,true);assert.equal(c.el('login-submit').disabled,false);
+ c.completar();c.enviar();c.w.dispatchEvent(new c.w.PageTransitionEvent('pageshow',{persisted:true}));await c.responder(exito());
+ assert.equal(c.w.localStorage.getItem('access_token'),null);assert.equal(c.el('ss-acceso-transicion').hidden,true);
+});
+
+test('el pase completado guarda la sesión una vez, retira el JSON y admite volver al login si falla el almacenamiento',async t=>{
+ const correcto=await pantalla(t,'completar');assert.equal(correcto.w.localStorage.getItem('access_token'),'access-prueba');assert.equal(correcto.el('datos-sesion'),null);assert.equal(correcto.el('ss-acceso-transicion').hidden,false);
+ const fallo=await pantalla(t,'completar',{preparar(w){w.Storage.prototype.setItem=()=>{throw new w.DOMException('No disponible','SecurityError');};}});
+ assert.equal(fallo.el('ss-acceso-indicador').hidden,true);assert.equal(fallo.el('ss-login-reintentar').hidden,false);assert.match(fallo.el('alert-box').textContent,/almacenamiento/);
 });

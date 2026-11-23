@@ -88,6 +88,6 @@ Accesos del entorno local configurado: [entrada común](http://127.0.0.1:8000/),
 
 Este repositorio contiene la evolución multiempresa. El sitio [smartstockchile.cl](https://smartstockchile.cl/) sigue vinculado al repositorio anterior hasta completar la preparación y el cambio de despliegue.
 
-El perfil local multiempresa no equivale al perfil de producción del sitio anterior. Consulta el [estado de las versiones y los cambios pendientes de integración](docs/desarrollo/estado-versiones.md) antes de elegir una rama para publicar.
+El perfil local multiempresa no equivale al perfil de producción del sitio anterior. Consulta el [estado de las versiones y la preparación del despliegue](docs/desarrollo/estado-versiones.md) antes de publicar.
 
 Las notas antiguas de avances están en [docs/historial/](docs/historial/). Se conservan como antecedentes y están separadas de las instrucciones actuales.

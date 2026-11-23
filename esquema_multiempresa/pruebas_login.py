@@ -64,6 +64,7 @@ class LoginUnificadoTests(TestCase):
                 destinos = respuesta.data['data']['destinos']
                 self.assertEqual(len(destinos), 1)
                 self.assertEqual(destinos[0]['url'], f'http://{codigo}.localhost:8000/acceder/')
+                self.assertEqual(destinos[0]['logo'], f'/static/branding/empresas/{codigo}.png')
                 self.assertNotIn(self.claves[alias], respuesta.content.decode())
                 cliente, entrega = self.recibir(destinos[0])
                 self.assertEqual(entrega.status_code, 200)
@@ -95,6 +96,11 @@ class LoginUnificadoTests(TestCase):
         self.assertEqual(sin_csrf.post('/api/v1/auth/login-web/', {
             'email': self.correo, 'password': self.claves['ferreteria'],
         }, format='json').status_code, 403)
+        solo_correo = self.portal.post('/api/v1/auth/login-web/', {'email': self.correo},
+            format='json', HTTP_X_CSRFTOKEN=self.portal.cookies['csrftoken'].value)
+        self.assertEqual(solo_correo.status_code, 400)
+        self.assertNotIn('destinos', solo_correo.data)
+        self.assertNotIn('La Fragua', solo_correo.content.decode())
         self.assertEqual(self.ingresar('incorrecta').status_code, 401)
         self.assertFalse(TicketAcceso.objects.exists())
         self.assertEqual(Usuario.objects.using('ferreteria').get(pk=90).intentos_fallidos, 1)

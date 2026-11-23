@@ -185,3 +185,7 @@ python manage.py test esquema_multiempresa.selenium_suite --settings=esquema_mul
 El acceso `contacto@smartstockchile.cl` tiene un panel de atención separado del equipo técnico y de las empresas. La migración `0007_contacto_y_bandeja` prepara su rol y las tablas centrales; no crea usuarios ni contraseñas. Consulta [Cuenta de contacto y conexión de Zoho](../modulos/contacto-zoho.md) para habilitar la cuenta y conectar el buzón por HTTPS.
 
 La conexión de contacto se configura también desde **Cuenta de contacto → Conectar Zoho Mail**, exclusiva del superusuario. Actualiza dependencias y aplica `empresas.0008_conexion_buzon_contacto` en la central. La autorización queda cifrada; las empresas conservan sus 46 tablas. La bandeja añade Enviados, contadores por vista y diagnósticos de conexión.
+
+## Rendimiento sin cambiar las bases de Neon
+
+El servidor web reutiliza conexiones PostgreSQL con `psycopg[pool]` y reduce consultas repetidas. Los datos continúan en las tres bases de Neon. Actualiza los requisitos antes de iniciar esta versión. Consulta [rendimiento-neon.md](rendimiento-neon.md) para ver el procedimiento y medir la conexión desde tu equipo. No hay una migración nueva para estas mejoras.
