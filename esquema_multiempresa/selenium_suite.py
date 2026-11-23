@@ -683,9 +683,6 @@ class AccesoUnificadoEnChromeTests(StaticLiveServerTestCase):
     pulsar = ContactoEnChromeTests.pulsar
 
     def test_seleccion_autorizada_transicion_y_sesion_sin_repetir_clave(self):
-        from apps.core.empresa import empresa_actual
-        from .login import huella_acceso
-
         call_command('registrar_empresas_prueba', stdout=StringIO())
         clave = 'Cuenta-acceso-unificado-fixture-2026!'
         for empresa in Empresa.objects.using('central').all():
@@ -696,54 +693,50 @@ class AccesoUnificadoEnChromeTests(StaticLiveServerTestCase):
         opciones = webdriver.ChromeOptions()
         opciones.add_argument('--headless=new')
         opciones.add_argument('--window-size=1440,1000')
-        opciones.page_load_strategy = 'none'
         navegador = webdriver.Chrome(options=opciones)
         self.addCleanup(navegador.quit)
         espera = WebDriverWait(navegador, 20)
-        consumiendo, continuar = Event(), Event()
-        self.addCleanup(continuar.set)
-
-        def comprobar_huella(usuario, empresa):
-            if empresa_actual() is not None:
-                consumiendo.set()
-                if not continuar.wait(20):
-                    raise AssertionError('La prueba no liberó la preparación de la sesión.')
-            return huella_acceso(usuario, empresa)
-
-        with patch('esquema_multiempresa.login.huella_acceso', side_effect=comprobar_huella):
-            navegador.get(self.live_server_url)
-            espera.until(EC.visibility_of_element_located((By.ID, 'login-submit')))
-            navegador.find_element(By.ID, 'email').send_keys('compartida@example.invalid')
-            self.assertFalse(navegador.find_element(By.ID, 'ss-acceso-transicion').is_displayed())
-            navegador.find_element(By.ID, 'password').send_keys(clave)
-            self.pulsar(navegador, By.ID, 'login-submit')
-            espera.until(EC.visibility_of_element_located((By.ID, 'opciones-acceso')))
-            botones = navegador.find_elements(By.CSS_SELECTOR, '#destinos-acceso button')
-            self.assertEqual({b.text for b in botones}, {'Ferretería La Fragua', 'Repuestos Punto Motor'})
-            self.assertEqual(navegador.find_element(By.ID, 'password').get_attribute('value'), '')
-            navegador.save_screenshot('/tmp/ss-acceso-unificado-selector.png')
-            navegador.execute_cdp_cmd('Emulation.setEmulatedMedia', {'features': [{'name': 'prefers-reduced-motion', 'value': 'reduce'}]})
-            try:
-                self.pulsar(navegador, By.XPATH, '//div[@id="destinos-acceso"]/button[contains(.,"La Fragua")]')
-                espera.until(lambda d: consumiendo.is_set())
-                self.assertTrue(navegador.find_element(By.ID, 'ss-acceso-transicion').is_displayed())
-                self.assertEqual(navegador.find_element(By.ID, 'ss-acceso-titulo').text, 'Abriendo Ferretería La Fragua…')
-                self.assertIsNone(navegador.execute_script('return localStorage.getItem("access_token")'))
-                self.assertIsNone(navegador.find_element(By.ID, 'ss-carga').get_attribute('open'))
-                self.assertEqual(navegador.execute_script('return getComputedStyle(document.getElementById("ss-acceso-indicador")).animationName'), 'none')
-                imagen = navegador.find_element(By.ID, 'ss-acceso-logo')
-                espera.until(lambda d: d.execute_script('return arguments[0].complete && arguments[0].naturalWidth>0;', imagen))
-                self.assertIn('/branding/empresas/la-fragua.png', imagen.get_attribute('src'))
-                navegador.save_screenshot('/tmp/ss-acceso-unificado-transicion.png')
-                navegador.set_window_size(390, 844)
-                self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
-                navegador.save_screenshot('/tmp/ss-acceso-unificado-transicion-movil.png')
-            finally:
-                continuar.set()
-            espera.until(EC.url_contains('/dashboard/'))
-            self.assertEqual(urlsplit(navegador.current_url).hostname, 'la-fragua.localhost')
-            self.assertIn('Ferretería La Fragua', navegador.title)
-            self.assertFalse(navegador.find_elements(By.ID, 'login-form'))
+        navegador.get(self.live_server_url)
+        espera.until(EC.visibility_of_element_located((By.ID, 'login-submit')))
+        navegador.find_element(By.ID, 'email').send_keys('compartida@example.invalid')
+        self.assertFalse(navegador.find_element(By.ID, 'ss-acceso-transicion').is_displayed())
+        navegador.find_element(By.ID, 'password').send_keys(clave)
+        self.pulsar(navegador, By.ID, 'login-submit')
+        espera.until(EC.visibility_of_element_located((By.ID, 'opciones-acceso')))
+        botones = navegador.find_elements(By.CSS_SELECTOR, '#destinos-acceso button')
+        self.assertEqual({b.text for b in botones}, {'Ferretería La Fragua', 'Repuestos Punto Motor'})
+        self.assertEqual(navegador.find_element(By.ID, 'password').get_attribute('value'), '')
+        navegador.save_screenshot('/tmp/ss-acceso-unificado-selector.png')
+        navegador.execute_cdp_cmd('Emulation.setEmulatedMedia', {'features': [{'name': 'prefers-reduced-motion', 'value': 'reduce'}]})
+        # ChromeDriver cambia de documento durante una navegación pendiente.
+        # Pausar únicamente el envío nativo permite inspeccionar el fotograma
+        # anterior; después se ejecuta el POST real y se verifica la sesión.
+        navegador.execute_script("""
+            const enviar=HTMLFormElement.prototype.submit;
+            HTMLFormElement.prototype.submit=function(){
+                if(this.matches('form[data-ss-entrega-acceso]')) window.entregarAcceso=()=>enviar.call(this);
+                else enviar.call(this);
+            };
+        """)
+        self.pulsar(navegador, By.XPATH, '//div[@id="destinos-acceso"]/button[contains(.,"La Fragua")]')
+        espera.until(lambda d: d.execute_script('return typeof window.entregarAcceso==="function"'))
+        self.assertTrue(navegador.find_element(By.ID, 'ss-acceso-transicion').is_displayed())
+        self.assertEqual(navegador.find_element(By.ID, 'ss-acceso-titulo').text, 'Abriendo Ferretería La Fragua…')
+        self.assertIsNone(navegador.execute_script('return localStorage.getItem("access_token")'))
+        self.assertIsNone(navegador.find_element(By.ID, 'ss-carga').get_attribute('open'))
+        self.assertEqual(navegador.execute_script('return getComputedStyle(document.getElementById("ss-acceso-indicador")).animationName'), 'none')
+        imagen = navegador.find_element(By.ID, 'ss-acceso-logo')
+        espera.until(lambda d: d.execute_script('return arguments[0].complete && arguments[0].naturalWidth>0;', imagen))
+        self.assertIn('/branding/empresas/la-fragua.png', imagen.get_attribute('src'))
+        navegador.save_screenshot('/tmp/ss-acceso-unificado-transicion.png')
+        navegador.set_window_size(390, 844)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.save_screenshot('/tmp/ss-acceso-unificado-transicion-movil.png')
+        navegador.execute_script('window.entregarAcceso()')
+        espera.until(EC.url_contains('/dashboard/'))
+        self.assertEqual(urlsplit(navegador.current_url).hostname, 'la-fragua.localhost')
+        self.assertIn('Ferretería La Fragua', navegador.title)
+        self.assertFalse(navegador.find_elements(By.ID, 'login-form'))
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
