@@ -1,0 +1,40 @@
+# Documentación de SmartStock
+
+Este índice organiza las guías del repositorio. Para una primera revisión, comienza con el [README principal](../README.md), continúa con la arquitectura y termina con las pruebas.
+
+## Desarrollo y ejecución
+
+| Documento | Para qué sirve |
+| --- | --- |
+| [Arquitectura y organización](desarrollo/arquitectura.md) | Relación entre las carpetas, el servidor y las bases de cada empresa. |
+| [Instalación multiempresa](desarrollo/multiempresa.md) | Python, archivos privados, Neon, preparación y accesos locales. |
+| [Pruebas](desarrollo/pruebas.md) | Suites de API, JavaScript, navegador y ejecución aislada en CI. |
+| [Integridad del stock](desarrollo/integridad-stock.md) | Restricciones, diagnóstico y comprobaciones de concurrencia. |
+| [Aplicación de escritorio](desarrollo/escritorio.md) | Ejecución local y compilación de SmartStock.exe para Windows. |
+| [Estado de las versiones](desarrollo/estado-versiones.md) | Diferencias entre main, las mejoras pendientes y el sitio publicado. |
+
+## Módulos y operaciones
+
+| Documento | Contenido |
+| --- | --- |
+| [Bodegas](modulos/bodegas.md) | Administración de bodegas y existencias. |
+| [Transferencias](modulos/transferencias.md) | Traslado de productos entre bodegas y consistencia de saldos. |
+| [Ubicaciones físicas](modulos/ubicaciones-fisicas.md) | Pasillos, estanterías, niveles y ubicaciones. |
+| [Reportes y Kardex](modulos/reportes-inventario.md) | Informes, filtros, exportaciones y conciliación. |
+| [Códigos de producto](modulos/codigos-producto.md) | Consulta y registro a partir de SKU, barras y QR. |
+| [Alertas SMS](modulos/alertas-sms.md) | Integración de Twilio, estados y configuración. |
+| [Gestión de SMS pendientes](modulos/gestion-sms-pendientes.md) | Revisión, procesamiento y cancelación desde la interfaz. |
+| [Cuenta de contacto y Zoho](modulos/contacto-zoho.md) | Acceso al buzón y conexión de correo. |
+| [Permisos y soporte](modulos/permisos-soporte.md) | Perfiles internos y acceso temporal autorizado por el cliente. |
+
+La documentación de módulos describe el código de su rama. Las mejoras aún no incorporadas a main se identifican en el [estado de las versiones](desarrollo/estado-versiones.md); no se consideran ya publicadas en el sitio oficial.
+
+## Antecedentes
+
+[Historial de integraciones](historial/README.md) conserva las notas de avances anteriores. Sus comandos y estados corresponden al momento de aquella integración.
+
+## Documentación junto a sus archivos
+
+- [Pruebas JavaScript](../tests/js/README.md): cobertura y requisitos del DOM de pruebas.
+- [Datos territoriales](../esquema_multiempresa/datos/README.md): procedencia del catálogo de regiones y comunas.
+- [Mapa de pruebas](../tests/README.md): ubicación de las suites.

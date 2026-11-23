@@ -1,6 +1,6 @@
 # Equipo interno y soporte autorizado
 
-La aplicación distingue el equipo interno de SmartStock de los usuarios operativos de cada empresa. Ni siquiera un superusuario central obtiene automáticamente acceso al inventario de los clientes. Los perfiles y su matriz de funciones se describen en [multiempresa.md](multiempresa.md#perfiles-del-equipo-de-smartstock).
+La aplicación distingue el equipo interno de SmartStock de los usuarios operativos de cada empresa. Ni siquiera un superusuario central obtiene automáticamente acceso al inventario de los clientes. Los perfiles y su matriz de funciones se describen en la [guía multiempresa](../desarrollo/multiempresa.md#perfiles-del-equipo-de-smartstock).
 
 ## Actualizar una instalación existente
 

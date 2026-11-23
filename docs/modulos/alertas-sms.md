@@ -1,5 +1,7 @@
 # Alertas de stock por SMS con Twilio
 
+En el perfil local multiempresa de ensayo, los SMS están desactivados por configuración. Esta guía describe la integración y sus opciones cuando se habilita en un entorno autorizado.
+
 Esta integración envía SMS reales y **Twilio cobra por utilizarlos**. Está activa por defecto para las pruebas y demostraciones de SmartStock, con un límite de 100 intentos diarios. Requiere credenciales, remitente y destinatarios válidos para realizar envíos. No requiere WhatsApp, Redis, Celery ni un servicio adicional de Render.
 
 ## Comportamiento
@@ -108,23 +110,16 @@ El comando procesa un lote máximo de 3. Si quedan pendientes, puede repetirse. 
 En CMD de Windows, dentro del repositorio:
 
 ```bat
-call venv\Scripts\activate.bat
+call .venv\Scripts\activate.bat
 python -m pip install -r requirements-web.txt
-python manage.py migrate
-python manage.py check
-python manage.py test
-python manage.py runserver
+set "SS_TEST_POSTGRES="
+python manage.py check --settings=esquema_multiempresa.testing
+python manage.py test --settings=config.settings.testing
 ```
 
 Los tests usan un proveedor simulado: **no envían SMS reales ni consumen saldo**. Para probar callbacks reales localmente necesitas un origen HTTPS público y configurar `TWILIO_PUBLIC_BASE_URL` con ese origen.
 
-Para ejecutar el resto de la suite con tus credenciales reales presentes en el `.env`, pausa los SMS solo en el CMD donde corres las pruebas:
-
-```bat
-set "SMS_ALERTAS_ACTIVAS=False"
-python manage.py test
-set "SMS_ALERTAS_ACTIVAS=True"
-```
+El perfil de pruebas desactiva los SMS aunque existan credenciales privadas en el entorno. Para abrir la aplicación y preparar sus bases, utiliza la [guía multiempresa](../desarrollo/multiempresa.md). La activación descrita a continuación corresponde a un entorno autorizado que tenga habilitada la integración; el perfil local multiempresa de ensayo conserva los envíos desactivados.
 
 Con la cuenta y el remitente ya preparados, configura un único celular autorizado y conserva `SMS_ALERTAS_ACTIVAS=True` para las demostraciones. En un producto de prueba con 6 unidades, guarda mínimo 5 y registra una salida de 1: debe aparecer un único SMS de stock bajo. Otra salida sin llegar a cero no repite el aviso. Al llegar a cero se genera la alerta de agotado. Comprueba la entrega en el historial y en la consola de Twilio. Estas pruebas reales tienen costo.
 

@@ -25,7 +25,7 @@ from apps.usuarios.views_recuperacion import (
 def favicon_icono(request):
     """Icono del proyecto para clientes que solicitan /favicon.ico."""
     return FileResponse(
-        open(settings.BASE_DIR / 'icono.ico', 'rb'),
+        open(settings.BASE_DIR / 'recursos' / 'branding' / 'icono.ico', 'rb'),
         content_type='image/x-icon',
     )
 

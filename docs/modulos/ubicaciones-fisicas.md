@@ -78,7 +78,7 @@ python -X utf8 manage.py runserver
 
 Se parte de `main` con el PR #31 de integridad de stock ya incorporado. Si esa
 migración aún no está aplicada en tu instalación, sigue primero las instrucciones
-de respaldo, diagnóstico y `migrate` de `docs/integridad_stock.md`.
+de respaldo, diagnóstico y `migrate` de la [guía de integridad del stock](../desarrollo/integridad-stock.md).
 
 Abre `/bodegas/` y pulsa **Ubicaciones** en una bodega. Prueba crear la estructura,
 asignar un producto, repetir la asignación, buscarlo y retirar su referencia.
@@ -93,6 +93,6 @@ python -X utf8 manage.py test apps.productos.test_ubicaciones --settings=config.
 Las pruebas de concurrencia requieren PostgreSQL. El workflow de GitHub ejecuta
 la suite completa con PostgreSQL 16 aislado; `config.settings.testing` también
 permite usar un PostgreSQL local de pruebas mediante `SS_TEST_POSTGRES=true` y
-las variables `SS_TEST_DB_*` documentadas en `docs/integridad_stock.md`.
+las variables `SS_TEST_DB_*` documentadas en la [guía de integridad del stock](../desarrollo/integridad-stock.md).
 Las pruebas no usan la base de producción ni envían SMS reales. La configuración
 de SMS de la aplicación se mantiene.

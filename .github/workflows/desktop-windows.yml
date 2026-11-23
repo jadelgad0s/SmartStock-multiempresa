@@ -4,11 +4,10 @@ on:
   pull_request:
     paths:
       - desktop.py
-      - desktop_splash.html
+      - recursos/**
       - static/js/password_visibility.js
       - tests/desktop/login.html
-      - icono.ico
-      - build-desktop.cmd
+      - scripts/build-desktop.cmd
       - requirements-desktop-build.txt
       - .github/workflows/desktop-windows.yml
   workflow_dispatch:
@@ -30,7 +29,7 @@ jobs:
           architecture: x64
       - name: Compilar SmartStock.exe
         shell: cmd
-        run: build-desktop.cmd
+        run: scripts\build-desktop.cmd
       - name: Preparar Microsoft Edge WebView2
         shell: pwsh
         run: |

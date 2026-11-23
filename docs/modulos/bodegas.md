@@ -76,17 +76,16 @@ producto/bodega que modifica, conservando su total.
 
 ## Prueba local
 
-Con la rama del PR #27 seleccionada y el entorno virtual activo:
+Con la [instalación multiempresa preparada](../desarrollo/multiempresa.md) y el entorno virtual activo:
 
 ```bat
-git pull --ff-only
-set "DJANGO_SETTINGS_MODULE=config.settings.development"
-python manage.py migrate
-python manage.py runserver
+python manage.py check --settings=esquema_multiempresa.web
+python manage.py runserver --settings=esquema_multiempresa.web
 ```
 
-Abrir `http://127.0.0.1:8000/bodegas/`. Esta entrega no incorpora migraciones
-nuevas respecto a `main`; `migrate` solo aplica las pendientes del proyecto.
+Abrir Bodegas dentro de la empresa, por ejemplo
+`http://la-fragua.localhost:8000/bodegas/`. La preparación de bases y sus
+migraciones se realiza por alias según la guía multiempresa.
 
 En una base de prueba, dejar un producto con 24 unidades en Central y 10 en una
 segunda bodega. Registrar una salida de 3 y una merma de 1 en la segunda:
@@ -94,12 +93,12 @@ Central debe conservar 24 y la segunda quedar en 6. Comprobar ambos historiales
 filtrados y que se rechace desactivar una bodega con existencias.
 
 ```bat
-python manage.py test apps.productos.test_bodegas apps.productos.test_movimientos apps.productos.test_mermas apps.productos.test_mermas_historial
+python manage.py test apps.productos.test_bodegas apps.productos.test_movimientos apps.productos.test_mermas apps.productos.test_mermas_historial --settings=config.settings.testing
 npm --prefix tests/js ci
 npm --prefix tests/js test
 ```
 
 Las pruebas de concurrencia que necesitan bloqueo de filas requieren PostgreSQL;
 SQLite las omite. Las transferencias entre las bodegas actuales se describen en
-[TRANSFERENCIAS.md](TRANSFERENCIAS.md). Los reportes/Kardex siguen como siguiente
-entrega del plan.
+[Transferencias](transferencias.md). Los informes y el Kardex se describen en
+[Reportes de inventario](reportes-inventario.md).
