@@ -35,6 +35,8 @@ Los resultados distinguen solicitudes, operaciones completadas, fallidas y deneg
 
 Las solicitudes anteriores no se convierten en operaciones completadas: se muestran como «Solicitud registrada», con la aclaración de que su resultado no quedó confirmado. Los eventos antiguos sin resultado siguen mostrando «No registrado». No se ejecutan actualizaciones sobre ese historial.
 
+En los reportes de inventario, «Archivo de reporte CSV/PDF preparado» se registra solo después de generar el documento completo. Ese evento confirma la preparación del archivo y no que el navegador lo haya descargado o impreso.
+
 ## Alcance y exportación
 
 El superusuario puede ver la auditoría central completa. Plataforma conserva su historial de gestión y las atenciones visibles. Soporte conserva sus eventos y las atenciones asignadas; la consulta de auditoría de una empresa exige autorización vigente, igual que antes.

@@ -265,6 +265,21 @@ class AuditoriaInvestigacionTests(TestCase):
             vista(request)
         self.assertEqual(Auditoria.objects.using('central').filter(accion='CONSULTA').latest('id').resultado, 'denegada')
 
+    def test_reporte_solo_confirma_preparacion_despues_de_generar_el_archivo(self):
+        acceso = self.conceder(tecnico=self.raiz, alcances=['reportes', 'exportar'])
+        parametros = {'empresa': 'la-fragua', 'atencion': str(acceso.atencion_id), 'exportar': 'pdf'}
+        self.assertEqual(self.raiz_web.get('/sistema/reportes/', parametros).status_code, 200)
+        preparado = Auditoria.objects.using('central').filter(modelo='AtencionSoporte', accion='CONSULTA').latest('id')
+        self.assertEqual((preparado.operacion, preparado.resultado), ('Archivo de reporte PDF preparado', 'completada'))
+        for formato, funcion in (('csv', 'archivo_reporte'), ('pdf', 'documento_reporte')):
+            with self.subTest(formato=formato), patch('esquema_multiempresa.consultas_sistema.' + funcion,
+                                                       side_effect=DatabaseError('Fallo de generación')):
+                respuesta = self.raiz_web.get('/sistema/reportes/', {**parametros, 'exportar': formato})
+                self.assertContains(respuesta, 'No pudimos consultar')
+                self.assertEqual(Auditoria.objects.using('central').filter(accion='CONSULTA').latest('id').resultado, 'fallida')
+                self.assertEqual(Auditoria.objects.using('central').filter(modelo='AtencionSoporte', accion='CONSULTA').latest('id').pk,
+                                 preparado.pk)
+
     def test_misma_autorizacion_en_detalle_opciones_listado_y_exportacion(self):
         privado = self.evento(modelo='Usuario', empresa=None, descripcion='SECRETO CUENTA INTERNA')
         pagina = self.central.get('/sistema/auditoria/')

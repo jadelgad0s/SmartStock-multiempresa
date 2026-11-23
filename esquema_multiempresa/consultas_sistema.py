@@ -149,10 +149,15 @@ def consulta_sistema(request, modulo):
                 contexto['formulario_consulta'] = formulario
                 if formulario.is_valid():
                     if modulo == 'reportes' and request.GET.get('exportar') in ('csv', 'pdf'):
-                        auditar_soporte(request, request._atencion_soporte, 'CONSULTA',
-                            f'Exportación {request.GET["exportar"]}; reporte {parametros.get("informe")}')
                         exportador = archivo_reporte if request.GET['exportar'] == 'csv' else documento_reporte
-                        return exportador(parametros, request.user.email, empresa.nombre)
+                        respuesta = exportador(parametros, request.user.email, empresa.nombre)
+                        # Estos exportadores preparan todos los datos antes de devolver
+                        # el archivo. Registrar preparación, sin afirmar su descarga.
+                        auditar_soporte(request, request._atencion_soporte, 'CONSULTA',
+                            f'Reporte {request.GET["exportar"].upper()} preparado; informe {parametros.get("informe")}',
+                            operacion=f'Archivo de reporte {request.GET["exportar"].upper()} preparado', resultado='completada')
+                        registrar_empresa_consultada(request, empresa, 'completada')
+                        return respuesta
                     consultas = {'catalogo': tabla_catalogo, 'bodegas': tabla_bodegas,
                                  'transferencias': tabla_transferencias, 'sms': tabla_sms}
                     if modulo in consultas:

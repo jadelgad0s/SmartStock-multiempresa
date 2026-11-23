@@ -767,6 +767,9 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         self.assertIn(raiz.email, navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary').text)
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
         navegador.execute_script('scrollTo({top:0,behavior:"instant"});')
+        navegador.save_screenshot('/tmp/ss-auditoria-filtros-movil.png')
+        navegador.execute_script('arguments[0].scrollIntoView({block:"center",behavior:"instant"});',
+                                 navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary'))
         navegador.save_screenshot('/tmp/ss-auditoria-grupo-movil.png')
 
 
