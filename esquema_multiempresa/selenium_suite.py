@@ -838,7 +838,7 @@ class MarcasEmpresaEnChromeTests(StaticLiveServerTestCase):
             self.assertEqual(navegador.find_element(By.CSS_SELECTOR, '.ss-auth-company').text, empresa.nombre)
             self.assertEqual(navegador.find_element(By.CSS_SELECTOR, 'a[href^="mailto:"]').get_attribute('href'),
                              'mailto:contacto@smartstockchile.cl')
-            self.pulsar(navegador, By.LINK_TEXT, 'Volver a iniciar sesión')
+            self.pulsar(navegador, By.CSS_SELECTOR, '.ss-auth-back')
             espera.until(EC.visibility_of_element_located((By.ID, 'login-submit')))
             self.pulsar(navegador, By.LINK_TEXT, '¿Olvidaste tu contraseña?')
             espera.until(EC.visibility_of_element_located((By.ID, 'id_email')))
