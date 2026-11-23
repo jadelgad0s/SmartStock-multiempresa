@@ -688,12 +688,15 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
             email='raiz-auditoria@example.invalid', password=clave, nombres='Javier', apellidos='De prueba')
         call_command('registrar_empresas_prueba', stdout=StringIO())
         empresa = Empresa.objects.using('central').get(codigo='la-fragua')
-        for _ in range(3):
-            crear_evento(alias='central', usuario=raiz, empresa=empresa, accion='CONSULTA', modelo='Empresa',
-                descripcion='QA-AUD Consulta de empresas', operacion='Consulta de Empresas', resultado='solicitada')
-        Auditoria.objects.using('central').filter(accion='CONSULTA').update(
-            fecha_creacion=timezone.now().replace(minute=0, second=0, microsecond=0))
-        evento = crear_evento(alias='central', usuario=raiz, empresa=empresa, accion='DEACTIVATE', modelo='Usuario',
+        motor = Empresa.objects.using('central').get(codigo='punto-motor')
+        consultas = []
+        for empresa_consultada in (empresa, motor, empresa):
+            consultas.append(crear_evento(alias='central', usuario=raiz, empresa=empresa_consultada, accion='CONSULTA', modelo='Empresa',
+                descripcion='QA-AUD Consulta de empresas', operacion='Consulta de Empresas', resultado='solicitada'))
+        fecha = timezone.localtime().replace(minute=0, second=0, microsecond=0)
+        for indice, consulta in enumerate(consultas):
+            Auditoria.objects.using('central').filter(pk=consulta.pk).update(fecha_creacion=fecha.replace(microsecond=indice * 100))
+        evento = crear_evento(alias='central', usuario=raiz, accion='DEACTIVATE', modelo='Usuario',
             descripcion='QA-AUD Cuenta de prueba suspendida. Descripción completa del evento.',
             operacion='Cuenta desactivada', cambios={'activo': {'antes': True, 'despues': False}})
         opciones = webdriver.ChromeOptions()
@@ -708,17 +711,33 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         self.pulsar(navegador, By.ID, 'login-submit')
         espera.until(EC.url_contains('/sistema/'))
         navegador.get(self.live_server_url + '/sistema/auditoria/?search=QA-AUD')
-        espera.until(EC.visibility_of_element_located((By.ID, 'auditoria-usuario')))
+        espera.until(EC.visibility_of_element_located((By.ID, 'buscar-evento')))
+        self.assertFalse(navegador.find_element(By.ID, 'auditoria-usuario').is_displayed())
         self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento')), 4)
         self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-grupo')), 1)
+        grupo = navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary').text
+        self.assertIn('3 consultas · 2 empresas', grupo)
+        self.assertIn(raiz.email, grupo)
+        self.assertIn('Superusuario técnico', grupo)
+        self.assertIn('Solicitud registrada', grupo)
+        self.assertIn(fecha.strftime('%d/%m/%Y · %H:%M:%S') + ' · Ver eventos individuales', grupo)
+        navegador.save_screenshot('/tmp/ss-auditoria-filtros-compactos.png')
         self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-grupo summary')
         self.assertEqual(len([e for e in navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento') if e.is_displayed()]), 4)
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.execute_script('scrollTo({top:0,behavior:"instant"});')
         navegador.save_screenshot('/tmp/ss-auditoria-escritorio.png')
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-avanzados summary')
         Select(navegador.find_element(By.ID, 'auditoria-accion')).select_by_value('DEACTIVATE')
         self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-filtros button[type="submit"]')
         espera.until(lambda d: 'accion=DEACTIVATE' in d.current_url)
         self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-aud-evento')), 1)
+        self.assertEqual(navegador.find_element(By.CSS_SELECTOR, '.ss-aud-evento dl > div:nth-child(3) dd').text, 'SmartStock')
+        self.assertTrue(navegador.find_element(By.ID, 'auditoria-accion').is_displayed())
+        self.assertEqual(Select(navegador.find_element(By.ID, 'auditoria-accion')).first_selected_option.get_attribute('value'), 'DEACTIVATE')
+        self.assertIn('1 activo', navegador.find_element(By.CSS_SELECTOR, '.ss-aud-avanzados summary').text)
+        navegador.execute_script('scrollTo({top:0,behavior:"instant"});')
+        navegador.save_screenshot('/tmp/ss-auditoria-filtros-activos.png')
         self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-ver-detalle')
         espera.until(EC.url_contains(f'/sistema/auditoria/{evento.pk}/'))
         self.assertIn('Descripción completa del evento.', navegador.find_element(By.TAG_NAME, 'body').text)
@@ -732,6 +751,9 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/auditoria/')
         self.assertIn('accion=DEACTIVATE', navegador.current_url)
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        self.pulsar(navegador, By.CSS_SELECTOR, '.ss-aud-avanzados summary')
+        self.assertFalse(navegador.find_element(By.ID, 'auditoria-accion').is_displayed())
+        self.assertIn('1 activo', navegador.find_element(By.CSS_SELECTOR, '.ss-aud-avanzados summary').text)
         navegador.execute_script('document.querySelector(".ss-aud-evento").scrollIntoView({block:"start",behavior:"instant"});')
         navegador.save_screenshot('/tmp/ss-auditoria-listado-movil.png')
         pestana = navegador.current_window_handle
@@ -742,6 +764,17 @@ class AuditoriaEnChromeTests(StaticLiveServerTestCase):
         self.assertIn('1 evento', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertIn('QA-AUD Cuenta de prueba suspendida', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertNotIn('QA-AUD Consulta de empresas', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.close()
+        navegador.switch_to.window(pestana)
+        navegador.get(self.live_server_url + '/sistema/auditoria/?search=QA-AUD&vista=consultas')
+        espera.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.ss-aud-grupo summary')))
+        self.assertIn(raiz.email, navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary').text)
+        self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        navegador.execute_script('scrollTo({top:0,behavior:"instant"});')
+        navegador.save_screenshot('/tmp/ss-auditoria-filtros-movil.png')
+        navegador.execute_script('arguments[0].scrollIntoView({block:"center",behavior:"instant"});',
+                                 navegador.find_element(By.CSS_SELECTOR, '.ss-aud-grupo summary'))
+        navegador.save_screenshot('/tmp/ss-auditoria-grupo-movil.png')
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])

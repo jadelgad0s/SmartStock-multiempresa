@@ -140,9 +140,12 @@ def resumen_empresa(empresa, request=None):
     if request is not None and not es_administrador_plataforma(request.user):
         # La ficha asignada procede del directorio central; consultar las
         # cuentas del cliente requiere su autorización específica.
+        registrar_empresa_consultada(request, empresa, 'completada')
         return datos
     if empresa.alias_bd not in settings.BASES_EMPRESA:
         datos['disponible'] = False
+        if request is not None:
+            registrar_empresa_consultada(request, empresa, 'fallida')
         return datos
     try:
         with usar_empresa(empresa):
@@ -155,6 +158,8 @@ def resumen_empresa(empresa, request=None):
                          puede_invitar=not conteos['con_acceso'])
     except DatabaseError:
         datos['disponible'] = False
+    if request is not None:
+        registrar_empresa_consultada(request, empresa, 'completada' if datos['disponible'] else 'fallida')
     return datos
 
 
@@ -254,6 +259,7 @@ def ficha_empresa(request, codigo):
                                    bodegas=Bodega.objects.filter(activa=True).count(), inventario_autorizado=True)
         except DatabaseError:
             resumen['disponible'] = False
+            registrar_empresa_consultada(request, empresa, 'fallida')
     contexto = contexto_sistema(request, 'empresas', 'Ficha de empresa', empresa=empresa)
     contexto['resumen'] = resumen
     return render(request, 'sistema/empresa_ficha.html', contexto)
@@ -278,7 +284,9 @@ def usuarios_sistema(request):
                 if texto:
                     consulta = consulta.filter(Q(email__icontains=texto) | Q(nombres__icontains=texto) | Q(apellidos__icontains=texto))
                 contexto['usuarios_empresa'] = list(paginar(request, contexto, consulta))
+                registrar_empresa_consultada(request, empresa, 'completada')
         except DatabaseError:
+            registrar_empresa_consultada(request, empresa, 'fallida')
             contexto['error_consulta'] = 'No pudimos consultar los usuarios de esta empresa. Vuelve a intentarlo.'
     return render(request, 'sistema/usuarios.html', contexto)
 
@@ -383,6 +391,8 @@ def formulario_cuenta(request, empresa, usuario_id, propia=False):
         if empresa:
             volver = reverse('sistema_usuarios') + '?' + urlencode({'empresa': empresa.codigo, **parametros_atencion(request)})
         contexto.update(formulario=formulario, volver=volver)
+        if empresa:
+            registrar_empresa_consultada(request, empresa, 'completada')
         return render(request, 'sistema/formulario.html', contexto)
 
 

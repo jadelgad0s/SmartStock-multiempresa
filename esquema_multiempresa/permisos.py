@@ -67,29 +67,48 @@ def nombre_perfil_personal(usuario):
     return PERFILES_EQUIPO.get(perfil_personal(usuario), 'Sin perfil habilitado')
 
 
-def registrar_empresa_consultada(request, empresa):
+def registrar_empresa_consultada(request, empresa, resultado=None):
     consultas = getattr(request, '_empresas_consultadas', {})
     consultas[empresa.pk] = empresa
     request._empresas_consultadas = consultas
+    if resultado:
+        resultados = getattr(request, '_resultados_consulta', {})
+        # Crear el contexto después de una lectura no borra su resultado.
+        # Tampoco una lectura posterior oculta un fallo parcial de la ficha.
+        if resultados.get(empresa.pk) not in ('fallida', 'denegada'):
+            resultados[empresa.pk] = resultado
+        request._resultados_consulta = resultados
 
 
-def auditar_consultas(request, respuesta):
-    if request.method != 'GET' or respuesta.status_code >= 400:
+def auditar_consultas(request, respuesta=None, resultado=None):
+    if request.method != 'GET':
         return
     consultas = getattr(request, '_empresas_consultadas', {})
-    Auditoria.objects.using('central').bulk_create([
-        Auditoria(
+    resultados = getattr(request, '_resultados_consulta', {})
+    if respuesta is not None:
+        if respuesta.status_code >= 400:
+            resultado = 'denegada' if respuesta.status_code == 403 else 'fallida'
+        elif (respuesta.status_code >= 300 or respuesta.streaming
+              or not getattr(respuesta, 'is_rendered', True)):
+            # Ni una redirección ni el inicio de un flujo confirman su final.
+            resultado = 'solicitada'
+    descripciones = {'completada': 'Consulta completada de ', 'fallida': 'Consulta fallida de ',
+                     'denegada': 'Consulta denegada de ', 'solicitada': 'Solicitud de consulta de '}
+    registros = []
+    for empresa in consultas.values():
+        final = resultado or resultados.get(empresa.pk, 'solicitada')
+        registros.append(Auditoria(
             usuario=request.user, accion='CONSULTA', modelo='Empresa', objeto_id=str(empresa.pk),
-            descripcion=(f'SmartStock · {request.user.email} · Solicitud de consulta de '
+            descripcion=(f'SmartStock · {request.user.email} · {descripciones[final]}'
                          f'{getattr(request, "_modulo_consultado", "empresa")} · {empresa.nombre} ({empresa.codigo})'
                          + (f' · Atención {request._atencion_soporte.pk} · Motivo: {getattr(request, "_acceso_soporte", request._atencion_soporte).motivo}'
                             if getattr(request, '_atencion_soporte', None) else ''))[:2000],
             **datos_registro(request, usuario=request.user, empresa=empresa,
                 modulo=getattr(request, '_modulo_consultado', 'Empresas'),
                 operacion='Consulta de ' + getattr(request, '_modulo_consultado', 'empresa'),
-                resultado='solicitada'),
-        ) for empresa in consultas.values()
-    ])
+                resultado=final),
+        ))
+    Auditoria.objects.using('central').bulk_create(registros)
 
 
 def requiere(comprobar):
@@ -109,8 +128,15 @@ def requiere(comprobar):
                     crear_evento(alias='central', request=request, accion='ACCESS_DENIED', modelo='Acceso',
                         operacion='Acceso denegado', resultado='denegada',
                         descripcion='La cuenta no tenía permiso vigente para esta acción.')
+                    auditar_consultas(request, resultado='denegada')
                 except DatabaseError:
                     pass  # La falta de registro nunca convierte una denegación en acceso.
+                raise
+            except Exception:
+                try:
+                    auditar_consultas(request, resultado='fallida')
+                except DatabaseError:
+                    pass  # Conservar el error original si tampoco responde la auditoría.
                 raise
             auditar_consultas(request, respuesta)
             return respuesta

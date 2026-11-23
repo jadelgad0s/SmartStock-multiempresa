@@ -16,7 +16,7 @@ from .cuentas_empresa import enviar_enlace, puede_invitar_inicial
 from .forms_soporte import AtencionForm, InvitacionEmpresaForm, ResolucionForm, SolicitudAccesoForm
 from .models import AccesoSoporte, AtencionSoporte
 from .notificaciones import confirmar_guardado
-from .permisos import es_administrador_plataforma, requiere_administrador_plataforma, requiere_personal
+from .permisos import es_administrador_plataforma, registrar_empresa_consultada, requiere_administrador_plataforma, requiere_personal
 from .sistema import contexto_sistema, empresa_del_panel, paginar
 from .soporte_operaciones import avisar_tecnico, revocar_accesos, solicitar_acceso
 
@@ -129,6 +129,7 @@ def detalle_atencion(request, atencion_id):
         puede_solicitar=atencion.tecnico_id == request.user.pk and atencion.estado == 'abierta' and atencion.empresa.activa,
         enlaces_autorizados=enlaces, error_consulta=error,
         eventos=list(Auditoria.objects.using('central').filter(modelo='AtencionSoporte', objeto_id=str(atencion.pk)).order_by('-fecha_creacion')[:20]))
+    registrar_empresa_consultada(request, atencion.empresa, 'fallida' if error else 'completada')
     return render(request, 'soporte/atencion.html', contexto)
 
 
@@ -171,6 +172,7 @@ def invitar_administrador(request, codigo):
                 return redirect('sistema_ficha_empresa', codigo=empresa.codigo)
     contexto = contexto_sistema(request, 'usuarios', 'Invitar administrador inicial', empresa)
     contexto.update(formulario=formulario, volver=reverse('sistema_ficha_empresa', args=[empresa.codigo]))
+    registrar_empresa_consultada(request, empresa, 'completada')
     return render(request, 'sistema/formulario.html', contexto)
 
 

@@ -16,6 +16,7 @@ from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import Truncator
 from django.views.decorators.http import require_GET
 
 from apps.core.models import Auditoria
@@ -23,11 +24,12 @@ from apps.core.registro_auditoria import ETIQUETAS, MODULOS, cambios_seguros, cr
 from apps.core.views_auditoria import ACCIONES, SalidaCSV, celda_csv, consulta_base, datos_evento, fijar_reporte
 from apps.usuarios.models import Usuario
 from .autorizacion_soporte import acceso_para, atenciones_visibles, empresa_para_consulta, parametros_atencion
-from .permisos import es_administrador_plataforma, es_personal_smartstock, es_superusuario_smartstock, requiere_personal
+from .permisos import es_administrador_plataforma, es_personal_smartstock, es_superusuario_smartstock, registrar_empresa_consultada, requiere_personal
 
 
 VISTAS = [('todos', 'Todos'), ('cambios', 'Cambios'), ('accesos', 'Accesos'), ('consultas', 'Consultas')]
 RESULTADOS = dict(Auditoria._meta.get_field('resultado').choices)
+RESULTADOS['solicitada'] = 'Solicitud registrada'
 CAMPOS_URL = ('empresa', 'atencion', 'search', 'usuario', 'actor', 'accion', 'modulo', 'modelo', 'resultado',
               'desde', 'hasta', 'vista', 'agrupar', 'page')
 
@@ -151,7 +153,8 @@ def presentar(evento, empresa=None, empresas=None):
     datos = datos_evento(evento, detalle=True)
     actor = evento.actor if isinstance(evento.actor, dict) else {}
     datos.update(usuario=actor.get('nombre') or datos['usuario'], usuario_email=actor.get('email') or datos['usuario_email'],
-        perfil=actor.get('perfil', ''), origen_actor=actor.get('origen', ''), identidad_guardada=bool(actor),
+        perfil=actor.get('perfil', ''), origen_actor=actor.get('origen', ''),
+        actor_id=actor.get('id') or datos['usuario_id'], identidad_guardada=bool(actor),
         modulo_mostrado=evento.modulo_visible, operacion=evento.operacion or datos['accion_etiqueta'],
         resultado=evento.resultado, resultado_etiqueta=RESULTADOS.get(evento.resultado, 'No registrado'),
         empresa_nombre=evento.empresa_nombre or (empresa.nombre if empresa else ''),
@@ -163,11 +166,26 @@ def presentar(evento, empresa=None, empresas=None):
         anterior = empresas.get(evento.objeto_id)
         if anterior:
             datos.update(empresa_nombre=anterior.nombre, empresa_codigo=anterior.codigo)
+    datos['empresa_mostrada'] = datos['empresa_nombre'] or datos['empresa_codigo'] or 'No registrada'
+    # El actor central no basta: una consulta de cliente o una denegación sin
+    # destino registrado no prueba que la empresa relacionada sea SmartStock.
+    interno = (evento.modelo in ('Usuario', 'Rol', 'MensajeContacto', 'BuzonContacto')
+               and datos['accion'] in ('LOGIN', 'LOGOUT', 'CREATE', 'UPDATE', 'DEACTIVATE', 'REACTIVATE', 'DELETE')
+               or evento.modelo == 'Auditoria' and datos['accion'] == 'EXPORT')
+    if (not datos['empresa_nombre'] and not datos['empresa_codigo'] and not evento.atencion_id
+            and evento._state.db == 'central' and datos['origen_actor'] == 'smartstock' and interno):
+        datos['empresa_mostrada'] = 'SmartStock'
     # El resumen nunca sustituye la descripción completa del detalle.
     resumen = evento.descripcion
     if resumen.startswith('SmartStock · ') and len(resumen.split(' · ', 2)) == 3:
         resumen = resumen.split(' · ', 2)[2]
-    datos['resumen'] = resumen
+    if datos['accion'] == 'CONSULTA':
+        resumen = {'completada': 'Consulta completada.', 'fallida': 'La consulta no se completó.',
+            'denegada': 'Consulta denegada.', 'solicitada': 'Solicitud registrada; resultado sin confirmar.'}.get(
+                evento.resultado, 'Consulta sin resultado registrado.')
+    datos['resumen'] = Truncator(' '.join(resumen.split())).chars(180)
+    datos['resultado_ayuda'] = ('Se registró la solicitud, pero no quedó confirmado su resultado.'
+                              if evento.resultado == 'solicitada' else '')
     datos['fecha_dia'], datos['fecha_hora'] = datos['fecha'].split(' ')
     datos['tipo_accion'] = {'DEACTIVATE': 'desactivar', 'REACTIVATE': 'crear', 'CREATE': 'crear',
         'DELETE': 'alerta', 'ACCESS_DENIED': 'alerta', 'LOGIN_FAILED': 'alerta'}.get(datos['accion'], 'normal')
@@ -205,10 +223,24 @@ def grupos(eventos, agrupar):
         if not agrupar or evento['accion'] != 'CONSULTA':
             return ('evento', evento['id'])
         fecha = datetime.fromisoformat(evento['fecha_iso'])
-        return ('consulta', evento['usuario_email'] or evento['usuario_id'] or evento['id'],
+        identidad = (evento['origen_actor'], evento['actor_id'], evento['usuario_email'], evento['perfil'])
+        if not (evento['actor_id'] or evento['usuario_email']):
+            return ('evento', evento['id'])
+        return ('consulta', identidad,
                 evento['modulo_mostrado'], evento['operacion'], evento['resultado'], evento['atencion_id'],
                 int(fecha.timestamp()) // 300)
-    return [{'eventos': list(grupo)} for _, grupo in groupby(eventos, key=clave)]
+    salida = []
+    for _, grupo in groupby(eventos, key=clave):
+        filas = list(grupo)
+        empresas = {('codigo', e['empresa_codigo']) if e['empresa_codigo'] else ('nombre', e['empresa_nombre'])
+                    for e in filas if e['empresa_codigo'] or e['empresa_nombre']}
+        fechas = sorted(datetime.fromisoformat(e['fecha_iso']) for e in filas)
+        inicio, fin = (fecha.replace(microsecond=0) for fecha in (fechas[0], fechas[-1]))
+        intervalo = inicio.strftime('%d/%m/%Y · %H:%M:%S')
+        if fin != inicio:
+            intervalo += '–' + fin.strftime('%H:%M:%S' if inicio.date() == fin.date() else '%d/%m/%Y %H:%M:%S')
+        salida.append({'eventos': filas, 'cantidad_empresas': len(empresas), 'intervalo': intervalo})
+    return salida
 
 
 def listado(request):
@@ -220,6 +252,8 @@ def listado(request):
         exportacion_permitida=puede_exportar(request, empresa), limpiar_url=enlace(request,
             **{k: None for k in CAMPOS_URL if k not in ('empresa', 'atencion')}),
         vista=request.GET.get('vista', 'todos'), agrupar=request.GET.get('agrupar', '1') == '1')
+    contexto['filtros_avanzados_activos'] = sum(bool(request.GET.get(campo)) for campo in (
+        'actor', 'usuario', 'accion', 'modulo', 'modelo', 'resultado'))
     contexto['vistas'] = [{'nombre': nombre, 'valor': valor, 'url': enlace(request, vista=valor, page=None)}
                            for valor, nombre in VISTAS]
     hoy = timezone.localdate()
@@ -241,7 +275,13 @@ def listado(request):
                          for n in pagina.paginator.get_elided_page_range(pagina.number, on_each_side=1, on_ends=1)],
                 anterior_url=enlace(request, page=pagina.previous_page_number()) if pagina.has_previous() else '',
                 siguiente_url=enlace(request, page=pagina.next_page_number()) if pagina.has_next() else '')
+            if empresa:
+                registrar_empresa_consultada(request, empresa, 'completada')
+        elif empresa:
+            registrar_empresa_consultada(request, empresa, 'fallida')
     except DatabaseError:
+        if empresa:
+            registrar_empresa_consultada(request, empresa, 'fallida')
         contexto['error_consulta'] = 'No pudimos consultar la auditoría. Vuelve a intentarlo.'
     return render(request, 'sistema/auditoria.html', contexto)
 
@@ -255,6 +295,8 @@ def detalle(request, evento_id):
     contexto = contexto_sistema(request, 'auditoria', 'Detalle del evento', empresa)
     contexto.update(evento=presentar(registro, empresa, {str(e.pk): e for e in contexto['empresas_disponibles']}),
         volver_url=enlace(request), ambito_nombre=empresa.nombre if empresa else 'Plataforma SmartStock')
+    if empresa:
+        registrar_empresa_consultada(request, empresa, 'completada')
     return render(request, 'sistema/auditoria_detalle.html', contexto)
 
 
@@ -318,7 +360,7 @@ def exportar(request):
                     e = presentar(registro, empresa)
                     cambios = '; '.join(f'{c["campo"]}: {c["antes"]} → {c["despues"]}' for c in e['cambios'])
                     yield escritor.writerow([celda_csv(v) for v in [e['id'], e['fecha'], e['zona_horaria'],
-                        e['usuario'], e['usuario_email'], e['perfil'], e['empresa_nombre'], e['operacion'],
+                        e['usuario'], e['usuario_email'], e['perfil'], e['empresa_mostrada'], e['operacion'],
                         e['modulo_mostrado'], e['resultado_etiqueta'], e['descripcion'], e['atencion_id'],
                         e['ip_address'], e['user_agent'], cambios]])
                 ultimo = lote[-1]
