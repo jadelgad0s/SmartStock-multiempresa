@@ -11,6 +11,7 @@ La versión multiempresa separa el directorio y las cuentas de SmartStock de los
 | Revisar el repositorio durante la presentación | [Recorrido de revisión académica](docs/presentacion.md) |
 | Entender el proyecto y sus componentes | [Arquitectura y organización](docs/desarrollo/arquitectura.md) |
 | Instalar y ejecutar la versión multiempresa | [Preparación en Windows y conexión a Neon](docs/desarrollo/multiempresa.md) |
+| Preparar el despliegue público | [Producción multiempresa en Render](docs/desarrollo/produccion-render.md) |
 | Entender un módulo o sus permisos | [Índice de documentación](docs/README.md) |
 | Ejecutar las pruebas sin credenciales de Neon | [Guía de pruebas](docs/desarrollo/pruebas.md) |
 | Compilar la aplicación de escritorio | [Aplicación para Windows](docs/desarrollo/escritorio.md) |

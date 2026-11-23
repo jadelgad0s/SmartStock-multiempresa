@@ -2,10 +2,10 @@ name: Pruebas de inventario en PostgreSQL
 
 on:
   pull_request:
-    paths: ['apps/**', 'config/**', 'esquema_multiempresa/**', 'local_settings.py', 'requirements-web.txt', '.github/workflows/tests-postgres.yml']
+    paths: ['apps/**', 'config/**', 'esquema_multiempresa/**', 'scripts/*-render.sh', '.env.multiempresa.production.example', 'local_settings.py', 'requirements-web.txt', '.github/workflows/tests-postgres.yml']
   push:
     branches: [main]
-    paths: ['apps/**', 'config/**', 'esquema_multiempresa/**', 'local_settings.py', 'requirements-web.txt', '.github/workflows/tests-postgres.yml']
+    paths: ['apps/**', 'config/**', 'esquema_multiempresa/**', 'scripts/*-render.sh', '.env.multiempresa.production.example', 'local_settings.py', 'requirements-web.txt', '.github/workflows/tests-postgres.yml']
   workflow_dispatch:
 
 permissions:
@@ -49,4 +49,4 @@ jobs:
         run: python -c "import django; django.setup(); from django.db import connection; connection.ensure_connection(); assert connection.vendor == 'postgresql'"
       - run: python manage.py test --verbosity 2 --noinput
       - name: Probar acceso y operaciones entre dos empresas
-        run: python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login esquema_multiempresa.pruebas_sistema esquema_multiempresa.pruebas_contacto esquema_multiempresa.pruebas_soporte esquema_multiempresa.pruebas_rendimiento esquema_multiempresa.pruebas_auditoria --settings=esquema_multiempresa.testing --verbosity 2 --noinput
+        run: python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login esquema_multiempresa.pruebas_sistema esquema_multiempresa.pruebas_contacto esquema_multiempresa.pruebas_soporte esquema_multiempresa.pruebas_rendimiento esquema_multiempresa.pruebas_auditoria esquema_multiempresa.pruebas_produccion --settings=esquema_multiempresa.testing --verbosity 2 --noinput

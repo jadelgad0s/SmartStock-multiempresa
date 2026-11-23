@@ -10,6 +10,7 @@ El [recorrido de revisión académica](presentacion.md) relaciona las funciones 
 | --- | --- |
 | [Arquitectura y organización](desarrollo/arquitectura.md) | Relación entre las carpetas, el servidor y las bases de cada empresa. |
 | [Instalación multiempresa](desarrollo/multiempresa.md) | Python, archivos privados, Neon, preparación y accesos locales. |
+| [Producción en Render](desarrollo/produccion-render.md) | Perfil público, variables, HTTPS, almacenamiento externo y comandos de despliegue. |
 | [Pruebas](desarrollo/pruebas.md) | Suites de API, JavaScript, navegador y ejecución aislada en CI. |
 | [Integridad del stock](desarrollo/integridad-stock.md) | Restricciones, diagnóstico y comprobaciones de concurrencia. |
 | [Rendimiento en Neon](desarrollo/rendimiento-neon.md) | Reutilización de conexiones, consultas y carga del contenido de correos. |

@@ -23,10 +23,12 @@ set "SS_TEST_POSTGRES="
 python manage.py check --settings=esquema_multiempresa.testing
 python manage.py makemigrations --check --dry-run --settings=esquema_multiempresa.testing
 python manage.py test --settings=config.settings.testing --verbosity 2
-python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login esquema_multiempresa.pruebas_sistema esquema_multiempresa.pruebas_contacto esquema_multiempresa.pruebas_soporte esquema_multiempresa.pruebas_rendimiento esquema_multiempresa.pruebas_auditoria --settings=esquema_multiempresa.testing --verbosity 2
+python manage.py test esquema_multiempresa.pruebas_web esquema_multiempresa.pruebas_login esquema_multiempresa.pruebas_sistema esquema_multiempresa.pruebas_contacto esquema_multiempresa.pruebas_soporte esquema_multiempresa.pruebas_rendimiento esquema_multiempresa.pruebas_auditoria esquema_multiempresa.pruebas_produccion --settings=esquema_multiempresa.testing --verbosity 2
 ~~~
 
 Con SS_TEST_POSTGRES desactivado, estos perfiles usan SQLite desechable únicamente para QA. Esta opción permite revisar el proyecto sin acceso a los datos de las empresas.
+
+pruebas_produccion comprueba además el perfil público con URLs sintéticas, estáticos, HTTPS, separación de sesiones y objetos privados. No abre conexiones a Neon ni al bucket real; la [guía de Render](produccion-render.md) distingue esas comprobaciones de la preparación del proveedor.
 
 Para validar bloqueos, restricciones y concurrencia utiliza PostgreSQL aislado. Las variables SS_TEST_DB_USER, SS_TEST_DB_PASSWORD, SS_TEST_DB_HOST y SS_TEST_DB_PORT y el indicador SS_TEST_POSTGRES=true se describen en [Integridad del stock](integridad-stock.md). GitHub Actions prepara PostgreSQL 16 para esas comprobaciones.
 

@@ -25,8 +25,8 @@ La [auditoría](../modulos/auditoria.md) incorpora identidad histórica y campos
 
 ## Antes de publicar la versión multiempresa
 
-El siguiente paso es preparar un perfil de producción multiempresa, configurar los dominios y las conexiones privadas de Neon y validar el despliegue en un entorno temporal antes de cambiar el servicio público.
+El perfil de producción multiempresa y sus comandos están preparados en el repositorio. El siguiente paso es configurar las bases definitivas de Neon, el bucket privado de imágenes y los dominios, y validar un despliegue temporal antes de cambiar el servicio público. La [guía de Render](produccion-render.md) detalla las variables y ese recorrido.
 
 El perfil esquema_multiempresa.web usa localhost y la rama de pruebas de Neon. El perfil config.settings.production corresponde al despliegue anterior; no sustituye la preparación multiempresa.
 
-Los archivos subidos necesitan almacenamiento persistente además de las bases PostgreSQL. Las integraciones de correo y SMS requieren su configuración propia.
+El perfil esquema_multiempresa.production admite el dominio público y las entradas centrales autorizadas, con almacenamiento externo privado compatible con S3. Las integraciones de correo y SMS requieren su configuración propia.
