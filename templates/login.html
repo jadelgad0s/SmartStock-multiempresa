@@ -2,6 +2,7 @@
 {% load static %}
 {% block title %}Iniciar sesión - SmartStock{% endblock %}
 {% block acceso_content %}
+<div id="ss-login-contenido">
 <h1 id="titulo-acceso">Bienvenido de vuelta</h1>
 <p class="ss-auth-intro">{% if request.empresa %}Ingresa tu correo y contraseña para continuar.{% else %}Ingresa tu correo y contraseña para acceder a SmartStock.{% endif %}</p>
 <div id="alert-box" class="alert alert-danger ss-auth-error" role="alert" tabindex="-1" hidden></div>
@@ -32,5 +33,7 @@
   {% if request.empresa %}<a href="{% url 'contacto_page' %}" class="ss-auth-secondary">¿Necesitas ayuda para ingresar?</a><p class="ss-auth-support-note">Atención de SmartStock</p>
   {% else %}<a href="{% url 'contacto_page' %}" class="ss-auth-secondary">Contacto</a>{% endif %}
 </footer>
+</div>
+{% include 'usuarios/transicion_acceso.html' %}
 {% endblock %}
-{% block acceso_scripts %}<script src="{% static 'js/login.js' %}?v=multiempresa-3" defer></script>{% endblock %}
+{% block acceso_scripts %}<script src="{% static 'js/transicion_acceso.js' %}?v=1" defer></script><script src="{% static 'js/login.js' %}?v=multiempresa-4" defer></script>{% endblock %}
