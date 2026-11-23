@@ -41,8 +41,9 @@ arbitraria no proporciona por sí solo los datos del producto.
 - Se admiten GTIN-8, UPC-A, EAN-13 y GTIN-14 con dígito verificador válido.
   Los códigos locales se buscan aunque no tengan formato GTIN.
 - No requiere clave de Open Food Facts, nuevas dependencias ni cambios en
-  `.env`. Ejecuta `python manage.py migrate` antes de arrancar el servidor.
-  Render ya ejecuta las migraciones en su comando de construcción.
+  `.env`. Para preparar las bases de la versión multiempresa sigue la
+  [guía de instalación](../desarrollo/multiempresa.md), que indica las
+  migraciones por alias.
 
 ## Consulta externa y procedencia
 
@@ -80,16 +81,14 @@ Referencias oficiales:
 ## Verificación local
 
 En Windows CMD, desde la carpeta que contiene `manage.py`, con el entorno
-virtual activo y tu configuración habitual de desarrollo:
+virtual activo:
 
 ```bat
-python manage.py migrate
-python manage.py check
-python manage.py test apps.productos.test_consulta_codigos
-python manage.py runserver
+python manage.py check --settings=esquema_multiempresa.testing
+python manage.py test apps.productos.test_consulta_codigos --settings=config.settings.testing
 ```
 
-Las pruebas sustituyen las peticiones externas y no envían SMS. Para probar
+Las pruebas sustituyen las peticiones externas y no envían SMS. Para abrir la aplicación, usa el arranque de la [guía multiempresa](../desarrollo/multiempresa.md). Para probar
 el formulario, usa primero un código de tu catálogo y después un código real
 de alimento o bebida que todavía no tengas registrado. `3017620422003` sirve
 como ejemplo de consulta; el contenido de una fuente externa puede cambiar.

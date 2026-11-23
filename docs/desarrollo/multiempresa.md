@@ -28,10 +28,11 @@ Django lee su clave local de `.env`. Desde la carpeta de `manage.py`, el siguien
 findstr /R /C:"^SECRET_KEY=." ".env" >nul 2>nul || python -c "import secrets; print('\nSECRET_KEY=' + secrets.token_urlsafe(64))" >> ".env"
 ```
 
-El segundo archivo privado, `.env.multiempresa.local`, contiene `SS_PRUEBAS_CENTRAL_URL` con la URL directa de `smartstock_central` en la rama `pruebas-multiempresa`, incluidos los parámetros SSL. Si ya comprobaste esa conexión en la copia anterior, puedes copiar ese archivo. Este ejemplo supone que ambas carpetas de proyecto están en el mismo directorio.
+El segundo archivo privado, `.env.multiempresa.local`, contiene `SS_PRUEBAS_CENTRAL_URL` con la URL directa de `smartstock_central` en la rama `pruebas-multiempresa`, incluidos los parámetros SSL. Crea el archivo a partir del ejemplo y completa el valor en tu editor con la conexión privada de Neon. El ejemplo no contiene credenciales. Si el archivo ya existe, se conserva.
 
 ```bat
-if not exist ".env.multiempresa.local" copy "..\SmartStock\smartstock\.env.multiempresa.local" ".env.multiempresa.local"
+if not exist ".env.multiempresa.local" copy ".env.multiempresa.example" ".env.multiempresa.local"
+notepad .env.multiempresa.local
 python manage.py check --settings=esquema_multiempresa.migracion
 ```
 
@@ -107,7 +108,7 @@ Los roles de las empresas siguen siendo **Administrador**, **Encargado de bodega
 
 Para registrar una empresa adicional, su base y conexión deben estar preparadas en el servidor. Las empresas inactivas siguen disponibles para gestión y en las atenciones asignadas, pero su acceso operativo queda bloqueado. Suspender el servicio revoca todos sus permisos de soporte; reactivarlo no los restablece.
 
-La migración `empresas.0009_soporte_temporal` añade las dos tablas centrales de atenciones y autorizaciones. Una instalación que ya tenía las migraciones hasta `0008` solo necesita migrar la central para este cambio. No se modifican las 46 tablas de cada empresa. Consulta el [procedimiento de soporte y permisos](permisos-soporte.md).
+La migración `empresas.0009_soporte_temporal` añade las dos tablas centrales de atenciones y autorizaciones. Una instalación que ya tenía las migraciones hasta `0008` solo necesita migrar la central para este cambio. No se modifican las 46 tablas de cada empresa. Consulta el [procedimiento de soporte y permisos](../modulos/permisos-soporte.md).
 
 ## Ficha de empresa y actualización de instalaciones existentes
 
@@ -181,6 +182,6 @@ python manage.py test esquema_multiempresa.selenium_suite --settings=esquema_mul
 
 ## Cuenta exclusiva de contacto
 
-El acceso `contacto@smartstockchile.cl` tiene un panel de atención separado del equipo técnico y de las empresas. La migración `0007_contacto_y_bandeja` prepara su rol y las tablas centrales; no crea usuarios ni contraseñas. Consulta [Cuenta de contacto y conexión de Zoho](contacto-zoho.md) para habilitar la cuenta y conectar el buzón por HTTPS.
+El acceso `contacto@smartstockchile.cl` tiene un panel de atención separado del equipo técnico y de las empresas. La migración `0007_contacto_y_bandeja` prepara su rol y las tablas centrales; no crea usuarios ni contraseñas. Consulta [Cuenta de contacto y conexión de Zoho](../modulos/contacto-zoho.md) para habilitar la cuenta y conectar el buzón por HTTPS.
 
 La conexión de contacto se configura también desde **Cuenta de contacto → Conectar Zoho Mail**, exclusiva del superusuario. Actualiza dependencias y aplica `empresas.0008_conexion_buzon_contacto` en la central. La autorización queda cifrada; las empresas conservan sus 46 tablas. La bandeja añade Enviados, contadores por vista y diagnósticos de conexión.

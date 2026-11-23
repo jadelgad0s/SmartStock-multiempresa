@@ -129,28 +129,24 @@ totales existentes. No modificar ni borrar sus registros de manera aislada.
 
 ## Prueba local en CMD
 
-Con los cambios locales guardados y el entorno virtual activo, desde la carpeta
-que contiene `manage.py`:
+Con la [instalación multiempresa preparada](../desarrollo/multiempresa.md) y el
+entorno virtual activo, desde la carpeta que contiene `manage.py`:
 
 ```bat
-git fetch origin
-git switch mejora/transferencias-bodegas
-git pull --ff-only
-set "DJANGO_SETTINGS_MODULE=config.settings.development"
-python -X utf8 manage.py migrate
-python -X utf8 manage.py runserver
+python -X utf8 manage.py check --settings=esquema_multiempresa.web
+python -X utf8 manage.py runserver --settings=esquema_multiempresa.web
 ```
 
-Abrir `http://127.0.0.1:8000/transferencias/`. Tener dos bodegas activas y una
+Abrir `http://la-fragua.localhost:8000/transferencias/`. Tener dos bodegas activas y una
 cuenta con el permiso indicado. Probar primero el ejemplo 24/6 → 18/12, revisar
 ambos historiales de Movimientos y comprobar que una cantidad superior al stock
-se rechace sin modificar ninguna bodega. `migrate` aplica solo las migraciones
-pendientes del proyecto; esta entrega no introduce otras.
+se rechace sin modificar ninguna bodega. La preparación de las bases y sus
+migraciones por alias se describe en la guía de instalación.
 
 Pruebas automatizadas sobre una base de pruebas:
 
 ```bat
-python -X utf8 manage.py test apps.productos.test_transferencias apps.productos.test_bodegas apps.productos.test_movimientos apps.core.test_pantallas_integradas
+python -X utf8 manage.py test apps.productos.test_transferencias apps.productos.test_bodegas apps.productos.test_movimientos apps.core.test_pantallas_integradas --settings=config.settings.testing
 npm --prefix tests/js ci
 npm --prefix tests/js test
 ```

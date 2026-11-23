@@ -36,22 +36,11 @@ Desde **Ver detalle → Cancelar aviso** puedes confirmar la cancelación de un 
 
 ## Prueba local en Windows CMD
 
-Antes de la integración del PR, puedes revisar la rama así desde el repositorio, con el entorno virtual activado y sin cambios locales pendientes:
+Con la [instalación multiempresa preparada](../desarrollo/multiempresa.md) y el entorno virtual activado:
 
 ```bat
-git fetch origin
-git switch --track origin/mejora/gestion-sms-pendientes
-python manage.py check
-python manage.py runserver
+python manage.py check --settings=esquema_multiempresa.web
+python manage.py runserver --settings=esquema_multiempresa.web
 ```
 
-Si ya tienes esa rama local:
-
-```bat
-git switch mejora/gestion-sms-pendientes
-git pull --ff-only
-python manage.py check
-python manage.py runserver
-```
-
-Inicia sesión como administrador y abre `http://127.0.0.1:8000/alertas-sms/`. Para probar solo la revisión, abre el historial y sus detalles sin confirmar el procesamiento.
+Inicia sesión como administrador de la empresa y abre Alertas SMS en su dominio, por ejemplo `http://la-fragua.localhost:8000/alertas-sms/`. Para probar solo la revisión, abre el historial y sus detalles sin confirmar el procesamiento. El perfil local multiempresa de ensayo tiene los envíos desactivados.

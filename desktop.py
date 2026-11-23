@@ -100,8 +100,8 @@ def main():
     if empaquetado and os.name == 'nt':
         comprobar_webview2()
 
-    icon_path = BASE_DIR / 'icono.ico'
-    pantalla_carga = (BASE_DIR / 'desktop_splash.html').read_text(encoding='utf-8')
+    icon_path = BASE_DIR / 'recursos' / 'branding' / 'icono.ico'
+    pantalla_carga = (BASE_DIR / 'recursos' / 'escritorio' / 'splash.html').read_text(encoding='utf-8')
     ventana = webview.create_window(
         title='SmartStock - Hub de Inventario',
         html=pantalla_carga,

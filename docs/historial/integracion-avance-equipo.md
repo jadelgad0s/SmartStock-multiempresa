@@ -1,5 +1,7 @@
 # Integración del avance de otro integrante de SmartStock
 
+> Documento histórico. Para la versión actual, consulta el [índice de documentación](../README.md).
+
 **Fuente:** ZIP `SmartStock_20261019_2108.zip` compartido por el equipo.  
 **Base:** `main` de SmartStock (`e5dec23` al crear la rama).
 **Estado:** Rama de revisión; **NO DESPLEGAR** sin pruebas locales y validación de permisos.

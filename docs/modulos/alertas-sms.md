@@ -1,6 +1,8 @@
 # Alertas de stock por SMS con Twilio
 
-Esta integración envía SMS reales y **Twilio cobra por utilizarlos**. Está activa por defecto para las pruebas y demostraciones de SmartStock, con un límite de 100 intentos diarios. Requiere credenciales, remitente y destinatarios válidos para realizar envíos. No requiere WhatsApp, Redis, Celery ni un servicio adicional de Render.
+En el perfil local multiempresa de ensayo, los SMS están desactivados por configuración. Esta guía describe la integración y sus opciones cuando se habilita en un entorno autorizado.
+
+Esta integración envía SMS reales y **Twilio cobra por utilizarlos**. La configuración general del proyecto original define la activación por defecto y un límite de 100 intentos diarios; el perfil multiempresa de ensayo sobrescribe la activación y mantiene los envíos desactivados. Requiere credenciales, remitente y destinatarios válidos para realizar envíos. No requiere WhatsApp, Redis, Celery ni un servicio adicional de Render.
 
 ## Comportamiento
 
@@ -33,6 +35,10 @@ El cuerpo generado usa hasta 160 caracteres GSM básicos, con saltos de línea y
 La frase **“Sent from your Twilio trial account”** de los SMS de prueba la añade Twilio; no forma parte del cuerpo generado por SmartStock y no se puede quitar desde la aplicación. Para eliminarla hay que actualizar la cuenta de Twilio. Ese prefijo u otros textos añadidos por el proveedor pueden aumentar la longitud recibida y el número de segmentos. Los SMS ya enviados conservan su mensaje original en el historial; el texto nuevo se aplica a las próximas alertas y a los pendientes que se envíen después de actualizar el código.
 
 ## Configuración en Render
+
+Esta sección corresponde al despliegue general del proyecto original. La
+preparación de producción multiempresa se describe en el
+[estado de las versiones](../desarrollo/estado-versiones.md).
 
 Primero instala las dependencias y aplica las migraciones de esta versión. En el servicio web, abre **Environment** y agrega variables privadas:
 
@@ -95,7 +101,7 @@ La aplicación valida `X-Twilio-Signature` con la librería oficial, la URL púb
 - Solo un rechazo explícito por exceso de solicitudes (`HTTP 429`) queda pendiente para otro intento, después de un minuto y hasta 3 intentos en total. No hay un bucle de reintentos automáticos.
 - Un timeout, desconexión, error de servidor o proceso interrumpido puede haber alcanzado a Twilio. Se deja **Resultado por confirmar**, sin reenvío automático para evitar mensajes y cobros duplicados. Un callback válido puede completar ese resultado.
 - Los rechazos definitivos no se reintentan. El código `21610` indica que el destinatario se dio de baja. No se omite ni se intenta evadir esa baja.
-- Para revisar pendientes tras corregir la configuración, liberar cuota o esperar un `429`, un administrador puede usar la API anterior o ejecutar:
+- Para revisar pendientes en una empresa, usa la [pantalla de gestión](gestion-sms-pendientes.md) o la API anterior dentro de su dominio. En el despliegue general del proyecto original también existe el comando:
 
 ```console
 python manage.py procesar_alertas_sms
@@ -103,28 +109,24 @@ python manage.py procesar_alertas_sms
 
 El comando procesa un lote máximo de 3. Si quedan pendientes, puede repetirse. No depende de que el servicio gratuito de Render permanezca despierto: las operaciones nuevas intentan enviar sus SMS después del commit; los pendientes requieren ejecutar este comando o el endpoint. No incluye un programador periódico ni promete entrega durante una caída del servidor o del proveedor.
 
+El comando general no selecciona una empresa. No debe ejecutarse con el perfil
+multiempresa como sustituto de la pantalla o API que resuelven su contexto.
+
 ## Prueba local y activación
 
 En CMD de Windows, dentro del repositorio:
 
 ```bat
-call venv\Scripts\activate.bat
+call .venv\Scripts\activate.bat
 python -m pip install -r requirements-web.txt
-python manage.py migrate
-python manage.py check
-python manage.py test
-python manage.py runserver
+set "SS_TEST_POSTGRES="
+python manage.py check --settings=esquema_multiempresa.testing
+python manage.py test --settings=config.settings.testing
 ```
 
 Los tests usan un proveedor simulado: **no envían SMS reales ni consumen saldo**. Para probar callbacks reales localmente necesitas un origen HTTPS público y configurar `TWILIO_PUBLIC_BASE_URL` con ese origen.
 
-Para ejecutar el resto de la suite con tus credenciales reales presentes en el `.env`, pausa los SMS solo en el CMD donde corres las pruebas:
-
-```bat
-set "SMS_ALERTAS_ACTIVAS=False"
-python manage.py test
-set "SMS_ALERTAS_ACTIVAS=True"
-```
+El perfil de pruebas desactiva los SMS aunque existan credenciales privadas en el entorno. Para abrir la aplicación y preparar sus bases, utiliza la [guía multiempresa](../desarrollo/multiempresa.md). La activación descrita a continuación corresponde a un entorno autorizado que tenga habilitada la integración; el perfil local multiempresa de ensayo conserva los envíos desactivados.
 
 Con la cuenta y el remitente ya preparados, configura un único celular autorizado y conserva `SMS_ALERTAS_ACTIVAS=True` para las demostraciones. En un producto de prueba con 6 unidades, guarda mínimo 5 y registra una salida de 1: debe aparecer un único SMS de stock bajo. Otra salida sin llegar a cero no repite el aviso. Al llegar a cero se genera la alerta de agotado. Comprueba la entrega en el historial y en la consola de Twilio. Estas pruebas reales tienen costo.
 

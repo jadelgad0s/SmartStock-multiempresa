@@ -66,21 +66,22 @@ consolida automáticamente. Las referencias nuevas se crean con cantidad cero.
 
 ## Prueba local en CMD
 
-Con el entorno virtual activo y el servidor detenido con Ctrl+C:
+Con la [instalación multiempresa preparada](../desarrollo/multiempresa.md) y el
+entorno virtual activo:
 
 ```bat
-git fetch origin
-git switch mejora/ubicaciones-fisicas
-git pull --ff-only
-python -X utf8 manage.py check
-python -X utf8 manage.py runserver
+python -X utf8 manage.py check --settings=esquema_multiempresa.web
+python -X utf8 manage.py runserver --settings=esquema_multiempresa.web
 ```
 
-Se parte de `main` con el PR #31 de integridad de stock ya incorporado. Si esa
-migración aún no está aplicada en tu instalación, sigue primero las instrucciones
-de respaldo, diagnóstico y `migrate` de `docs/integridad_stock.md`.
+La migración de integridad de stock forma parte del código integrado. Si aún no
+está aplicada en las bases de ensayo, sigue las instrucciones de respaldo,
+diagnóstico y migración por alias de la
+[guía de integridad del stock](../desarrollo/integridad-stock.md).
 
-Abre `/bodegas/` y pulsa **Ubicaciones** en una bodega. Prueba crear la estructura,
+Abre Bodegas dentro de la empresa, por ejemplo
+`http://la-fragua.localhost:8000/bodegas/`, y pulsa **Ubicaciones** en una bodega.
+Prueba crear la estructura,
 asignar un producto, repetir la asignación, buscarlo y retirar su referencia.
 Comprueba que el catálogo y el Kardex conservan sus unidades. Repite con un
 operador (consulta) y un encargado de bodega (edición). Prueba también el menú,
@@ -93,6 +94,6 @@ python -X utf8 manage.py test apps.productos.test_ubicaciones --settings=config.
 Las pruebas de concurrencia requieren PostgreSQL. El workflow de GitHub ejecuta
 la suite completa con PostgreSQL 16 aislado; `config.settings.testing` también
 permite usar un PostgreSQL local de pruebas mediante `SS_TEST_POSTGRES=true` y
-las variables `SS_TEST_DB_*` documentadas en `docs/integridad_stock.md`.
+las variables `SS_TEST_DB_*` documentadas en la [guía de integridad del stock](../desarrollo/integridad-stock.md).
 Las pruebas no usan la base de producción ni envían SMS reales. La configuración
 de SMS de la aplicación se mantiene.

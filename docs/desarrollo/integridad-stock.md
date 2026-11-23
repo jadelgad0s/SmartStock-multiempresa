@@ -44,34 +44,36 @@ Al revertir la migración se eliminan las restricciones, pero **no se recrean lo
 IDs ni las filas duplicadas**: los totales consolidados permanecen. Para recuperar
 exactamente la disposición anterior de las filas se necesita el respaldo previo.
 
-## Prueba local en CMD
+## Comprobación en la instalación multiempresa
 
-Con el entorno virtual activo, detén `runserver` con Ctrl+C y entra en la rama.
-Primero confirma que estás usando tu base **local**. El respaldo se guarda fuera
-del repositorio para evitar subir datos de usuarios a GitHub.
+La migración forma parte del código integrado. Prepara primero los archivos
+privados de la [instalación multiempresa](multiempresa.md). Cada empresa tiene
+su propio inventario; el diagnóstico se ejecuta con su alias explícito.
+
+Antes de migrar una base con datos, detén las operaciones y obtén un respaldo
+comprobado de esa base mediante su conexión directa de Neon. Guarda el respaldo
+fuera del repositorio. Con el entorno virtual activo, revisa las bases de ensayo:
 
 ```bat
-git fetch origin
-git switch mejora/integridad-stock
-git pull --ff-only
-set "SS_RESPALDO=%TEMP%\SmartStock_integridad_%RANDOM%.json"
-python -X utf8 manage.py dumpdata --all --natural-foreign --natural-primary --indent 2 --output "%SS_RESPALDO%"
-python -X utf8 manage.py revisar_integridad_stock
+python -X utf8 manage.py revisar_integridad_stock --database=ferreteria --settings=esquema_multiempresa.settings
+python -X utf8 manage.py revisar_integridad_stock --database=repuestos --settings=esquema_multiempresa.settings
 ```
 
-Confirma que el respaldo terminó correctamente. Si el diagnóstico encuentra
-cantidades inválidas, conserva el archivo y revisa los registros señalados antes
+Si el diagnóstico encuentra cantidades inválidas, revisa los registros señalados antes
 de continuar; el comando es de solo lectura y no los corrige.
 
 ```bat
-python -X utf8 manage.py migrate
-python -X utf8 manage.py revisar_integridad_stock
-python -X utf8 manage.py check
-python -X utf8 manage.py runserver
+python -X utf8 manage.py migrate --database=ferreteria --settings=esquema_multiempresa.migracion
+python -X utf8 manage.py migrate --database=repuestos --settings=esquema_multiempresa.migracion
+python -X utf8 manage.py revisar_integridad_stock --database=ferreteria --settings=esquema_multiempresa.settings
+python -X utf8 manage.py revisar_integridad_stock --database=repuestos --settings=esquema_multiempresa.settings
+python -X utf8 manage.py check --settings=esquema_multiempresa.web
+python -X utf8 manage.py runserver --settings=esquema_multiempresa.web
 ```
 
-Si una instalación está vacía, `migrate` crea las tablas y aplica la migración sin
-necesidad de consolidar datos previos.
+Si una instalación está vacía, sigue la preparación de los tres alias de la guía
+multiempresa. El diagnóstico necesita las tablas del inventario; después de
+crearlas se puede ejecutar para comprobar el resultado.
 
 ## Pruebas con PostgreSQL
 
