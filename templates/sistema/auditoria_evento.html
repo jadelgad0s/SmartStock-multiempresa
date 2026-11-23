@@ -5,7 +5,7 @@
     <div><dt>Empresa</dt><dd>{{ evento.empresa_nombre|default:'—' }}{% if evento.empresa_codigo %}<small>{{ evento.empresa_codigo }}</small>{% endif %}</dd></div>
     <div><dt>Acción y resumen</dt><dd><span class="ss-aud-accion ss-aud-{{ evento.tipo_accion }}">{{ evento.operacion }}</span><p class="ss-aud-preview">{{ evento.resumen }}</p></dd></div>
     <div><dt>Módulo</dt><dd>{{ evento.modulo_mostrado }}</dd></div>
-    <div><dt>Resultado</dt><dd><span class="ss-aud-resultado ss-aud-{{ evento.resultado|default:'anterior' }}">{{ evento.resultado_etiqueta }}</span></dd></div>
+    <div><dt>Resultado</dt><dd><span class="ss-aud-resultado ss-aud-{{ evento.resultado|default:'anterior' }}"{% if evento.resultado_ayuda %} title="{{ evento.resultado_ayuda }}"{% endif %}>{{ evento.resultado_etiqueta }}</span></dd></div>
     <div><dt>Detalle</dt><dd><a class="btn btn-sm btn-outline-secondary ss-aud-ver-detalle" href="{{ evento.detalle_url }}" aria-label="Ver detalle del evento {{ evento.id }}" data-ss-loading="Abriendo detalle del evento…">Ver detalle</a></dd></div>
   </dl>
 </article>
