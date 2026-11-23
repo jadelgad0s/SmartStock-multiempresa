@@ -46,6 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const correo = document.getElementById('email'), clave = document.getElementById('password');
   const boton = document.getElementById('login-submit');
   const opciones = document.getElementById('opciones-acceso');
+  const tituloEntrada = document.getElementById('titulo-acceso');
+  const introduccion = document.getElementById('ss-login-intro');
+  const tituloInicial = tituloEntrada?.textContent;
+  const restaurarEntrada = () => {
+    if (tituloEntrada) tituloEntrada.textContent = tituloInicial;
+    if (introduccion) introduccion.hidden = false;
+  };
   let enviando = false, completado = false, navegando = false;
   const estado = () => {
     const ocupado = enviando || completado;
@@ -83,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cambiar-cuenta')?.addEventListener('click', () => {
     epoca++; transicion?.restaurar(); navegando = false;
     opciones.hidden = true; form.hidden = false;
+    restaurarEntrada();
     document.getElementById('destinos-acceso').replaceChildren();
     completado = false; estado(); correo.focus();
   });
@@ -139,6 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
             lista.appendChild(enlace);
           }
           form.hidden = true; opciones.hidden = false;
+          if (tituloEntrada) tituloEntrada.textContent = 'Elige tu empresa';
+          if (introduccion) introduccion.hidden = true;
+          lista.firstElementChild?.focus();
         }
       } else {
         completado = true;
@@ -156,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
       epoca++; transicion?.restaurar();
       document.querySelectorAll('form[data-ss-entrega-acceso]').forEach(f => f.remove());
       enviando = false; completado = false; navegando = false; form.hidden = false;
+      restaurarEntrada();
       if (opciones) {
         opciones.hidden = true;
         opciones.querySelectorAll('button').forEach(b => { b.disabled = false; });

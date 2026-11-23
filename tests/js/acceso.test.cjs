@@ -85,10 +85,12 @@ test('las credenciales con varios accesos permiten elegir la empresa después de
   {nombre:'Punto Motor',url:'http://punto-motor.localhost/acceder/',ticket:'b8111111-1111-4111-a111-111111111111'},
  ]}});
  assert.equal(c.form.hidden,true);assert.equal(c.el('opciones-acceso').hidden,false);assert.equal(entregas.length,0);
+ assert.equal(c.el('titulo-acceso').textContent,'Elige tu empresa');assert.equal(c.el('ss-login-intro').hidden,true);
  const botones=c.el('destinos-acceso').querySelectorAll('button');assert.equal(botones.length,2);botones[1].click();botones[1].click();
  await tick();
  assert.deepEqual(entregas,['http://punto-motor.localhost/acceder/']);
  c.w.dispatchEvent(new c.w.PageTransitionEvent('pageshow',{persisted:true}));assert.equal(c.form.hidden,false);assert.equal(c.el('opciones-acceso').hidden,true);
+ assert.equal(c.el('titulo-acceso').textContent,'Bienvenido de vuelta');assert.equal(c.el('ss-login-intro').hidden,false);
 });
 test('el acceso técnico abre su panel y un destino externo se rechaza',async t=>{
  const tecnico=await pantalla(t);tecnico.completar();tecnico.enviar();await tecnico.responder({success:true,data:{sistema:true,inicio:'/sistema/'}});
