@@ -4,6 +4,47 @@ El perfil `esquema_multiempresa.production` publica la entrada central y las emp
 
 Esta guía prepara la publicación. El cambio del repositorio del servicio y de sus dominios se realiza después de configurar las bases, el almacenamiento y comprobar una instalación temporal.
 
+## Recursos preparados en Neon
+
+La preparación del 23 de noviembre de 2026 conserva las bases multiempresa existentes mediante una copia independiente de `pruebas-multiempresa`, llamada `produccion-multiempresa`, en el proyecto SmartStock. Esta copia conserva las cuentas y la configuración; el usuario decidió iniciar con el inventario actual de esas bases. La conexión de Zoho se configurará nuevamente con la clave privada de esta instalación.
+
+| Alias Django | Base de Neon | Variable privada |
+| --- | --- | --- |
+| central | smartstock_central | SS_CENTRAL_DATABASE_URL |
+| ferreteria | ferreteria_la_fragua | SS_FERRETERIA_DATABASE_URL |
+| repuestos | repuestos_punto_motor | SS_REPUESTOS_DATABASE_URL |
+
+Las tres conexiones utilizan el endpoint directo de `produccion-multiempresa`, con SSL. El endpoint puede consultarse en Neon; no se deben copiar las URLs completas al repositorio.
+
+| Parámetro de objetos | Valor |
+| --- | --- |
+| Proveedor | Neon Object Storage |
+| Región | us-east-2 |
+| Bucket | smartstock-imagenes |
+| Acceso | Privado |
+| Endpoint | https://br-purple-smoke-b52qkb96.storage.c-7.us-east-2.aws.neon.tech |
+| Credencial de servidor | Limitada a almacenamiento de esta rama; conservada en Render. |
+
+Las bases de pruebas continúan siendo independientes. El bucket corresponde a la rama de destino y no depende del disco temporal de Render. Las cuotas gratuitas se comparten con otros recursos del mismo proyecto; revisar el consumo en Neon antes de aumentar el volumen.
+
+## Servicio temporal y verificación de proveedores
+
+El servicio separado `smartstock-multiempresa-pruebas` utiliza Render Free en Ohio y el repositorio multiempresa. Las actualizaciones automáticas están desactivadas durante la preparación. Su [entrada temporal](https://smartstock-multiempresa-pruebas.onrender.com/) permite comprobar la central.
+
+`SS_DOMINIO_EMPRESAS=pruebas.smartstockchile.cl` reserva el dominio de ensayo. Las direcciones `la-fragua.pruebas.smartstockchile.cl` y `punto-motor.pruebas.smartstockchile.cl` requieren todavía configurar DNS, dominios y certificados antes de probar la navegación completa. La dirección onrender.com solo cubre la entrada central.
+
+Desde un equipo que tenga las variables privadas del servicio:
+
+```bash
+python manage.py verificar_produccion --probar-archivos --settings=esquema_multiempresa.production
+```
+
+El comando abre cada conexión real, comprueba el nombre de la base y escribe el mismo nombre relativo de archivo con contenido diferente en las dos empresas. Luego verifica ambas lecturas y elimina únicamente los archivos temporales que acaba de crear. No aplica migraciones, importa inventario ni muestra credenciales.
+
+Para ejecutar esa misma comprobación al iniciar el servicio temporal, configura `SS_VERIFICAR_PRODUCCION=True` durante el despliegue de validación. Si falla, el inicio se detiene. Después de comprobar el resultado, guarda `SS_VERIFICAR_PRODUCCION=False` para los despliegues siguientes. Este control es explícito y permanece desactivado por defecto.
+
+La lectura/escritura de imágenes y la conexión de bases no sustituyen las pruebas de cuentas, permisos, correos y navegación bajo los dominios de cada empresa. El sitio oficial permanece en su servicio anterior hasta completar esas pruebas.
+
 ## Perfiles
 
 | Perfil | Función |
