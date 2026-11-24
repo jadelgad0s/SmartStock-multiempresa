@@ -27,6 +27,8 @@ Las tres conexiones utilizan el endpoint directo de `produccion-multiempresa`, c
 
 Las bases de pruebas continúan siendo independientes. El bucket corresponde a la rama de destino y no depende del disco temporal de Render. Las cuotas gratuitas se comparten con otros recursos del mismo proyecto; revisar el consumo en Neon antes de aumentar el volumen.
 
+La credencial de S3 declara los permisos `storage:read` y `storage:write`. El cliente usa cargas compatibles con Neon y calcula las sumas de comprobación cuando la operación las exige, con HTTPS, firma SigV4 y direccionamiento por ruta. Los errores de la verificación muestran únicamente la operación y un código conocido, sin mensajes ni cabeceras del proveedor.
+
 ## Servicio temporal y verificación de proveedores
 
 El servicio separado `smartstock-multiempresa-pruebas` utiliza Render Free en Ohio y el repositorio multiempresa. Las actualizaciones automáticas están desactivadas durante la preparación. Su [entrada temporal](https://smartstock-multiempresa-pruebas.onrender.com/) permite comprobar la central.
