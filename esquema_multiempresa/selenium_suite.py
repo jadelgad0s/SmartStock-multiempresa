@@ -350,6 +350,10 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertEqual(urlsplit(acceso.get_attribute('href')).hostname, 'la-fragua.localhost')
         self.assertEqual(acceso.get_attribute('target'), '_blank')
         self.assertFalse(fila.find_element(By.CSS_SELECTOR, 'a[href^="/sistema/atenciones/nueva/"]').is_displayed())
+        self.assertTrue(navegador.execute_script('''
+            return [...document.querySelectorAll('.ss-sistema-tabla-adaptable')].every(
+                tabla => tabla.getBoundingClientRect().width <= tabla.closest('.card').clientWidth + 1);
+        '''))
         navegador.save_screenshot('/tmp/ss-panel-sistema-escritorio.png')
         fila.find_element(By.TAG_NAME, 'summary').send_keys(Keys.ENTER)
         espera.until(lambda d: d.find_element(By.CSS_SELECTOR, '[data-empresa="la-fragua"] details').get_attribute('open') is not None)
@@ -365,6 +369,8 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         navegador.get(self.live_server_url + '/sistema/')
         navegador.find_element(By.CSS_SELECTOR, '.ss-theme-toggle').click()
         espera.until(lambda d: d.find_element(By.TAG_NAME, 'html').get_attribute('data-bs-theme') == 'dark')
+        espera.until(lambda d: d.execute_script(
+            'return getComputedStyle(document.querySelector("summary")).color === "rgb(203, 213, 225)"'))
         navegador.save_screenshot('/tmp/ss-panel-sistema-oscuro.png')
         navegador.find_element(By.CSS_SELECTOR, '.ss-theme-toggle').click()
         for ancho in (390, 320):
@@ -389,7 +395,11 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
             if ancho == 390:
                 navegador.save_screenshot('/tmp/ss-panel-sistema-acciones-movil.png')
                 responsable = navegador.find_element(By.CSS_SELECTOR, '.ss-sistema-tabla .badge-soft-warning')
-                navegador.execute_script('arguments[0].scrollIntoView({block:"center"})', responsable)
+                navegador.execute_script('arguments[0].scrollIntoView({block:"center",behavior:"instant"})', responsable)
+                espera.until(lambda d: d.execute_script('''
+                    const r=arguments[0].getBoundingClientRect();
+                    return r.top>=0 && r.bottom<=innerHeight;
+                ''', responsable))
                 navegador.save_screenshot('/tmp/ss-panel-sistema-soporte-movil.png')
         navegador.set_window_size(1440, 1000)
         navegador.get(self.live_server_url + '/sistema/')

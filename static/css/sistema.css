@@ -93,7 +93,7 @@
 .ss-sistema .ss-sistema-enlace-empresa { color: var(--dash-ink); }
 .ss-sistema-acceso-empresa { max-width: 28rem; font-size: .75rem; }
 .ss-sistema-tabla { overflow: hidden; }
-.ss-sistema-tabla > .table-responsive { flex-shrink: 0; }
+.ss-sistema-tabla-adaptable td { overflow-wrap: anywhere; }
 .ss-sistema-tabla tbody tr:last-child td { border-bottom: 0; }
 .ss-sistema-etiqueta { display: inline-flex; align-items: center; gap: .4rem; border-radius: 1rem; padding: .35em .7em; font-size: .75rem; font-weight: 600; line-height: 1.4; }
 .ss-sistema-estado-abierto { color: #115e59; background: #ccfbf1; }
@@ -139,7 +139,6 @@
   .ss-sistema-periodo { margin-left: 0; }
 }
 @media (max-width: 767.98px) {
-  .ss-sistema .table-responsive > .ss-sistema-tabla-adaptable { min-width: 0; }
   .ss-sistema-tabla-adaptable, .ss-sistema-tabla-adaptable tbody { display: block; width: 100%; }
   .ss-sistema-tabla-adaptable thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .ss-sistema-tabla-adaptable tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--dash-line); }
