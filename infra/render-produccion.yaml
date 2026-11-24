@@ -1,5 +1,5 @@
-# Destino definitivo del servicio multiempresa ya comprobado.
-# Preparado: no aplicar hasta completar las condiciones de cambio-dominio.md.
+# Configuración activa del servicio multiempresa desde el 24 de noviembre de 2026.
+# El procedimiento de traslado y reversión está en docs/desarrollo/cambio-dominio.md.
 # Mantener autoSync desactivado y revisar el plan antes de aprobarlo.
 # El nombre identifica el servicio existente; no crear otro servicio con este archivo.
 # Las claves privadas, las bases y el almacenamiento se conservan en Render.

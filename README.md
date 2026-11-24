@@ -11,7 +11,7 @@ La versión multiempresa separa el directorio y las cuentas de SmartStock de los
 | Revisar el repositorio durante la presentación | [Recorrido de revisión académica](docs/presentacion.md) |
 | Entender el proyecto y sus componentes | [Arquitectura y organización](docs/desarrollo/arquitectura.md) |
 | Instalar y ejecutar la versión multiempresa | [Preparación en Windows y conexión a Neon](docs/desarrollo/multiempresa.md) |
-| Preparar el despliegue público | [Producción multiempresa en Render](docs/desarrollo/produccion-render.md) |
+| Revisar el despliegue público | [Producción multiempresa en Render](docs/desarrollo/produccion-render.md) |
 | Entender un módulo o sus permisos | [Índice de documentación](docs/README.md) |
 | Ejecutar las pruebas sin credenciales de Neon | [Guía de pruebas](docs/desarrollo/pruebas.md) |
 | Compilar la aplicación de escritorio | [Aplicación para Windows](docs/desarrollo/escritorio.md) |
@@ -87,8 +87,14 @@ Accesos del entorno local configurado: [entrada común](http://127.0.0.1:8000/),
 
 ## Versiones y despliegue
 
-Este repositorio contiene la evolución multiempresa. El sitio [smartstockchile.cl](https://smartstockchile.cl/) sigue vinculado al repositorio anterior hasta completar la preparación y el cambio de despliegue.
+Desde el 24 de noviembre de 2026, el sitio público utiliza la versión multiempresa de este repositorio, con Render Free y bases independientes en Neon.
 
-El perfil local multiempresa no equivale al perfil de producción del sitio anterior. Consulta el [estado de las versiones y la preparación del despliegue](docs/desarrollo/estado-versiones.md) antes de publicar.
+| Acceso | Dirección |
+| --- | --- |
+| Central SmartStock | https://smartstockchile.cl/ |
+| Ferretería La Fragua | https://la-fragua.smartstockchile.cl/ |
+| Repuestos Punto Motor | https://punto-motor.smartstockchile.cl/ |
+
+El perfil público es `esquema_multiempresa.production`. Las actualizaciones de código e infraestructura continúan siendo manuales. El [estado de las versiones](docs/desarrollo/estado-versiones.md) identifica el despliegue comprobado y las guías para mantenerlo.
 
 Las notas antiguas de avances están en [docs/historial/](docs/historial/). Se conservan como antecedentes y están separadas de las instrucciones actuales.
