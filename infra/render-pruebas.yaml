@@ -1,0 +1,22 @@
+# Configuración del servicio temporal existente en My Workspace.
+# Planificar con adopción del servicio y sincronización automática desactivada.
+# Las variables privadas se conservan en Render; este archivo no las redefine.
+previews:
+  generation: 'off'
+
+services:
+  - type: web
+    name: smartstock-multiempresa-pruebas
+    runtime: python
+    repo: https://github.com/jadelgad0s/SmartStock-multiempresa
+    branch: main
+    region: ohio
+    plan: free
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    buildCommand: bash scripts/build-render.sh
+    startCommand: bash scripts/start-render.sh
+    healthCheckPath: /salud/
+    renderSubdomainPolicy: enabled
+    domains:
+      - "*.pruebas.smartstockchile.cl"

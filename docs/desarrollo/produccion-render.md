@@ -6,7 +6,7 @@ Esta guía prepara la publicación. El cambio del repositorio del servicio y de 
 
 ## Recursos preparados en Neon
 
-La preparación del 23 de noviembre de 2026 conserva las bases multiempresa existentes mediante una copia independiente de `pruebas-multiempresa`, llamada `produccion-multiempresa`, en el proyecto SmartStock. Esta copia conserva las cuentas y la configuración; el usuario decidió iniciar con el inventario actual de esas bases. La conexión de Zoho se configurará nuevamente con la clave privada de esta instalación.
+La preparación del 23 de noviembre de 2026 conserva las bases multiempresa existentes mediante una copia independiente de `pruebas-multiempresa`, llamada `produccion-multiempresa`, en el proyecto SmartStock. Esta copia conserva las cuentas y la configuración; el usuario decidió iniciar con el inventario actual de esas bases. Zoho se reconectó desde la cuenta de Contacto y se comprobó en el servicio temporal. La autorización se conserva cifrada con la clave privada de esta instalación.
 
 | Alias Django | Base de Neon | Variable privada |
 | --- | --- | --- |
@@ -46,6 +46,46 @@ El comando abre cada conexión real, comprueba el nombre de la base y escribe el
 Para ejecutar esa misma comprobación al iniciar el servicio temporal, configura `SS_VERIFICAR_PRODUCCION=True` durante el despliegue de validación. Si falla, el inicio se detiene. Después de comprobar el resultado, guarda `SS_VERIFICAR_PRODUCCION=False` para los despliegues siguientes. Este control es explícito y permanece desactivado por defecto.
 
 La lectura/escritura de imágenes y la conexión de bases no sustituyen las pruebas de cuentas, permisos, correos y navegación bajo los dominios de cada empresa. El sitio oficial permanece en su servicio anterior hasta completar esas pruebas.
+
+## Plan de dominios de ensayo
+
+[infra/render-pruebas.yaml](../../infra/render-pruebas.yaml) declara el servicio temporal existente y un dominio comodín para las dos empresas. Esta configuración se prepara como un plan revisable antes de aplicarla.
+
+| Parámetro | Valor |
+| --- | --- |
+| Servicio existente que se adopta | smartstock-multiempresa-pruebas, srv-dc2b7safngtc73bbupu0 |
+| Workspace | My Workspace |
+| Plan del servidor | Free, una instancia en Ohio |
+| Archivo de configuración | infra/render-pruebas.yaml |
+| Rama | main |
+| Sincronización de infraestructura | Manual, autoSync desactivado |
+| Publicaciones automáticas de código | Desactivadas durante el ensayo |
+| Dominio propuesto | *.pruebas.smartstockchile.cl |
+| Comprobación HTTP | /salud/ |
+
+Al crear el plan en Render se utiliza la opción de adoptar el servicio existente. Antes de aprobarlo, comprobar que el cambio corresponde al ID indicado y que conserva el plan Free. Las variables privadas continúan gestionándose en Environment: el archivo omite envVars y Render conserva los valores existentes, incluido SECRET_KEY. La autorización de Zoho depende de esa clave estable.
+
+La entrada central del ensayo continúa por la dirección onrender.com. El comodín permite preparar estas direcciones de empresa:
+
+| Empresa | Dirección prevista |
+| --- | --- |
+| La Fragua | https://la-fragua.pruebas.smartstockchile.cl |
+| Punto Motor | https://punto-motor.pruebas.smartstockchile.cl |
+
+El plan Free del servidor y el cupo de dominios personalizados son conceptos distintos. Render incluye dos dominios en el workspace Hobby y cobra USD 0,25 mensuales por cada dominio que exceda el cupo. Revisar el uso del workspace y cualquier cargo adicional antes de aprobar el dominio comodín. Referencias: [dominios personalizados](https://render.com/docs/custom-domains), [planes y precios](https://render.com/pricing).
+
+Después de aprobar el plan, preparar estos registros en Cloudflare, dentro de la zona smartstockchile.cl, con proxy DNS only y TTL automático. Los destinos de validación deben coincidir con las instrucciones que Render muestre para el dominio registrado.
+
+| Tipo | Nombre | Destino previsto |
+| --- | --- | --- |
+| CNAME | pruebas | smartstock-multiempresa-pruebas.onrender.com |
+| CNAME | *.pruebas | smartstock-multiempresa-pruebas.onrender.com |
+| CNAME | _acme-challenge.pruebas | smartstock-multiempresa-pruebas.verify.renderdns.com |
+| CNAME | _cf-custom-hostname.pruebas | smartstock-multiempresa-pruebas.hostname.renderdns.com |
+
+El registro pruebas dirige la base del comodín a Render, como exige su validación DNS. La configuración de este ensayo se limita a pruebas.smartstockchile.cl y sus registros de validación. Antes de crear registros, revisar si esos nombres ya existen y confirmar sus destinos.
+
+Tras verificar el dominio y emitir el certificado, abrir /salud/ bajo los dos hosts y comprobar el acceso desde la central con las cuentas de cada empresa. El cambio del dominio oficial se realiza después de completar esas comprobaciones. Guía del proveedor: [DNS de Cloudflare](https://render.com/docs/configure-cloudflare-dns).
 
 ## Perfiles
 
