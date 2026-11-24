@@ -59,7 +59,8 @@
 .ss-soporte-aviso p { font-size: .85rem; margin: .35rem 0; overflow-wrap: anywhere; }
 .ss-soporte-aviso a { color: #0f766e; text-underline-offset: .15em; font-size: .85rem; }
 .ss-soporte-aviso details[open] { border-top: 1px solid currentColor; margin-top: .5rem; }
-.ss-sistema-filtros.ss-soporte-consulta-filtros { display: flex; align-items: end; flex-wrap: wrap; }
+/* .card usa columnas: los filtros necesitan una fila que se adapte al ancho. */
+.ss-sistema-filtros.ss-soporte-consulta-filtros { display: flex; flex-direction: row; align-items: flex-end; flex-wrap: wrap; }
 .ss-soporte-consulta-filtros > div:not(.ss-sistema-acciones) { flex: 1 1 210px; max-width: 340px; min-width: 0; }
 .ss-soporte-consulta-filtros :is(.btn, .form-control, .form-select) { min-height: 44px; }
 .ss-soporte-resumen-empresa { display: flex; flex-wrap: wrap; gap: .6rem 1.25rem; margin: 1.25rem 0; }

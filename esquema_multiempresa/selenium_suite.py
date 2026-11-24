@@ -408,6 +408,104 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
 class SoporteEnChromeTests(StaticLiveServerTestCase):
     databases = {'central', 'ferreteria', 'repuestos'}
 
+    def test_filtros_catalogo_y_bodegas_compactos_en_escritorio_y_movil(self):
+        call_command('registrar_empresas_prueba', stdout=StringIO())
+        empresa = Empresa.objects.get(codigo='punto-motor')
+        rol, _ = Rol.objects.using('central').get_or_create(
+            codigo=SOPORTE_TECNICO, defaults={'nombre': 'Soporte técnico'})
+        tecnico = Usuario.objects.db_manager('central').create_user(
+            email='filtros-soporte@example.invalid', password='Filtros-qa-fixture-2026!',
+            nombres='Soporte', apellidos='QA', is_staff=True, rol=rol)
+        caso = AtencionSoporte.objects.using('central').create(
+            empresa=empresa, tecnico=tecnico, asunto='Revisión inicial de Punto Motor',
+            motivo='Comprobar el catálogo y las bodegas de la empresa')
+        ahora = timezone.now()
+        AccesoSoporte.objects.using('central').create(
+            atencion=caso, tecnico=tecnico, alcances=['catalogo', 'bodegas'],
+            motivo='Autorización de prueba para comprobar los filtros', estado='aprobado',
+            decidido_en=ahora, expira_en=ahora + timedelta(minutes=30),
+            aprobador_id=1, aprobador_email='cliente-qa@example.invalid')
+        opciones = webdriver.ChromeOptions()
+        opciones.add_argument('--headless=new')
+        opciones.add_argument('--window-size=1920,1080')
+        navegador = webdriver.Chrome(options=opciones)
+        self.addCleanup(navegador.quit)
+        espera = WebDriverWait(navegador, 20)
+        navegador.get(self.live_server_url)
+        navegador.find_element(By.ID, 'email').send_keys(tecnico.email)
+        navegador.find_element(By.ID, 'password').send_keys('Filtros-qa-fixture-2026!')
+        navegador.find_element(By.ID, 'login-submit').click()
+        espera.until(EC.url_contains('/sistema/'))
+
+        def comprobar_distribucion():
+            medidas = navegador.execute_script('''
+                const form=document.querySelector('.ss-soporte-consulta-filtros');
+                const r=form.getBoundingClientRect();
+                const controles=[...form.querySelectorAll('.form-control,.form-select,button[type="submit"]')]
+                    .map(e=>{const c=e.getBoundingClientRect();
+                        return {left:c.left,right:c.right,top:c.top,bottom:c.bottom,height:c.height,width:c.width};});
+                return {left:r.left,right:r.right,width:r.width,height:r.height,controles,
+                    viewport:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth};
+            ''')
+            self.assertFalse(medidas['overflow'])
+            self.assertLessEqual(medidas['controles'][0]['left'] - medidas['left'], 24)
+            for control in medidas['controles']:
+                self.assertGreaterEqual(control['height'], 43)
+                self.assertGreaterEqual(control['left'], medidas['left'])
+                self.assertLessEqual(control['right'], medidas['right'])
+            if medidas['viewport'] >= 1200:
+                self.assertLess(medidas['height'], 140)
+                finales = [c['bottom'] for c in medidas['controles']]
+                self.assertLessEqual(max(finales) - min(finales), 2)
+            else:
+                self.assertLess(medidas['height'], 290)
+                for control in medidas['controles'][:-1]:
+                    self.assertGreaterEqual(control['width'], medidas['width'] - 36)
+
+        for con_datos in (False, True):
+            if con_datos:
+                with usar_empresa(empresa):
+                    bodega = Bodega.objects.create(nombre='Bodega Central', direccion='Avenida de Prueba 123')
+                    producto = Producto.objects.create(sku='QA-FILTRO', nombre='Filtro de aceite para motor')
+                    StockBodega.objects.create(producto=producto, bodega=bodega, cantidad_total=10)
+            for modulo in ('catalogo', 'bodegas'):
+                ruta = f'/sistema/{modulo}/?empresa=punto-motor&atencion={caso.pk}'
+                for ancho in (1920, 1440, 390, 320):
+                    with self.subTest(modulo=modulo, ancho=ancho, con_datos=con_datos):
+                        navegador.set_window_size(ancho, 1000 if ancho >= 1200 else 844)
+                        navegador.get(self.live_server_url + ruta)
+                        espera.until(EC.visibility_of_element_located((By.ID, 'id_search')))
+                        if ancho < 1200:
+                            espera.until(lambda d: d.execute_script(
+                                'return document.getElementById("ss-navigation").getBoundingClientRect().right <= 1'))
+                        if ancho in (1920, 390):
+                            navegador.save_screenshot('/tmp/ss-soporte-consulta-'
+                                + f'{modulo}-{ancho}-' + ('con-datos' if con_datos else 'vacia') + '.png')
+                        comprobar_distribucion()
+                        self.assertIn('Repuestos Punto Motor', navegador.find_element(By.TAG_NAME, 'body').text)
+                        if con_datos:
+                            self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, 'table.ss-sistema-tabla-adaptable'))
+                        else:
+                            self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, '.ss-sistema-vacio'))
+                navegador.set_window_size(1440, 1000)
+                navegador.get(self.live_server_url + ruta)
+                self.pulsar(navegador, '.ss-theme-toggle')
+                navegador.refresh()
+                comprobar_distribucion()
+                if con_datos:
+                    navegador.save_screenshot(f'/tmp/ss-soporte-consulta-{modulo}-oscuro.png')
+                self.pulsar(navegador, '.ss-theme-toggle')
+                navegador.refresh()
+                navegador.find_element(By.ID, 'id_search').send_keys('sin-coincidencias-qa')
+                self.pulsar(navegador, '.ss-soporte-consulta-filtros button[type="submit"]')
+                espera.until(EC.url_contains('search=sin-coincidencias-qa'))
+                comprobar_distribucion()
+                self.assertIn(f'atencion={caso.pk}', navegador.current_url)
+                self.pulsar(navegador, '.ss-soporte-consulta-filtros a')
+                espera.until(lambda d: 'search=' not in d.current_url)
+                self.assertIn('empresa=punto-motor', navegador.current_url)
+                self.assertIn(f'atencion={caso.pk}', navegador.current_url)
+
     def pulsar(self, navegador, selector):
         espera = WebDriverWait(navegador, 20)
         elemento = espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
