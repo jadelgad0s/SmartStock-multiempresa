@@ -2,6 +2,7 @@
 import os
 from uuid import uuid4
 
+from botocore.exceptions import ClientError
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -10,6 +11,23 @@ from django.db import connections
 
 from apps.core.empresa import usar_empresa
 from esquema_multiempresa.models import Empresa
+
+
+def detalle_error_seguro(exc):
+    """Solo informa códigos conocidos; nunca el mensaje, URL ni cabeceras de S3."""
+    if not isinstance(exc, ClientError):
+        return type(exc).__name__
+    codigos = {'400', '403', '404', '500', '503', 'AccessDenied', 'InvalidAccessKeyId',
+               'SignatureDoesNotMatch', 'NoSuchBucket', 'NoSuchKey', 'InvalidRequest',
+               'NotImplemented', 'SlowDown', 'BadDigest', 'AuthorizationHeaderMalformed',
+               'XAmzContentSHA256Mismatch', 'ExpiredToken'}
+    operaciones = {'HeadObject', 'PutObject', 'GetObject', 'DeleteObject', 'HeadBucket',
+                   'ListObjectsV2', 'CreateMultipartUpload', 'UploadPart',
+                   'CompleteMultipartUpload', 'AbortMultipartUpload'}
+    codigo = exc.response.get('Error', {}).get('Code')
+    codigo = codigo if codigo in codigos else 'no-clasificado'
+    operacion = exc.operation_name if exc.operation_name in operaciones else 'S3'
+    return f'ClientError; operación={operacion}; código={codigo}'
 
 
 class Command(BaseCommand):
@@ -51,9 +69,11 @@ class Command(BaseCommand):
             for alias in settings.BASES_EMPRESA:
                 empresa = Empresa.objects.using('central').get(alias_bd=alias)
                 contenido = f'Prueba temporal de almacenamiento: {alias}.'.encode()
+                # Incluso si se pierde la respuesta de subida, se retira nuestra ruta UUID.
+                escritos.append((empresa, ruta, contenido))
                 with usar_empresa(empresa):
                     nombre = default_storage.save(ruta, ContentFile(contenido))
-                escritos.append((empresa, nombre, contenido))
+                escritos[-1] = (empresa, nombre, contenido)
                 if nombre != ruta:
                     raise ValueError('El archivo de prueba no conserva su ruta.')
             # El mismo nombre relativo debe conservar contenido diferente en cada empresa.
@@ -64,7 +84,7 @@ class Command(BaseCommand):
                             raise ValueError('El contenido no corresponde a la empresa.')
                 self.stdout.write(f'Archivos {empresa.alias_bd}: escritura y lectura verificadas.')
         except Exception as exc:
-            fallo = f'No se pudo verificar el almacenamiento ({type(exc).__name__}).'
+            fallo = f'No se pudo verificar el almacenamiento ({detalle_error_seguro(exc)}).'
         finally:
             for empresa, nombre, _ in escritos:
                 try:
@@ -73,7 +93,7 @@ class Command(BaseCommand):
                         if default_storage.exists(nombre):
                             raise ValueError('El archivo temporal sigue presente.')
                 except Exception as exc:
-                    fallo = fallo or f'No se pudo retirar un archivo temporal ({type(exc).__name__}).'
+                    fallo = fallo or f'No se pudo retirar un archivo temporal ({detalle_error_seguro(exc)}).'
         if fallo:
             raise CommandError(fallo) from None
         self.stdout.write('Archivos temporales eliminados; separación por empresa verificada.')

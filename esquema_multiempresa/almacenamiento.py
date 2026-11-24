@@ -28,6 +28,8 @@ class ArchivosEmpresaS3(Storage):
                 self._backends[alias] = S3Storage(
                     **settings.SS_S3_STORAGE_OPTIONS, location=f'empresas/{alias}',
                     client_config=Config(signature_version='s3v4', s3={'addressing_style': 'path'},
+                        request_checksum_calculation='when_required',
+                        response_checksum_validation='when_required',
                         connect_timeout=5, read_timeout=15,
                         retries={'mode': 'standard', 'total_max_attempts': 2}),
                 )

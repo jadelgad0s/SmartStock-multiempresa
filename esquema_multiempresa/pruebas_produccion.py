@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from botocore.stub import Stubber
+from botocore.exceptions import ClientError
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, SuspiciousFileOperation
@@ -25,6 +26,7 @@ from .almacenamiento import ArchivosEmpresaS3
 from .configuracion_produccion import bases_produccion, configuracion_publica, opciones_s3
 from .models import Empresa
 from .salud import SaludMiddleware
+from .management.commands.verificar_produccion import detalle_error_seguro
 
 
 def entorno_prueba():
@@ -44,6 +46,16 @@ def lector(valores):
 
 
 class ConfiguracionPublicacionTests(SimpleTestCase):
+    def test_error_s3_informa_operacion_y_codigo_sin_exponer_datos_del_proveedor(self):
+        datos = {'Error': {'Code': 'AccessDenied', 'Message': 'credencial-privada'},
+                 'ResponseMetadata': {'HTTPHeaders': {'Authorization': 'firma-privada'}}}
+        detalle = detalle_error_seguro(ClientError(datos, 'HeadObject'))
+        self.assertIn('HeadObject', detalle)
+        self.assertIn('AccessDenied', detalle)
+        self.assertNotIn('privada', detalle)
+        desconocido = ClientError({'Error': {'Code': 'credencial-privada'}}, 'url-privada')
+        self.assertNotIn('privada', detalle_error_seguro(desconocido))
+
     def test_perfil_real_recoge_estaticos_y_responde_detras_del_proxy_sin_conectar_proveedores(self):
         entorno = {**os.environ, **entorno_prueba(),
             'DJANGO_SETTINGS_MODULE': 'esquema_multiempresa.production',
