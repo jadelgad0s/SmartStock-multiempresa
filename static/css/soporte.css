@@ -1,0 +1,97 @@
+/* Flujo de atención, autorizaciones y consultas de soporte. */
+.ss-soporte-cabecera, .ss-soporte-bloque { padding: 1.5rem; margin-bottom: 1.25rem; min-width: 0; }
+.ss-soporte-cabecera h2 { font-size: 1.15rem; }
+.ss-soporte-fila { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .6rem 1rem; }
+.ss-soporte-descripcion { margin: .9rem 0 1rem; line-height: 1.65; overflow-wrap: anywhere; }
+.ss-soporte-metadatos { display: flex; flex-wrap: wrap; gap: .75rem 2rem; margin: 0 0 1.25rem; }
+.ss-soporte-metadatos dt { color: var(--dash-muted, #526176); font-size: .78rem; font-weight: 500; }
+.ss-soporte-metadatos dd { margin: .25rem 0 0; font-size: .9rem; }
+.ss-soporte-estado, .ss-soporte-aviso { border: 1px solid var(--dash-line, #e2e8f0); border-left-width: 4px; border-radius: .6rem; padding: 1rem; }
+.ss-soporte-estado p { margin: .35rem 0 0; font-size: .875rem; line-height: 1.5; }
+.ss-soporte-estado-correcto, .ss-soporte-aviso { background: #f0fdfa; border-color: #5eead4; color: #115e59; }
+.ss-soporte-estado-aviso { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.ss-soporte-estado-neutro { background: var(--bs-tertiary-bg); }
+.ss-soporte-insignia { display: inline-block; padding: .3rem .65rem; border-radius: 1rem; font-size: .78rem; font-weight: 600; }
+.ss-soporte-insignia-correcto { background: #ccfbf1; color: #115e59; }
+.ss-soporte-insignia-aviso { background: #fef3c7; color: #92400e; }
+.ss-soporte-insignia-neutro { background: #f1f5f9; color: #475569; }
+.ss-soporte-pasos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1.25rem 0 0; padding: 0; list-style: none; }
+.ss-soporte-pasos li { display: flex; align-items: center; gap: .5rem; color: var(--dash-muted, #526176); font-size: .8rem; }
+.ss-soporte-pasos li > span { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--bs-tertiary-bg); border: 1px solid var(--dash-line, #e2e8f0); }
+.ss-soporte-pasos li[aria-current] { color: var(--teal-600); font-weight: 650; }
+.ss-soporte-pasos li[aria-current] > span, .ss-soporte-paso-completo > span { background: #0f766e !important; color: white; border-color: #0f766e; }
+.ss-soporte-resultado { border-top: 1px solid var(--dash-line, #e2e8f0); margin-top: 1.25rem; padding-top: 1.25rem; }
+.ss-soporte-resultado p { margin-bottom: 0; margin-top: .6rem; }
+.ss-soporte-detalle-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(290px, .85fr); gap: 1.25rem; align-items: start; margin-bottom: 1.25rem; }
+.ss-soporte-detalle-finalizada { grid-template-columns: 1fr; }
+.ss-soporte-detalle-grid > section { min-width: 0; }
+.ss-soporte-desplegable { margin-bottom: 1rem; min-width: 0; }
+.ss-soporte-desplegable > summary { list-style: none; padding: 1rem 1.25rem; font-size: .95rem; font-weight: 600; cursor: pointer; min-height: 44px; }
+.ss-soporte-desplegable > summary::-webkit-details-marker { display: none; }
+.ss-soporte-desplegable > summary::after { content: '+'; float: right; margin-left: .75rem; font-weight: 700; }
+.ss-soporte-desplegable[open] > summary::after { content: '−'; }
+.ss-soporte-desplegable[open] > summary { border-bottom: 1px solid var(--dash-line, #e2e8f0); }
+.ss-soporte-formulario, .ss-soporte-interior { padding: 1.25rem; }
+.ss-soporte-formulario .btn, .ss-soporte-contenido .btn, .ss-soporte-cierre .btn { min-height: 44px; }
+.ss-soporte-formulario textarea, .ss-soporte-cierre textarea { min-height: 105px; }
+.ss-soporte-parametros { display: grid; gap: 1rem; margin: 1.25rem 0; }
+.ss-soporte-permisos-grupo { border: 1px solid var(--dash-line, #e2e8f0); border-radius: .5rem; padding: .75rem; margin: 1rem 0 0; min-width: 0; }
+.ss-soporte-permisos-grupo legend { float: none; width: auto; padding: 0 .3rem; margin: 0; font-size: .9rem; font-weight: 600; }
+.ss-soporte-permisos-grupo > p { font-size: .78rem; color: var(--dash-muted, #526176); margin: .25rem 0 .5rem; }
+.ss-soporte-opciones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem .75rem; }
+.ss-soporte-opciones .ss-soporte-opcion { display: grid; grid-template-columns: 1rem minmax(0, 1fr); align-items: start; gap: .6rem; padding: .5rem .25rem; margin: 0; font-size: .83rem; font-weight: 400; line-height: 1.5; cursor: pointer; }
+.ss-soporte-opcion input { width: 1rem; height: 1rem; margin: .18rem 0 0; accent-color: #0f766e; }
+.ss-soporte-opcion:focus-within { outline: 2px solid var(--teal-600); outline-offset: 1px; border-radius: .25rem; }
+.ss-soporte-solicitud { padding: 1rem; margin-bottom: 1rem; min-width: 0; }
+.ss-soporte-solicitud .ss-soporte-fila { margin-bottom: .6rem; font-size: .85rem; }
+.ss-soporte-lista-permisos { padding-left: 1.2rem; font-size: .875rem; line-height: 1.6; margin-bottom: 1rem; }
+.ss-soporte-contador { color: var(--dash-muted, #526176); font-size: .8rem; margin-left: .5rem; }
+.ss-soporte-historial { list-style: none; padding: 0; margin: 0; }
+.ss-soporte-historial > li { padding: 1rem 0; border-bottom: 1px solid var(--dash-line, #e2e8f0); }
+.ss-soporte-historial > li:first-child { padding-top: 0; }
+.ss-soporte-historial > li:last-child { padding-bottom: 0; border-bottom: 0; }
+.ss-soporte-historial time, .ss-soporte-historial > li > p { font-size: .8rem; color: var(--dash-muted, #526176); margin: .4rem 0; }
+.ss-soporte-historial summary, .ss-soporte-aviso summary, .ss-soporte-descripcion-caso summary, .ss-soporte-finalizar-empresa summary { cursor: pointer; font-size: .85rem; color: var(--teal-600); padding: .5rem 0; width: fit-content; }
+.ss-soporte-detalle-tecnico { background: var(--bs-tertiary-bg); border-radius: .5rem; padding: 1rem; margin-top: .5rem; font-size: .8rem; overflow-wrap: anywhere; }
+.ss-soporte-detalle-tecnico dl { margin-bottom: 0; }
+.ss-soporte-detalle-tecnico dd { margin-bottom: .5rem; }
+.ss-soporte-aviso { margin-bottom: 1.25rem; }
+.ss-soporte-aviso p { font-size: .85rem; margin: .35rem 0; overflow-wrap: anywhere; }
+.ss-soporte-aviso a { color: #0f766e; text-underline-offset: .15em; font-size: .85rem; }
+.ss-soporte-aviso details[open] { border-top: 1px solid currentColor; margin-top: .5rem; }
+.ss-sistema-filtros.ss-soporte-consulta-filtros { display: flex; align-items: end; flex-wrap: wrap; }
+.ss-soporte-consulta-filtros > div:not(.ss-sistema-acciones) { flex: 1 1 210px; max-width: 340px; min-width: 0; }
+.ss-soporte-consulta-filtros :is(.btn, .form-control, .form-select) { min-height: 44px; }
+.ss-soporte-resumen-empresa { display: flex; flex-wrap: wrap; gap: .6rem 1.25rem; margin: 1.25rem 0; }
+.ss-soporte-resumen-empresa > span { padding: .6rem .85rem; border: 1px solid var(--dash-line, #e2e8f0); border-radius: .5rem; font-size: .85rem; background: var(--dash-panel, white); }
+.ss-soporte-resumen-empresa strong { margin-left: .5rem; }
+.ss-soporte-ayuda { max-width: 980px; }
+.ss-soporte-titulo { margin: 1.5rem 0 1rem; font-size: 1.1rem; font-weight: 650; }
+.ss-soporte-tarjeta { padding: 1.25rem; margin-bottom: 1.25rem; min-width: 0; }
+.ss-soporte-tarjeta h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+.ss-soporte-tarjeta > summary { cursor: pointer; font-size: 1rem; min-height: 44px; }
+.ss-soporte-tarjeta-contenido { margin-top: .75rem; }
+.ss-soporte-etiqueta-acceso { margin: .6rem 0 1rem; }
+.ss-soporte-descripcion-caso { margin-bottom: .6rem; }
+.ss-soporte-descripcion-caso p { font-size: .9rem; line-height: 1.6; margin: .5rem 0; }
+.ss-soporte-finalizar-empresa { border-top: 1px solid var(--dash-line, #e2e8f0); padding-top: .5rem; }
+.ss-soporte-contenido .ss-soporte-estado-cerrado { background: #f1f5f9; color: #475569; }
+:root[data-bs-theme='dark'] :is(.ss-soporte-estado-correcto, .ss-soporte-aviso) { background: #143b38; border-color: #3c9e91; color: #c2fff3; }
+:root[data-bs-theme='dark'] .ss-soporte-estado-aviso { background: #40321b; border-color: #927339; color: #fde68a; }
+:root[data-bs-theme='dark'] .ss-soporte-insignia-correcto { background: #194743; color: #8cf5e6; }
+:root[data-bs-theme='dark'] .ss-soporte-insignia-aviso { background: #493519; color: #fde68a; }
+:root[data-bs-theme='dark'] .ss-soporte-insignia-neutro { background: #263447; color: #cbd5e1; }
+:root[data-bs-theme='dark'] :is(.ss-soporte-pasos li[aria-current], .ss-soporte-historial summary, .ss-soporte-aviso summary, .ss-soporte-aviso a, .ss-soporte-descripcion-caso summary, .ss-soporte-finalizar-empresa summary) { color: #8cf5e6; }
+:root[data-bs-theme='dark'] .ss-soporte-contenido .ss-sistema-estado-abierto { background: #194743; color: #8cf5e6; }
+:root[data-bs-theme='dark'] .ss-soporte-contenido .ss-sistema-estado-cerrado { background: #263447; color: #cbd5e1; }
+@media (max-width: 1199.98px) { .ss-soporte-detalle-grid { grid-template-columns: 1fr; } }
+@media (max-width: 767.98px) {
+  .ss-soporte-cabecera, .ss-soporte-bloque, .ss-soporte-tarjeta { padding: 1rem; }
+  .ss-soporte-formulario, .ss-soporte-interior { padding: 1rem; }
+  .ss-soporte-pasos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ss-soporte-opciones { grid-template-columns: 1fr; }
+  .ss-soporte-opciones .ss-soporte-opcion { min-height: 44px; align-items: center; }
+  .ss-soporte-opcion input { margin-top: 0; }
+  .ss-soporte-consulta-filtros > div:not(.ss-sistema-acciones) { flex-basis: 100%; max-width: none; }
+  .ss-soporte-aviso .ss-soporte-fila { align-items: start; }
+}

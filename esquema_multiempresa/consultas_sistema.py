@@ -63,6 +63,12 @@ def tabla_catalogo(request, contexto, datos):
             **({'bodega': bodega.pk} if bodega else {}),
         }), 'accion': 'Ver historial',
     } for producto in paginar(request, contexto, consulta)]
+    if not contexto['filas']:
+        hay_productos = Producto.objects.exists()
+        contexto['estado_vacio'] = {
+            'titulo': 'Sin productos registrados' if not hay_productos else 'Sin productos que coincidan',
+            'descripcion': 'La empresa todavía no tiene productos registrados. Coordina su carga inicial con su administrador.'
+                if not hay_productos else 'Prueba otro nombre, SKU o selección de bodega.', 'icono': 'box'}
     if 'reportes' not in alcances_actuales(request):
         for fila in contexto['filas']:
             fila.pop('url', None)
@@ -75,6 +81,11 @@ def tabla_bodegas(request, contexto, datos):
     contexto['columnas'] = ['Bodega', 'Dirección', 'Estado']
     contexto['filas'] = [{'celdas': [bodega.nombre, bodega.direccion, 'Activa' if bodega.activa else 'Inactiva']}
                          for bodega in paginar(request, contexto, consulta.order_by('nombre', 'id'))]
+    if not contexto['filas']:
+        hay_bodegas = Bodega.objects.exists()
+        contexto['estado_vacio'] = {'titulo': 'Sin bodegas registradas' if not hay_bodegas else 'Sin bodegas que coincidan',
+            'descripcion': 'La empresa todavía no tiene bodegas registradas. Coordina su configuración con su administrador.'
+                if not hay_bodegas else 'Prueba otro nombre o dirección de bodega.', 'icono': 'warehouse'}
 
 
 def tabla_transferencias(request, contexto, datos):
@@ -146,6 +157,13 @@ def consulta_sistema(request, modulo):
                     del formulario.fields['hasta']
                 if modulo == 'bodegas':
                     del formulario.fields['bodega']
+                if modulo in ('catalogo', 'bodegas'):
+                    formulario.fields['search'].widget.attrs['placeholder'] = (
+                        'SKU o nombre del producto' if modulo == 'catalogo' else 'Nombre o dirección de bodega')
+                    contexto['consulta_compacta'] = True
+                    contexto['url_limpiar_consulta'] = reverse('sistema_' + modulo) + '?' + urlencode({
+                        'empresa': empresa.codigo, **parametros_atencion(request)})
+                    contexto['filtros_consulta_activos'] = bool(parametros.get('search') or parametros.get('bodega'))
                 contexto['formulario_consulta'] = formulario
                 if formulario.is_valid():
                     if modulo == 'reportes' and request.GET.get('exportar') in ('csv', 'pdf'):
@@ -165,6 +183,9 @@ def consulta_sistema(request, modulo):
                     else:
                         tabla_reporte(request, contexto, parametros)
                     contexto['hay_acciones'] = any(fila.get('url') for fila in contexto.get('filas', []))
+                    if contexto.get('consulta_compacta'):
+                        for fila in contexto.get('filas', []):
+                            fila['celdas_presentacion'] = list(zip(contexto['columnas'], fila['celdas']))
                     registrar_empresa_consultada(request, empresa, 'completada')
                 else:
                     registrar_empresa_consultada(request, empresa, 'fallida')

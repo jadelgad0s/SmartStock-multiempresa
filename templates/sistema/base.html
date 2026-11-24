@@ -4,6 +4,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=carga-1">
 <link rel="stylesheet" href="{% static 'css/sistema.css' %}?v=soporte-8">
+<link rel="stylesheet" href="{% static 'css/soporte.css' %}?v=1">
 <link rel="stylesheet" href="{% static 'css/sistema_notificaciones.css' %}?v=1">
 {% endblock %}
 {% block content %}
@@ -50,7 +51,7 @@
         {% block acciones %}{% endblock %}
       </div>
       {{ confirmaciones|json_script:'sistema-confirmaciones' }}
-      {% if acceso_soporte %}<section class="ss-sistema-aviso mb-4" aria-label="Acceso de soporte autorizado"><strong>{{ acceso_soporte.atencion.empresa.nombre }}</strong> · Acceso temporal autorizado hasta {{ acceso_soporte.expira_en|date:'H:i' }}.<br>Motivo: {{ acceso_soporte.motivo }} <a href="{% url 'sistema_atencion' acceso_soporte.atencion_id %}">Ver atención y permisos</a></section>{% endif %}
+      {% if acceso_soporte and not ocultar_aviso_acceso %}{% include 'soporte/aviso_acceso.html' %}{% endif %}
       {% if error_consulta %}<div class="alert alert-danger" role="alert">{{ error_consulta }}</div>{% endif %}
       {% block panel_content %}{% endblock %}
     </main>

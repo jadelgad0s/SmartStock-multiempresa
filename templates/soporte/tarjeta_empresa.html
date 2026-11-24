@@ -1,0 +1,11 @@
+{% if atencion.estado == 'cerrada' %}<details class="card ss-soporte-tarjeta"><summary class="ss-soporte-fila"><strong>{{ atencion.asunto }}</strong><span class="ss-sistema-etiqueta ss-sistema-estado-cerrado">Cerrada</span></summary>{% else %}<article class="card ss-soporte-tarjeta"><header class="ss-soporte-fila"><h3>{{ atencion.asunto }}</h3><span class="ss-sistema-etiqueta ss-sistema-estado-abierto">Abierta</span></header>{% endif %}
+<div class="ss-soporte-tarjeta-contenido">
+  <p class="ss-soporte-nota">Responsable: <strong>{{ atencion.tecnico.nombre_completo|default:'Pendiente de asignar' }}</strong> · {{ atencion.creada_en|date:'d/m/Y H:i' }}</p>
+  <details class="ss-soporte-descripcion-caso"><summary>Descripción de la atención</summary><p>{{ atencion.motivo|linebreaksbr }}</p></details>
+  {% if not atencion.situacion.actuales %}<p class="ss-soporte-etiqueta-acceso"><span class="ss-soporte-insignia ss-soporte-insignia-{{ atencion.situacion.tono }}">{{ atencion.situacion.etiqueta }}</span></p>{% endif %}
+  {% for solicitud in atencion.situacion.actuales %}{% include 'soporte/solicitud.html' with cliente=True omitir_responsable=True %}{% endfor %}
+  {% if not atencion.accesos.all %}<p class="ss-soporte-nota">El equipo todavía no ha solicitado permisos para esta atención.</p>{% endif %}
+  {% if atencion.situacion.historicas %}<details class="ss-soporte-descripcion-caso"><summary>Historial de permisos</summary>{% for solicitud in atencion.situacion.historicas %}{% include 'soporte/solicitud.html' with cliente=True %}{% endfor %}</details>{% endif %}
+  {% if atencion.estado == 'abierta' %}<details class="ss-soporte-finalizar-empresa"><summary>Finalizar esta atención</summary><p class="ss-soporte-nota">Al finalizarla se revocan sus accesos temporales.</p><form method="post" data-ss-loading="Cerrando atención…">{% csrf_token %}<input type="hidden" name="atencion" value="{{ atencion.pk }}"><button name="accion" value="cerrar" class="btn btn-outline-secondary">Cerrar atención y revocar sus accesos</button></form></details>{% else %}<p><strong>Resultado:</strong> {{ atencion.resolucion|linebreaksbr }}</p>{% endif %}
+</div>
+{% if atencion.estado == 'cerrada' %}</details>{% else %}</article>{% endif %}

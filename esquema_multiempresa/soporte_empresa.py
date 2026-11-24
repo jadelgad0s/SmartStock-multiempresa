@@ -2,7 +2,7 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Prefetch, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
@@ -13,6 +13,7 @@ from .autorizacion_soporte import auditar_soporte, usuario_empresa_administrador
 from .forms_soporte import ConsultaClienteForm, personal_disponible
 from .models import AtencionSoporte, AccesoSoporte, NotificacionSistema
 from .soporte_operaciones import decidir_acceso, revocar_accesos
+from .presentacion_soporte import situacion_atencion
 
 
 @never_cache
@@ -56,6 +57,19 @@ def soporte_empresa(request):
                 return redirect('soporte_empresa')
         except (ValidationError, ValueError, TypeError) as e:
             error = ' '.join(e.messages) if isinstance(e, ValidationError) else 'Revisa la solicitud seleccionada.'
-    atenciones = list(AtencionSoporte.objects.using('central').filter(empresa=request.empresa).select_related('tecnico').prefetch_related(
-        Prefetch('accesos', queryset=AccesoSoporte.objects.using('central').select_related('tecnico')))[:50])
-    return render(request, 'soporte/empresa.html', {'formulario': formulario, 'atenciones': atenciones, 'error_consulta': error})
+    consulta = AtencionSoporte.objects.using('central').filter(empresa=request.empresa).annotate(
+        tiene_pendiente=Exists(AccesoSoporte.objects.using('central').filter(
+            atencion_id=OuterRef('pk'), estado='pendiente', atencion__estado='abierta')),
+        orden_estado=Case(When(estado='abierta', then=Value(0)), default=Value(1), output_field=IntegerField()))
+    resumen = consulta.aggregate(pendientes=Count('pk', filter=Q(tiene_pendiente=True)),
+        abiertas=Count('pk', filter=Q(estado='abierta')), cerradas=Count('pk', filter=Q(estado='cerrada')))
+    atenciones = list(consulta.select_related('empresa', 'tecnico', 'tecnico__rol').prefetch_related(
+        Prefetch('accesos', queryset=AccesoSoporte.objects.using('central').select_related('tecnico')))
+        .order_by('-tiene_pendiente', 'orden_estado', '-creada_en', '-pk')[:50])
+    for atencion in atenciones:
+        atencion.situacion = situacion_atencion(atencion, atencion.accesos.all())
+    return render(request, 'soporte/empresa.html', {'formulario': formulario, 'atenciones': atenciones,
+        'atenciones_pendientes': [a for a in atenciones if a.tiene_pendiente],
+        'otras_atenciones': [a for a in atenciones if not a.tiene_pendiente],
+        'hay_mas_atenciones': resumen['abiertas'] + resumen['cerradas'] > len(atenciones),
+        'resumen_soporte': resumen, 'error_consulta': error})

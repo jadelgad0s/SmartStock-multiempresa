@@ -2,20 +2,22 @@
 {% block panel_content %}
 {% include 'sistema/selector_empresa.html' %}
 {% if formulario_consulta %}
-<form method="get" class="card ss-sistema-filtros" data-ss-loading="Consultando registros…">
+<form method="get" class="card ss-sistema-filtros{% if consulta_compacta %} ss-soporte-consulta-filtros{% endif %}" data-ss-loading="Consultando registros…">
   <input type="hidden" name="empresa" value="{{ empresa_seleccionada.codigo }}">
   {% include 'soporte/campo_contexto.html' %}
   {% for campo in formulario_consulta %}<div><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{% if campo.errors %}<div class="text-danger small" role="alert">{{ campo.errors }}</div>{% endif %}</div>{% endfor %}
   {% if formulario_consulta.non_field_errors %}<div class="alert alert-danger" role="alert">{{ formulario_consulta.non_field_errors }}</div>{% endif %}
-  <div class="ss-sistema-acciones"><button type="submit" class="btn btn-primary">Actualizar consulta</button>{% if modulo == 'reportes' and puede_exportar %}<button type="submit" name="exportar" value="csv" class="btn btn-outline-secondary">Exportar CSV</button><button type="submit" name="exportar" value="pdf" formtarget="_blank" class="btn btn-outline-secondary">Imprimir / PDF</button>{% endif %}</div>
+  <div class="ss-sistema-acciones"><button type="submit" class="btn btn-primary">{% if consulta_compacta %}Filtrar{% else %}Actualizar consulta{% endif %}</button>{% if filtros_consulta_activos %}<a class="btn btn-outline-secondary" href="{{ url_limpiar_consulta }}">Limpiar filtros</a>{% endif %}{% if modulo == 'reportes' and puede_exportar %}<button type="submit" name="exportar" value="csv" class="btn btn-outline-secondary">Exportar CSV</button><button type="submit" name="exportar" value="pdf" formtarget="_blank" class="btn btn-outline-secondary">Imprimir / PDF</button>{% endif %}</div>
 </form>
 {% endif %}
 {% if meta_reporte %}<div class="ss-sistema-resumen-reporte">{% for dato in meta_reporte.resumen %}<p><span>{{ dato.etiqueta }}</span><strong>{{ dato.valor }}</strong></p>{% endfor %}</div>{% endif %}
-{% if columnas %}
-<div class="card"><div class="table-responsive"><table class="table table-custom mb-0">
-  <thead><tr>{% for columna in columnas %}<th>{{ columna }}</th>{% endfor %}{% if hay_acciones %}<th>Acciones</th>{% endif %}</tr></thead>
-  <tbody>{% for fila in filas %}<tr>{% for celda in fila.celdas %}<td>{{ celda|default_if_none:'—' }}</td>{% endfor %}{% if fila.url %}<td><a class="btn btn-sm btn-outline-secondary" href="{{ fila.url }}">{{ fila.accion }}</a></td>{% endif %}</tr>{% empty %}<tr><td colspan="20" class="text-center text-muted py-4">No hay registros para esta consulta.</td></tr>{% endfor %}</tbody>
-</table></div>{% include 'sistema/paginacion.html' %}</div>
+{% if estado_vacio %}<section class="card ss-sistema-vacio" role="status"><i class="fa-solid fa-{{ estado_vacio.icono }}" aria-hidden="true"></i><h2>{{ estado_vacio.titulo }}</h2><p>{{ estado_vacio.descripcion }}</p></section>
+{% elif columnas %}
+<div class="card ss-sistema-tabla">{% if not consulta_compacta %}<div class="table-responsive">{% endif %}<table class="table table-custom mb-0{% if consulta_compacta %} ss-sistema-tabla-adaptable{% endif %}" role="table">
+  <caption class="visually-hidden">{{ titulo }} de {{ empresa_seleccionada.nombre }}</caption>
+  <thead role="rowgroup"><tr role="row">{% for columna in columnas %}<th scope="col" role="columnheader">{{ columna }}</th>{% endfor %}{% if hay_acciones %}<th scope="col" role="columnheader">Acciones</th>{% endif %}</tr></thead>
+  <tbody role="rowgroup">{% for fila in filas %}<tr role="row">{% if consulta_compacta %}{% for etiqueta,celda in fila.celdas_presentacion %}<td role="cell" data-label="{{ etiqueta }}"{% if modulo == 'bodegas' and forloop.first %} class="ss-sistema-celda-principal"{% endif %}>{{ celda|default_if_none:'—' }}</td>{% endfor %}{% else %}{% for celda in fila.celdas %}<td role="cell">{{ celda|default_if_none:'—' }}</td>{% endfor %}{% endif %}{% if fila.url %}<td role="cell" data-label="Acciones" class="ss-sistema-celda-acciones"><a class="btn btn-sm btn-outline-secondary" href="{{ fila.url }}">{{ fila.accion }}</a></td>{% endif %}</tr>{% empty %}<tr role="row"><td role="cell" colspan="20" class="text-center text-muted py-4">No hay registros para esta consulta.</td></tr>{% endfor %}</tbody>
+</table>{% if not consulta_compacta %}</div>{% endif %}{% include 'sistema/paginacion.html' with ocultar_navegacion_unica=consulta_compacta %}</div>
 {% endif %}
 {% for nota in meta_reporte.notas %}<p class="text-muted small mt-3">{{ nota }}</p>{% endfor %}
 {% if not empresa_seleccionada %}<p class="text-muted">Selecciona una empresa para consultar este módulo.</p>{% endif %}

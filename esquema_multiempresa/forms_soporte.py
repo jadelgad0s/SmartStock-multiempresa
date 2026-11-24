@@ -76,6 +76,20 @@ class SolicitudAccesoForm(FormularioPanel, forms.Form):
         self.estilizar()
         self.fields['alcances'].widget.attrs['class'] = 'ss-soporte-permisos'
 
+    def grupos_permisos(self):
+        opciones = {str(opcion.data['value']): opcion for opcion in self['alcances']}
+        grupos = [
+            ('Inventario', 'Consultas de productos, existencias y operaciones registradas.',
+             ('inventario', 'catalogo', 'bodegas', 'movimientos', 'transferencias', 'mermas', 'reportes')),
+            ('Usuarios y accesos', 'Distingue la consulta de cuentas de las acciones de recuperación y gestión.',
+             ('usuarios', 'recuperar_acceso', 'gestionar_usuarios')),
+            ('Diagnóstico', 'Consulta de auditoría y del estado de las alertas.', ('auditoria', 'sms')),
+            ('Exportaciones', 'Requiere solicitar también Reportes o Auditoría.', ('exportar',)),
+        ]
+        return [{'nombre': nombre, 'descripcion': descripcion,
+                 'opciones': [opciones[clave] for clave in claves if clave in opciones]}
+                for nombre, descripcion, claves in grupos if any(clave in opciones for clave in claves)]
+
     def clean(self):
         datos = super().clean()
         alcances = datos.get('alcances', [])

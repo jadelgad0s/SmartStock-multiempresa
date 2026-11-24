@@ -1,0 +1,4 @@
+<section class="ss-soporte-aviso" aria-label="Acceso de soporte autorizado">
+  <div class="ss-soporte-fila"><div><strong>{{ acceso_soporte.atencion.empresa.nombre }}</strong><p>Acceso temporal autorizado hasta <time datetime="{{ acceso_soporte.expira_en|date:'c' }}">{{ acceso_soporte.expira_en|date:'d/m/Y H:i' }}</time>.</p></div><a href="{% url 'sistema_atencion' acceso_soporte.atencion_id %}" class="ss-sistema-enlace">Volver a la atención</a></div>
+  <details><summary>Motivo y permisos autorizados</summary><p>{{ acceso_soporte.motivo }}</p><ul class="ss-soporte-lista-permisos">{% for permiso in acceso_soporte.permisos_visibles %}<li>{{ permiso }}</li>{% endfor %}</ul></details>
+</section>
