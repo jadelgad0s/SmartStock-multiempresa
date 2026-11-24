@@ -1,7 +1,7 @@
 {% extends 'dashboard.html' %}
 {% load static %}
 {% block title %}Soporte de SmartStock{% endblock %}
-{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/sistema.css' %}?v=soporte-8"><link rel="stylesheet" href="{% static 'css/soporte.css' %}?v=1">{% endblock %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/sistema.css' %}?v=soporte-8"><link rel="stylesheet" href="{% static 'css/soporte.css' %}?v=2">{% endblock %}
 {% block panel_empresa %}<div class="ss-soporte-contenido">
 <h1 class="h4 fw-bold">Soporte de SmartStock</h1><p>Revisa las solicitudes del equipo para <strong>{{ request.empresa.nombre }}</strong>. Tú decides qué permisos autorizar y puedes revocarlos antes de su vencimiento.</p>
 {% for mensaje in messages %}<div class="ss-sistema-aviso mb-3" role="status">{{ mensaje }}</div>{% endfor %}
