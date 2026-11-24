@@ -112,10 +112,8 @@ class AccesoPorEmpresaTests(TestCase):
                     self.assertContains(respuesta, f'/static/branding/empresas/{propia.codigo}.png')
                     self.assertNotContains(respuesta, f'/static/branding/empresas/{ajena.codigo}.png')
                     self.assertContains(respuesta, f'<p class="ss-auth-company">{propia.nombre}</p>', html=True)
-                    if propia.codigo == 'la-fragua':
-                        self.assertContains(respuesta, 'ss-auth-layout ss-auth-la-fragua')
-                    else:
-                        self.assertNotContains(respuesta, 'ss-auth-layout ss-auth-la-fragua')
+                    self.assertContains(respuesta, f'ss-auth-layout ss-auth-{propia.codigo} ss-auth-empresa')
+                    self.assertNotContains(respuesta, f'ss-auth-layout ss-auth-{ajena.codigo}')
         portal = APIClient(HTTP_HOST='127.0.0.1:8000')
         for ruta in ('/', '/recuperar-clave/'):
             respuesta = portal.get(ruta, {'empresa': self.fragua.codigo})
@@ -123,6 +121,8 @@ class AccesoPorEmpresaTests(TestCase):
             self.assertNotContains(respuesta, 'branding/empresas/')
             self.assertNotContains(respuesta, '<p class="ss-auth-company">')
             self.assertNotContains(respuesta, 'ss-auth-layout ss-auth-la-fragua')
+            self.assertNotContains(respuesta, 'ss-auth-layout ss-auth-punto-motor')
+            self.assertNotContains(respuesta, 'ss-auth-empresa')
 
     def test_empresa_sin_logo_propio_tiene_alternativa_sin_consultas_extra(self):
         request = RequestFactory().get('/dashboard/')

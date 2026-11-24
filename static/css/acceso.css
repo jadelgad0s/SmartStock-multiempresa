@@ -1,6 +1,7 @@
 /* Presentación común del inicio de sesión y la recuperación de contraseña. */
 .ss-auth-layout { --ss-auth-accent:#0f766e; --ss-auth-accent-hover:#115e59; --ss-auth-soft:#f0fdfa; --ss-auth-focus:rgba(15,118,110,.16); --ss-auth-hover:rgba(15,118,110,.08); --ss-auth-panel:linear-gradient(135deg,#0f766e,#095c57); --ss-auth-eyebrow:#ccfbf1; --ss-auth-muted:#d3eee8; min-height:100vh; min-height:100svh; display:grid; background:#fff; color:#1e293b; }
 .ss-auth-la-fragua { --ss-auth-accent:#c2410c; --ss-auth-accent-hover:#9a3412; --ss-auth-soft:#fff7ed; --ss-auth-focus:rgba(194,65,12,.18); --ss-auth-hover:rgba(194,65,12,.08); --ss-auth-panel:linear-gradient(135deg,#303030,#191919); --ss-auth-eyebrow:#fdba74; --ss-auth-muted:#e7e5e4; }
+.ss-auth-punto-motor { --ss-auth-accent:#b91c1c; --ss-auth-accent-hover:#991b1b; --ss-auth-soft:#fef2f2; --ss-auth-focus:rgba(185,28,28,.18); --ss-auth-hover:rgba(185,28,28,.08); --ss-auth-panel:linear-gradient(135deg,#14263d,#071426); --ss-auth-eyebrow:#fca5a5; --ss-auth-muted:#e2e8f0; }
 .ss-auth-layout [hidden] { display:none!important; }
 .ss-auth-brand-panel { display:none; }
 .ss-auth-brand { display:inline-flex; align-items:center; gap:.8rem; color:inherit; text-decoration:none; font-size:1.65rem; font-weight:750; letter-spacing:-.035em; }
@@ -21,11 +22,11 @@
 .ss-auth-form .form-control.is-invalid { border-color:#b42318; background-image:none; }
 .ss-auth-form .btn { min-height:48px; padding:.7rem 1rem; font-size:1rem; border-radius:.5rem; }
 .ss-auth-form .btn-primary { width:100%; font-weight:600; }
-.ss-auth-la-fragua .btn-primary { --bs-btn-active-bg:var(--ss-auth-accent-hover); --bs-btn-active-border-color:var(--ss-auth-accent-hover); --bs-btn-disabled-bg:var(--ss-auth-accent); --bs-btn-disabled-border-color:var(--ss-auth-accent); background-color:var(--ss-auth-accent); border-color:var(--ss-auth-accent); box-shadow:0 1px 2px var(--ss-auth-focus); }
-.ss-auth-la-fragua .btn-primary:hover { background-color:var(--ss-auth-accent-hover); border-color:var(--ss-auth-accent-hover); }
-.ss-auth-la-fragua .btn-primary:focus-visible { background-color:var(--ss-auth-accent-hover); border-color:var(--ss-auth-accent-hover); outline:2px solid var(--ss-auth-accent); outline-offset:3px; box-shadow:none; }
+.ss-auth-empresa .btn-primary { --bs-btn-active-bg:var(--ss-auth-accent-hover); --bs-btn-active-border-color:var(--ss-auth-accent-hover); --bs-btn-disabled-bg:var(--ss-auth-accent); --bs-btn-disabled-border-color:var(--ss-auth-accent); background-color:var(--ss-auth-accent); border-color:var(--ss-auth-accent); box-shadow:0 1px 2px var(--ss-auth-focus); }
+.ss-auth-empresa .btn-primary:hover { background-color:var(--ss-auth-accent-hover); border-color:var(--ss-auth-accent-hover); }
+.ss-auth-empresa .btn-primary:focus-visible { background-color:var(--ss-auth-accent-hover); border-color:var(--ss-auth-accent-hover); outline:2px solid var(--ss-auth-accent); outline-offset:3px; box-shadow:none; }
 .ss-auth-form .text-primary { color:var(--ss-auth-accent)!important; }
-.ss-auth-la-fragua .btn-link { color:var(--ss-auth-accent); }
+.ss-auth-empresa .btn-link { color:var(--ss-auth-accent); }
 .ss-auth-form .btn-primary:disabled { opacity:.75; }
 .ss-auth-form a:focus-visible,.ss-auth-form summary:focus-visible,.ss-auth-brand:focus-visible { outline:2px solid var(--ss-auth-accent); outline-offset:4px; border-radius:3px; }
 .ss-auth-layout .ss-password-toggle:hover { color:var(--ss-auth-accent); background:var(--ss-auth-hover); }
@@ -38,7 +39,7 @@
 .ss-auth-field-error p { margin-bottom:.25rem; }
 .ss-auth-back { display:inline-flex; align-items:center; gap:.5rem; margin-top:1.5rem; min-height:44px; color:var(--ss-auth-accent); font-size:.9rem; text-decoration:none; }
 .ss-auth-secondary { display:block; margin-top:1rem; color:var(--ss-auth-accent); text-align:center; font-size:.9rem; padding:.5rem; }
-.ss-auth-la-fragua .ss-auth-back:hover,.ss-auth-la-fragua .ss-auth-secondary:hover { color:var(--ss-auth-accent-hover); }
+.ss-auth-empresa .ss-auth-back:hover,.ss-auth-empresa .ss-auth-secondary:hover { color:var(--ss-auth-accent-hover); }
 .ss-auth-support-note { margin:-.1rem 0 0; text-align:center; color:#64748b; font-size:.8rem; }
 .ss-auth-state-icon { width:56px; height:56px; display:flex; align-items:center; justify-content:center; background:var(--ss-auth-soft); color:var(--ss-auth-accent); border-radius:14px; font-size:1.4rem; margin-bottom:1.5rem; }
 .ss-auth-note { color:#475569; font-size:.9rem; line-height:1.65; margin-bottom:1.5rem; }
@@ -66,8 +67,8 @@
   .ss-auth-brand-panel .ss-auth-brand-icon { background:rgba(255,255,255,.97); }
   .ss-auth-brand-copy { padding:3rem 0; }
   .ss-auth-eyebrow { color:var(--ss-auth-eyebrow); font-size:.85rem; margin-bottom:1.1rem; }
-  .ss-auth-la-fragua .ss-auth-eyebrow { display:flex; align-items:center; gap:.65rem; }
-  .ss-auth-la-fragua .ss-auth-eyebrow::before { content:""; width:1.5rem; height:2px; background:currentColor; }
+  .ss-auth-empresa .ss-auth-eyebrow { display:flex; align-items:center; gap:.65rem; }
+  .ss-auth-empresa .ss-auth-eyebrow::before { content:""; width:1.5rem; height:2px; background:currentColor; }
   .ss-auth-brand-title { font-size:clamp(2.2rem,3.1vw,3.5rem); line-height:1.12; letter-spacing:-.035em; font-weight:750; margin-bottom:1.5rem; }
   .ss-auth-brand-description { color:var(--ss-auth-muted); max-width:540px; font-size:1.1rem; line-height:1.7; }
   .ss-auth-brand-footer { color:var(--ss-auth-muted); font-size:.8rem; margin:0; }

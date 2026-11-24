@@ -894,7 +894,7 @@ class MarcasEmpresaEnChromeTests(StaticLiveServerTestCase):
             navegador.get(origen + '/')
             self.comprobar_logo(navegador, '.ss-auth-brand-panel .ss-company-logo', codigo)
             self.assertEqual(navegador.find_element(By.CSS_SELECTOR, '.ss-auth-company').text, empresa.nombre)
-            color = 'rgb(194, 65, 12)' if codigo == 'la-fragua' else 'rgb(15, 118, 110)'
+            color = 'rgb(194, 65, 12)' if codigo == 'la-fragua' else 'rgb(185, 28, 28)'
             self.assertEqual(navegador.execute_script('return getComputedStyle(document.getElementById("login-submit")).backgroundColor;'), color)
             navegador.save_screenshot(f'/tmp/ss-empresa-{codigo}-acceso.png')
             navegador.set_window_size(390, 844)
