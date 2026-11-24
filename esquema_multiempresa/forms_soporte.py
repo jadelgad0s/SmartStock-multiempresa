@@ -2,9 +2,9 @@ from django import forms
 from django.db.models import Q
 
 from apps.usuarios.models import Usuario
-from .autorizacion_soporte import ALCANCES, EXTRAS_GESTION, empresas_visibles
+from .autorizacion_soporte import ALCANCES, EXTRAS_GESTION, atenciones_visibles, empresas_visibles
 from .forms import FormularioPanel
-from .models import AtencionSoporte
+from .models import AtencionSoporte, Empresa
 from .permisos import ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO, CORREO_CONTACTO, es_administrador_plataforma
 
 
@@ -13,24 +13,54 @@ def personal_disponible():
         Q(is_superuser=True) | Q(rol__codigo__in=[ADMINISTRADOR_PLATAFORMA, SOPORTE_TECNICO], rol__activo=True))
 
 
+class FiltroAtencionesForm(FormularioPanel, forms.Form):
+    search = forms.CharField(label='Buscar por asunto', max_length=160, required=False,
+        widget=forms.SearchInput(attrs={'placeholder': 'Ej.: problema para ingresar', 'id': 'buscar-atencion'}))
+    empresa = forms.ModelChoiceField(label='Empresa', queryset=Empresa.objects.none(), required=False,
+        to_field_name='codigo', empty_label='Todas las empresas', widget=forms.Select(attrs={'id': 'empresa-atencion'}))
+    estado = forms.ChoiceField(label='Estado', required=False,
+        choices=[('', 'Todas'), ('abierta', 'Abiertas'), ('cerrada', 'Cerradas')],
+        widget=forms.Select(attrs={'id': 'estado-atencion'}))
+
+    def __init__(self, *args, actor, **kwargs):
+        super().__init__(*args, **kwargs)
+        if es_administrador_plataforma(actor):
+            empresas = empresas_visibles(actor)
+        else:
+            # El historial propio puede incluir empresas cuya atención ya se cerró.
+            # Este filtro no concede acceso a la ficha ni al inventario del cliente.
+            empresas = Empresa.objects.using('central').filter(
+                pk__in=atenciones_visibles(actor).values('empresa_id'))
+        self.fields['empresa'].queryset = empresas.order_by('nombre', 'id')
+        self.estilizar()
+
+
 class AtencionForm(FormularioPanel, forms.ModelForm):
     class Meta:
         model = AtencionSoporte
         fields = ['empresa', 'tecnico', 'asunto', 'motivo']
-        widgets = {'motivo': forms.Textarea(attrs={'rows': 4})}
+        widgets = {
+            'asunto': forms.TextInput(attrs={'placeholder': 'Ej.: problema para ingresar al sistema'}),
+            'motivo': forms.Textarea(attrs={'rows': 5,
+                'placeholder': 'Indica qué sucede, desde cuándo y qué estabas intentando hacer.'}),
+        }
         labels = {'tecnico': 'Responsable de la atención', 'motivo': 'Descripción de la incidencia'}
 
     def __init__(self, *args, actor, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['empresa'].queryset = empresas_visibles(actor).filter(activa=True).order_by('nombre')
+        self.fields['empresa'].empty_label = 'Selecciona una empresa'
         self.fields['tecnico'].queryset = personal_disponible().order_by('nombres', 'email')
         self.fields['tecnico'].label_from_instance = lambda u: u.nombre_completo or u.email
+        self.fields['tecnico'].empty_label = 'Sin responsable (pendiente de asignación)'
+        self.fields['tecnico'].help_text = 'Puedes dejarla sin responsable y asignarla más adelante.'
         if not self.instance._state.adding:
             self.fields['empresa'].disabled = True
         if not es_administrador_plataforma(actor):
             self.fields['tecnico'].queryset = personal_disponible().filter(pk=actor.pk)
             self.initial['tecnico'] = self.fields['tecnico'].initial = actor.pk
             self.fields['tecnico'].disabled = True
+            self.fields['tecnico'].help_text = 'La atención quedará asignada a tu cuenta.'
         self.estilizar()
 
 

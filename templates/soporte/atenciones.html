@@ -1,5 +1,20 @@
 {% extends 'sistema/base.html' %}
 {% block acciones %}<a href="{% url 'sistema_nueva_atencion' %}" class="btn btn-primary">Nueva atención</a>{% endblock %}
-{% block panel_content %}<p class="text-muted">Cada consulta de inventario necesita autorización del administrador de la empresa, con permisos y duración definidos.</p>
-<form method="get" class="ss-sistema-busqueda mb-3" data-ss-loading="Buscando atenciones…"><label for="estado-atencion">Estado</label><div class="d-flex gap-2"><select id="estado-atencion" name="estado" class="form-select"><option value="">Todas</option><option value="abierta"{% if request.GET.estado == 'abierta' %} selected{% endif %}>Abiertas</option><option value="cerrada"{% if request.GET.estado == 'cerrada' %} selected{% endif %}>Cerradas</option></select><button class="btn btn-outline-secondary">Consultar</button></div></form>
-{% include 'soporte/tabla_atenciones.html' %}{% include 'sistema/paginacion.html' %}{% endblock %}
+{% block panel_content %}
+<p class="ss-soporte-introduccion">Registra y da seguimiento a las solicitudes de soporte de las empresas.</p>
+<section class="ss-soporte-resumen" aria-label="Resumen de los resultados">
+  <div class="card ss-soporte-indicador" data-indicador="abiertas"><span>Abiertas</span><strong>{{ resumen_atenciones.abiertas }}</strong></div>
+  <div class="card ss-soporte-indicador" data-indicador="cerradas"><span>Cerradas</span><strong>{{ resumen_atenciones.cerradas }}</strong></div>
+  <div class="card ss-soporte-indicador{% if resumen_atenciones.sin_responsable %} ss-soporte-indicador-pendiente{% endif %}" data-indicador="sin-responsable"><span>Sin responsable</span><strong>{{ resumen_atenciones.sin_responsable }}</strong><small>Solo abiertas</small></div>
+</section>
+<p class="ss-soporte-nota">Los contadores reflejan los filtros aplicados.</p>
+<form method="get" class="card ss-soporte-filtros" role="search" aria-label="Filtrar atenciones" data-ss-loading="Filtrando atenciones…">
+  {% for campo in formulario_filtros %}
+  <div><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{% if campo.errors %}<div class="text-danger small" role="alert">{{ campo.errors }}</div>{% endif %}</div>
+  {% endfor %}
+  <div class="ss-sistema-acciones"><button type="submit" class="btn btn-primary">Filtrar</button>{% if filtros_atenciones_activos %}<a class="btn btn-outline-secondary" href="{% url 'sistema_atenciones' %}">Limpiar filtros</a>{% endif %}</div>
+</form>
+{% include 'soporte/tabla_atenciones.html' %}
+{% include 'sistema/paginacion.html' with ocultar_navegacion_unica=True %}
+<p class="ss-soporte-nota ss-soporte-autorizacion"><i class="fa-solid fa-shield-halved me-2" aria-hidden="true"></i>Las consultas de inventario requieren autorización temporal del administrador de la empresa, con permisos y duración definidos.</p>
+{% endblock %}

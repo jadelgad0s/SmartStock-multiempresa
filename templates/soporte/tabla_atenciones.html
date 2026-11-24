@@ -15,7 +15,7 @@
         </td>
         <td data-label="Estado" role="cell"><span class="ss-sistema-etiqueta {% if atencion.estado == 'abierta' %}ss-sistema-estado-abierto{% else %}ss-sistema-estado-cerrado{% endif %}">{{ atencion.get_estado_display }}</span></td>
       </tr>
-      {% empty %}<tr role="row"><td colspan="4" class="ss-sistema-celda-vacia text-muted text-center py-4" role="cell">No hay atenciones en esta vista.</td></tr>{% endfor %}
+      {% empty %}<tr role="row"><td colspan="4" class="ss-sistema-celda-vacia text-muted text-center py-4" role="cell">{% if filtros_atenciones_activos %}No hay atenciones que coincidan con los filtros.{% else %}No hay atenciones en esta vista.{% endif %}</td></tr>{% endfor %}
     </tbody>
   </table>
 </div>

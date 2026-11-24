@@ -337,6 +337,71 @@ class PermisosSoporteTests(TestCase):
         caso = AtencionSoporte.objects.using('central').get()
         self.assertEqual((caso.empresa_id, caso.tecnico_id), (self.fragua.pk, self.soporte.pk))
 
+    def test_filtros_y_contadores_de_atenciones_incluyen_todos_los_resultados(self):
+        AtencionSoporte.objects.using('central').bulk_create([
+            AtencionSoporte(empresa=self.fragua, asunto=f'Acceso pendiente {numero}', motivo='Solicitud de prueba')
+            for numero in range(26)
+        ] + [
+            AtencionSoporte(empresa=self.fragua, asunto='Acceso resuelto', motivo='Solicitud de prueba', estado='cerrada'),
+            AtencionSoporte(empresa=self.motor, tecnico=self.plataforma, asunto='Acceso motor', motivo='Solicitud de prueba'),
+        ])
+        gestor = self.cliente(self.plataforma)
+        pagina = gestor.get('/sistema/atenciones/', {'empresa': 'la-fragua', 'search': 'acceso'})
+        self.assertEqual(pagina.context['resumen_atenciones'], {'abiertas': 26, 'cerradas': 1, 'sin_responsable': 26})
+        self.assertEqual(pagina.context['pagina'].paginator.count, 27)
+        siguiente = gestor.get('/sistema/atenciones/', {
+            'empresa': 'la-fragua', 'search': 'acceso', 'estado': 'abierta', 'page': '2'})
+        self.assertEqual(len(siguiente.context['atenciones']), 1)
+        self.assertEqual(siguiente.context['resumen_atenciones'], {'abiertas': 26, 'cerradas': 0, 'sin_responsable': 26})
+        for parametro in ('empresa=la-fragua', 'search=acceso', 'estado=abierta'):
+            self.assertIn(parametro, siguiente.context['filtros_pagina'])
+        self.assertNotIn('page=', siguiente.context['filtros_pagina'])
+        self.assertContains(siguiente, 'aria-label="Páginas del listado"')
+        cerradas = gestor.get('/sistema/atenciones/', {'empresa': 'la-fragua', 'estado': 'cerrada'})
+        self.assertEqual(cerradas.context['resumen_atenciones'], {'abiertas': 0, 'cerradas': 1, 'sin_responsable': 0})
+        self.assertNotContains(cerradas, 'aria-label="Páginas del listado"')
+        self.assertContains(cerradas, '1–1 de 1 registro')
+        vacia = gestor.get('/sistema/atenciones/', {'search': 'No coincide con ninguna solicitud'})
+        self.assertContains(vacia, 'No hay atenciones que coincidan con los filtros.')
+        self.assertEqual(vacia.context['resumen_atenciones'], {'abiertas': 0, 'cerradas': 0, 'sin_responsable': 0})
+
+    def test_filtro_de_historial_propio_no_revela_atenciones_ajenas_ni_habilita_inventario(self):
+        self.caso(self.soporte, self.fragua)
+        cerrada = self.caso(self.soporte, self.motor)
+        cerrada.estado = 'cerrada'
+        cerrada.save(using='central')
+        ajena = self.caso(self.plataforma, self.motor)
+        ajena.asunto = 'Solicitud ajena confidencial'
+        ajena.save(using='central')
+        pagina = self.central.get('/sistema/atenciones/', {'empresa': 'punto-motor'})
+        self.assertEqual(pagina.status_code, 200)
+        self.assertEqual([a.pk for a in pagina.context['atenciones']], [cerrada.pk])
+        self.assertEqual(pagina.context['resumen_atenciones'], {'abiertas': 0, 'cerradas': 1, 'sin_responsable': 0})
+        self.assertNotContains(pagina, ajena.asunto)
+        self.assertIsNone(pagina.context['empresa_seleccionada'])
+        self.assertEqual(self.central.get('/sistema/inventario/', {'empresa': 'punto-motor'}).status_code, 404)
+        empresa_ajena = Empresa.objects.using('central').create(codigo='ajena', nombre='Empresa privada', alias_bd='ajena')
+        self.caso(self.plataforma, empresa_ajena)
+        invalida = self.central.get('/sistema/atenciones/', {'empresa': 'ajena'})
+        self.assertTrue(invalida.context['formulario_filtros'].errors.get('empresa'))
+        self.assertFalse(invalida.context['atenciones'])
+        self.assertNotContains(invalida, empresa_ajena.nombre)
+
+    def test_creacion_de_atencion_admite_responsable_pendiente_para_gestores(self):
+        gestor = self.cliente(self.raiz)
+        formulario = gestor.get('/sistema/atenciones/nueva/')
+        self.assertContains(formulario, 'Crear atención')
+        self.assertNotContains(formulario, '>Guardar cambios<')
+        self.assertEqual(formulario.context['formulario'].fields['empresa'].empty_label, 'Selecciona una empresa')
+        self.assertFalse(formulario.context['formulario'].fields['tecnico'].required)
+        respuesta = self.post(gestor, '/sistema/atenciones/nueva/', {
+            'empresa': self.fragua.pk, 'tecnico': '', 'asunto': 'Ayuda para ingresar',
+            'motivo': 'La empresa solicita ayuda para acceder al sistema.'})
+        self.assertEqual(respuesta.status_code, 302)
+        creada = AtencionSoporte.objects.using('central').get(asunto='Ayuda para ingresar')
+        self.assertIsNone(creada.tecnico_id)
+        self.assertEqual(creada.empresa_id, self.fragua.pk)
+
     def test_cliente_crea_consulta_sin_elegir_otra_empresa_ni_un_tecnico(self):
         respuesta = self.post(self.cliente_fragua, '/soporte/', {'accion': 'nueva', 'asunto': 'Ayuda de mi empresa',
             'motivo': 'Necesito revisar las existencias', 'empresa': self.motor.pk, 'tecnico': self.raiz.pk})
