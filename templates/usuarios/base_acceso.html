@@ -2,10 +2,10 @@
 {% load static %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/password_visibility.css' %}?v=1">
-<link rel="stylesheet" href="{% static 'css/acceso.css' %}?v=3">
+<link rel="stylesheet" href="{% static 'css/acceso.css' %}?v=4">
 {% endblock %}
 {% block content %}
-<div class="ss-auth-layout{% if request.empresa.codigo == 'la-fragua' %} ss-auth-la-fragua{% endif %}">
+<div class="ss-auth-layout{% if request.empresa.codigo == 'la-fragua' %} ss-auth-la-fragua{% elif request.empresa.codigo == 'punto-motor' %} ss-auth-punto-motor{% endif %}{% if request.empresa %} ss-auth-empresa{% endif %}">
   <aside class="ss-auth-brand-panel" aria-label="{% if request.empresa %}{{ request.empresa.nombre }}{% else %}SmartStock{% endif %}">
     {% include 'usuarios/marca_acceso.html' %}
     <div class="ss-auth-brand-copy">
