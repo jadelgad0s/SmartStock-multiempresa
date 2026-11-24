@@ -1,6 +1,6 @@
 # Cambio de smartstockchile.cl a la versión multiempresa
 
-Estado al 24 de noviembre de 2026: las pantallas públicas de las dos empresas y HTTPS están comprobados. El usuario confirmó el funcionamiento del acceso de prueba y mostró una sesión de La Fragua abierta desde la central. El traslado del sitio oficial continúa pendiente.
+Traslado aplicado el 24 de noviembre de 2026. El despliegue `dep-dc2hlnek1f9s7381q9q0`, del commit `5792355ac08da94b21d1b0fbd77cc543da018af0`, terminó live. La central y las dos empresas responden por HTTPS, sus rutas `/salud/` devuelven HTTP 200 y las pantallas de acceso muestran las marcas correctas. www redirige al dominio principal. El procedimiento siguiente conserva el registro operativo del traslado y su reversión.
 
 ## Destinos
 
@@ -12,9 +12,9 @@ Estado al 24 de noviembre de 2026: las pantallas públicas de las dos empresas y
 
 Se utiliza el servicio existente `smartstock-multiempresa-pruebas`, ID `srv-dc2b7safngtc73bbupu0`, en Ohio, con plan Free. Su nombre en el panel identifica el recurso ya preparado. El servidor anterior es `SmartStock`, ID `srv-dbb6vi1jfumc73eo2d00`, cuya dirección propia es `smartstock-fqky.onrender.com`.
 
-[infra/render-produccion.yaml](../../infra/render-produccion.yaml) prepara el destino definitivo. Declarar el archivo en el repositorio no lo aplica: el Blueprint actual sigue usando `infra/render-pruebas.yaml`, con sincronización manual. Al cambiar de archivo, se debe revisar el plan que genere Render antes de aprobarlo.
+[infra/render-produccion.yaml](../../infra/render-produccion.yaml) es la configuración activa del Blueprint. La sincronización de infraestructura y las publicaciones de código permanecen manuales. Para cambios futuros, revisar el plan que genere Render antes de aprobarlo.
 
-La central y las empresas conservarán las bases actuales de `produccion-multiempresa` y el bucket ya comprobado. Solo cambia la variable pública `SS_DOMINIO_EMPRESAS` de `pruebas.smartstockchile.cl` a `smartstockchile.cl`. Las variables omitidas por el Blueprint se conservan: no cambiar `SECRET_KEY`, las conexiones privadas ni las credenciales de almacenamiento. Zoho depende de esa clave para conservar la autorización cifrada.
+La central y las empresas conservan las bases de `produccion-multiempresa` y el bucket ya comprobado. Se cambió la variable pública `SS_DOMINIO_EMPRESAS` de `pruebas.smartstockchile.cl` a `smartstockchile.cl`. Las variables privadas omitidas por el Blueprint se conservaron, incluida `SECRET_KEY`, de la que depende la autorización cifrada de Zoho. El usuario confirmó cero dominios utilizados de dos incluidos antes de aprobar el plan que incorporó los dos dominios definitivos.
 
 ## 1. Preparar DNS sin mover el sitio principal
 
