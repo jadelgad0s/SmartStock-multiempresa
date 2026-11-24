@@ -33,7 +33,7 @@ La credencial de S3 declara los permisos `storage:read` y `storage:write`. El cl
 
 El servicio separado `smartstock-multiempresa-pruebas` utiliza Render Free en Ohio y el repositorio multiempresa. Las actualizaciones automáticas están desactivadas durante la preparación. Su [entrada temporal](https://smartstock-multiempresa-pruebas.onrender.com/) permite comprobar la central.
 
-`SS_DOMINIO_EMPRESAS=pruebas.smartstockchile.cl` reserva el dominio de ensayo. Las direcciones `la-fragua.pruebas.smartstockchile.cl` y `punto-motor.pruebas.smartstockchile.cl` requieren todavía configurar DNS, dominios y certificados antes de probar la navegación completa. La dirección onrender.com solo cubre la entrada central.
+`SS_DOMINIO_EMPRESAS=pruebas.smartstockchile.cl` configura el dominio de ensayo. El 24 de noviembre de 2026 se verificaron el DNS, HTTPS y las pantallas públicas de acceso de `la-fragua.pruebas.smartstockchile.cl` y `punto-motor.pruebas.smartstockchile.cl`. La dirección onrender.com cubre la entrada central.
 
 Desde un equipo que tenga las variables privadas del servicio:
 
@@ -47,9 +47,9 @@ Para ejecutar esa misma comprobación al iniciar el servicio temporal, configura
 
 La lectura/escritura de imágenes y la conexión de bases no sustituyen las pruebas de cuentas, permisos, correos y navegación bajo los dominios de cada empresa. El sitio oficial permanece en su servicio anterior hasta completar esas pruebas.
 
-## Plan de dominios de ensayo
+## Dominios de ensayo
 
-[infra/render-pruebas.yaml](../../infra/render-pruebas.yaml) declara el servicio temporal existente y un dominio comodín para las dos empresas. Esta configuración se prepara como un plan revisable antes de aplicarla.
+[infra/render-pruebas.yaml](../../infra/render-pruebas.yaml) declara el servicio temporal existente y un dominio comodín para las dos empresas. El plan se aplicó el 24 de noviembre de 2026, conservando el servidor Free y utilizando el segundo dominio incluido en el workspace Hobby. Antes de aplicarlo, la página Billing mostraba un dominio utilizado de dos incluidos.
 
 | Parámetro | Valor |
 | --- | --- |
@@ -60,17 +60,21 @@ La lectura/escritura de imágenes y la conexión de bases no sustituyen las prue
 | Rama | main |
 | Sincronización de infraestructura | Manual, autoSync desactivado |
 | Publicaciones automáticas de código | Desactivadas durante el ensayo |
-| Dominio propuesto | *.pruebas.smartstockchile.cl |
+| Dominio registrado | *.pruebas.smartstockchile.cl |
 | Comprobación HTTP | /salud/ |
 
 Al crear el plan en Render se utiliza la opción de adoptar el servicio existente. Antes de aprobarlo, comprobar que el cambio corresponde al ID indicado y que conserva el plan Free. Las variables privadas continúan gestionándose en Environment: el archivo omite envVars y Render conserva los valores existentes, incluido SECRET_KEY. La autorización de Zoho depende de esa clave estable.
 
-La entrada central del ensayo continúa por la dirección onrender.com. El comodín permite preparar estas direcciones de empresa:
+La entrada central del ensayo continúa por la dirección onrender.com. El comodín cubre estas direcciones de empresa:
 
-| Empresa | Dirección prevista |
+| Empresa | Dirección pública de ensayo |
 | --- | --- |
 | La Fragua | https://la-fragua.pruebas.smartstockchile.cl |
 | Punto Motor | https://punto-motor.pruebas.smartstockchile.cl |
+
+La verificación pública del 24 de noviembre de 2026 confirmó los cuatro registros CNAME de la tabla inferior. Las dos empresas responden por HTTPS con un certificado aceptado por el cliente; `/salud/` devuelve HTTP 200 y `{"estado": "ok"}`. Cada pantalla de inicio de sesión y su imagen de marca devuelven HTTP 200 y corresponden a la empresa del host. Un acceso a `/productos/` sin sesión devuelve HTTP 302 hacia el inicio de sesión.
+
+La siguiente etapa es probar la autenticación con las cuentas existentes, la entrega de sesión desde la central, los permisos y las operaciones de inventario de cada empresa antes de cambiar el sitio oficial.
 
 El plan Free del servidor y el cupo de dominios personalizados son conceptos distintos. Render incluye dos dominios en el workspace Hobby y cobra USD 0,25 mensuales por cada dominio que exceda el cupo. Revisar el uso del workspace y cualquier cargo adicional antes de aprobar el dominio comodín. Referencias: [dominios personalizados](https://render.com/docs/custom-domains), [planes y precios](https://render.com/pricing).
 
