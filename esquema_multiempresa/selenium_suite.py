@@ -371,10 +371,14 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
             navegador.set_window_size(ancho, 844)
             navegador.get(self.live_server_url + '/sistema/')
             self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= innerWidth'))
+            self.assertTrue(navegador.execute_script('''
+                return [...document.querySelectorAll('.ss-sistema-tabla-adaptable')].every(
+                    tabla => tabla.getBoundingClientRect().width <= innerWidth);
+            '''))
             if ancho == 390:
                 navegador.save_screenshot('/tmp/ss-panel-sistema-movil.png')
             fila = navegador.find_element(By.CSS_SELECTOR, '[data-empresa="la-fragua"]')
-            fila.find_element(By.TAG_NAME, 'summary').click()
+            ContactoEnChromeTests.pulsar(self, navegador, By.CSS_SELECTOR, '[data-empresa="la-fragua"] summary')
             enlace = fila.find_element(By.LINK_TEXT, 'Usuarios')
             self.assertTrue(enlace.is_displayed())
             self.assertTrue(navegador.execute_script('''

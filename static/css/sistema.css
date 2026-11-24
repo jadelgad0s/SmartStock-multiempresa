@@ -93,6 +93,7 @@
 .ss-sistema .ss-sistema-enlace-empresa { color: var(--dash-ink); }
 .ss-sistema-acceso-empresa { max-width: 28rem; font-size: .75rem; }
 .ss-sistema-tabla { overflow: hidden; }
+.ss-sistema-tabla > .table-responsive { flex-shrink: 0; }
 .ss-sistema-tabla tbody tr:last-child td { border-bottom: 0; }
 .ss-sistema-etiqueta { display: inline-flex; align-items: center; gap: .4rem; border-radius: 1rem; padding: .35em .7em; font-size: .75rem; font-weight: 600; line-height: 1.4; }
 .ss-sistema-estado-abierto { color: #115e59; background: #ccfbf1; }
@@ -110,6 +111,8 @@
 :root[data-bs-theme='dark'] .ss-sistema .ss-sistema-enlace { color: #8cf5e6; }
 :root[data-bs-theme='dark'] .ss-sistema .ss-sistema-enlace:hover { color: #ccfbf1; }
 :root[data-bs-theme='dark'] .ss-sistema-pendiente { color: #fcd34d; }
+:root[data-bs-theme='dark'] .ss-sistema .ss-sistema-kpi-aviso { border-top-color: #fbbf24 !important; }
+:root[data-bs-theme='dark'] .ss-sistema .btn-outline-secondary { --bs-btn-color: #cbd5e1; --bs-btn-border-color: #64748b; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #334155; --bs-btn-hover-border-color: #94a3b8; --bs-btn-active-color: #fff; --bs-btn-active-bg: #334155; --bs-btn-active-border-color: #94a3b8; }
 :root[data-bs-theme='dark'] .ss-sistema-lista-acciones a:hover { background: #194743; }
 :root[data-bs-theme='dark'] .ss-sistema-etiqueta.badge-soft-success { background: #163e31; color: #a7f3d0; }
 :root[data-bs-theme='dark'] .ss-sistema-etiqueta.badge-soft-warning { background: #493519; color: #fde68a; }
@@ -136,13 +139,14 @@
   .ss-sistema-periodo { margin-left: 0; }
 }
 @media (max-width: 767.98px) {
+  .ss-sistema .table-responsive > .ss-sistema-tabla-adaptable { min-width: 0; }
   .ss-sistema-tabla-adaptable, .ss-sistema-tabla-adaptable tbody { display: block; width: 100%; }
   .ss-sistema-tabla-adaptable thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .ss-sistema-tabla-adaptable tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--dash-line); }
   .ss-sistema-tabla-adaptable tbody tr:last-child { border-bottom: 0; }
   .ss-sistema .ss-sistema-tabla-adaptable td { display: block; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
   .ss-sistema-tabla-adaptable td[data-label]::before { content: attr(data-label); display: block; margin-bottom: .35rem; color: var(--dash-muted); font-size: .72rem; font-weight: 600; }
-  .ss-sistema-celda-principal, .ss-sistema-celda-acciones, .ss-sistema-celda-vacia { grid-column: 1 / -1; }
+  .ss-sistema-celda-principal, .ss-sistema-celda-acciones, .ss-sistema-celda-vacia, .ss-sistema-tabla-adaptable td[data-label="Empresa"] { grid-column: 1 / -1; }
   .ss-sistema-acciones-empresa { gap: .5rem; }
   .ss-sistema-acciones-empresa .btn { min-height: 44px; }
 }
