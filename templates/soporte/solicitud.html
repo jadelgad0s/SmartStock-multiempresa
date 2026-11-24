@@ -1,5 +1,5 @@
 <article class="card ss-soporte-solicitud"><div class="ss-soporte-fila"><strong class="ss-soporte-insignia {% if solicitud.vigente and atencion.estado == 'abierta' %}ss-soporte-insignia-correcto{% elif solicitud.estado == 'pendiente' %}ss-soporte-insignia-aviso{% else %}ss-soporte-insignia-neutro{% endif %}">{{ solicitud.estado_visible }}</strong><span>{{ solicitud.minutos }} minutos</span></div>
-<p class="ss-soporte-nota">Responsable: {{ solicitud.tecnico.nombre_completo|default:'Cuenta técnica no disponible' }}</p><p>{{ solicitud.motivo }}</p>
+{% if not omitir_responsable %}<p class="ss-soporte-nota">Responsable: {{ solicitud.tecnico.nombre_completo|default:'Cuenta técnica no disponible' }}</p>{% endif %}<p>{{ solicitud.motivo }}</p>
 <ul class="ss-soporte-lista-permisos">{% for permiso in solicitud.permisos_visibles %}<li>{{ permiso }}</li>{% endfor %}</ul>
 {% if solicitud.expira_en %}<p class="ss-soporte-nota">Vencimiento: <time datetime="{{ solicitud.expira_en|date:'c' }}">{{ solicitud.expira_en|date:'d/m/Y H:i' }}</time>.</p>{% endif %}
 {% if solicitud.aprobador_email %}<p class="ss-soporte-nota">Decisión de {{ solicitud.aprobador_email }} · {{ solicitud.decidido_en|date:'d/m/Y H:i' }}.</p>{% endif %}

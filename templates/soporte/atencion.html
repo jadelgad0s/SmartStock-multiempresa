@@ -13,7 +13,7 @@
 <div class="ss-soporte-detalle-grid{% if atencion.estado == 'cerrada' %} ss-soporte-detalle-finalizada{% endif %}">
   <section aria-label="Permisos y solicitudes">
     <h2 class="mb-3">Permisos de esta atención</h2>
-    {% for solicitud in situacion.actuales %}{% include 'soporte/solicitud.html' with cliente=False %}{% endfor %}
+    {% for solicitud in situacion.actuales %}{% include 'soporte/solicitud.html' with cliente=False omitir_responsable=True %}{% endfor %}
     {% if not solicitudes %}<p class="text-muted">Todavía no se solicitaron permisos.</p>{% endif %}
     {% if mostrar_formulario_acceso %}
     <details class="card ss-soporte-desplegable" id="soporte-pedir-permisos"{% if abrir_formulario_acceso %} open{% endif %}>
@@ -34,7 +34,7 @@
   <section aria-label="Gestión de la atención">
     {% if atencion.estado == 'abierta' %}
       {% if es_gestor %}<details class="card ss-soporte-desplegable"{% if formulario_asignacion.errors %} open{% endif %}><summary>Responsable de la atención</summary><form method="post" class="ss-soporte-formulario" data-ss-loading="Asignando atención…">{% csrf_token %}{% for campo in formulario_asignacion %}{% if campo.name == 'tecnico' %}{% include 'sistema/campo_formulario.html' %}{% else %}<input type="hidden" name="{{ campo.name }}" value="{% if campo.name == 'empresa' %}{{ atencion.empresa_id }}{% elif campo.name == 'asunto' %}{{ atencion.asunto }}{% else %}{{ atencion.motivo }}{% endif %}">{% endif %}{% endfor %}<p class="form-text">Cambiar de responsable revoca los permisos anteriores.</p><button name="accion" value="asignar" class="btn btn-outline-secondary">Asignar responsable</button></form></details>{% endif %}
-      <form method="post" class="card ss-soporte-bloque ss-soporte-cierre" data-ss-loading="Cerrando atención…">{% csrf_token %}<h2 class="mb-3">Finalizar atención</h2>{% include 'contacto/campos.html' with form=formulario_cierre %}<p class="ss-soporte-nota">Registra lo que revisaste y el resultado. Al cerrar la atención se revocan todos sus accesos.</p><button name="accion" value="cerrar" class="btn btn-outline-secondary">Cerrar atención</button></form>
+      <details id="soporte-finalizar-atencion" class="card ss-soporte-desplegable ss-soporte-cierre"{% if situacion.vigente or formulario_cierre.errors %} open{% endif %}><summary>Finalizar atención</summary><form method="post" class="ss-soporte-formulario" data-ss-loading="Cerrando atención…">{% csrf_token %}{% include 'contacto/campos.html' with form=formulario_cierre %}<p class="ss-soporte-nota">Registra lo que revisaste y el resultado. Al cerrar la atención se revocan todos sus accesos.</p><button name="accion" value="cerrar" class="btn btn-outline-secondary">Cerrar atención</button></form></details>
     {% endif %}
   </section>
 </div>

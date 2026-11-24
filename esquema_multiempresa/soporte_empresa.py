@@ -71,4 +71,5 @@ def soporte_empresa(request):
     return render(request, 'soporte/empresa.html', {'formulario': formulario, 'atenciones': atenciones,
         'atenciones_pendientes': [a for a in atenciones if a.tiene_pendiente],
         'otras_atenciones': [a for a in atenciones if not a.tiene_pendiente],
+        'hay_mas_atenciones': resumen['abiertas'] + resumen['cerradas'] > len(atenciones),
         'resumen_soporte': resumen, 'error_consulta': error})

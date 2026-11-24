@@ -449,6 +449,7 @@ class SoporteEnChromeTests(StaticLiveServerTestCase):
         navegador.get(self.live_server_url + f'/sistema/atenciones/{caso.pk}/')
         self.assertFalse(navegador.find_elements(By.CSS_SELECTOR, '.ss-sidebar-links a[href*="/catalogo/"]'))
         navegador.save_screenshot('/tmp/ss-soporte-ficha-inicial.png')
+        self.assertIsNone(navegador.find_element(By.ID, 'soporte-finalizar-atencion').get_attribute('open'))
         self.pulsar(navegador, 'input[name="alcances"][value="catalogo"]')
         Select(navegador.find_element(By.ID, 'id_minutos')).select_by_value('15')
         navegador.find_element(By.ID, 'id_motivo').send_keys('Comprobar las existencias indicadas por el cliente')
@@ -491,6 +492,7 @@ class SoporteEnChromeTests(StaticLiveServerTestCase):
         navegador.refresh()
         navegador.set_window_size(390, 844)
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        espera.until(lambda d: d.execute_script('return document.getElementById("ss-navigation").getBoundingClientRect().right <= 1'))
         navegador.save_screenshot('/tmp/ss-soporte-empresa-movil.png')
         self.pulsar(navegador, 'button[name="accion"][value="aprobar"]')
         espera.until(lambda d: AccesoSoporte.objects.using('central').get(pk=acceso.pk).estado == 'aprobado')
@@ -514,6 +516,7 @@ class SoporteEnChromeTests(StaticLiveServerTestCase):
         navegador.save_screenshot('/tmp/ss-soporte-catalogo.png')
         navegador.set_window_size(390, 844)
         self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth<=innerWidth'))
+        espera.until(lambda d: d.execute_script('return document.getElementById("ss-navigation").getBoundingClientRect().right <= 1'))
         navegador.save_screenshot('/tmp/ss-soporte-catalogo-movil.png')
         self.pulsar(navegador, '.ss-menu-toggle')
         espera.until(lambda d: 'ss-sidebar-open' in d.find_element(By.ID, 'ss-navigation').get_attribute('class'))
@@ -550,8 +553,9 @@ class SoporteEnChromeTests(StaticLiveServerTestCase):
         self.pulsar(navegador, 'button[name="accion"][value="cerrar"]')
         espera.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-estado-acceso="finalizada"]')))
         self.assertFalse(AccesoSoporte.objects.using('central').filter(atencion=caso, estado='aprobado').exists())
-        self.assertEqual(navegador.execute_async_script(
-            'const listo=arguments[arguments.length-1];fetch(arguments[0]).then(r=>listo(r.status));', ruta), 403)
+        # Al cerrar la última atención asignada, también puede ocultarse la empresa (404).
+        self.assertIn(navegador.execute_async_script(
+            'const listo=arguments[arguments.length-1];fetch(arguments[0]).then(r=>listo(r.status));', ruta), (403, 404))
         navegador.set_window_size(1440, 1000)
         navegador.execute_script('window.scrollTo({top:0,behavior:"instant"})')
         navegador.save_screenshot('/tmp/ss-soporte-ficha-cerrada.png')
@@ -722,8 +726,9 @@ class ContactoEnChromeTests(StaticLiveServerTestCase):
             espera.until(lambda d: '/sistema/' in d.current_url or '/contacto/bandeja/' in d.current_url)
         def cerrar_confirmacion(documento_anterior):
             # La escritura en BD puede terminar antes de la redirección del POST.
-            # Espera el documento nuevo antes de consultar su confirmación.
-            espera.until(EC.staleness_of(documento_anterior))
+            # Consultar el documento actual evita enviar órdenes a un nodo que Chrome ya retiró.
+            documento_id = documento_anterior.id
+            espera.until(lambda d: d.find_element(By.TAG_NAME, 'html').id != documento_id)
             espera.until(lambda d: d.execute_script('return document.readyState') == 'complete')
             espera.until(EC.visibility_of_element_located((By.ID,'sistema-confirmacion')))
             self.pulsar(navegador, By.ID, 'sistema-confirmacion-cerrar')
