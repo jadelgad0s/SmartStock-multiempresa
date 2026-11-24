@@ -185,6 +185,20 @@ La recuperación e invitaciones utilizan Resend por HTTPS. El buzón conserva su
 
 Los SMS están desactivados por defecto en el perfil nuevo. Si se habilitan expresamente con SMS_ALERTAS_ACTIVAS=True, utiliza las variables de la [guía SMS](../modulos/alertas-sms.md). Los destinatarios siguen siendo la lista configurada en el servidor, compartida por esta instalación. El callback se construye con el dominio de la empresa y su firma se valida sobre esa URL exacta; el comando general no sustituye el contexto de una empresa.
 
+## Recuperación de cuentas administradoras desde CMD
+
+Para actualizar una cuenta administradora sin cargar las conexiones de la central y el almacenamiento web, utilizar el script independiente:
+
+```cmd
+python scripts\actualizar_cuenta_empresa.py --empresa punto-motor --usuario actual@example.test --nombres "Nombres" --apellidos "Apellidos" --correo nuevo@example.test
+```
+
+Sustituir los datos por los de la cuenta. Con la terminal interactiva y el entorno virtual activo, el script solicita de forma oculta la URL privada `SS_REPUESTOS_DATABASE_URL` del servicio publicado y la contraseña nueva dos veces. Para La Fragua se utiliza `--empresa la-fragua` y la URL `SS_FERRETERIA_DATABASE_URL`.
+
+El destino se valida contra el servidor de la rama `produccion-multiempresa` y la base de la empresa seleccionada. Se conserva la política de contraseñas del proyecto, el rol, los permisos y el estado de la cuenta. Los datos y la contraseña se guardan junto con una entrada de auditoría; también se limpia el bloqueo por intentos fallidos. Un error revierte los cambios de la transacción. La auditoría conserva los cambios del perfil y el indicador de clave actualizada, sin guardar la contraseña ni su hash.
+
+El script no carga el perfil `esquema_multiempresa.production`, no necesita las variables de la central ni S3 y no modifica archivos `.env` ni la configuración de Render. Las pruebas se ejecutan con SQLite aislado en Windows y Linux.
+
 ## Validación aislada
 
 La [guía de pruebas](pruebas.md) incluye pruebas de producción con datos desechables: URLs incompletas o inseguras, hosts públicos, HTTPS detrás del proxy, entrega de sesión entre dominios, cookies y archivos separados por empresa. El arranque real recoge los estáticos y sirve la entrada y /salud/ con conexiones a proveedores bloqueadas. El SDK de objetos se comprueba con respuestas controladas; la conectividad al bucket real se valida al configurar el proveedor.

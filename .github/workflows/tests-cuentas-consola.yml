@@ -1,0 +1,29 @@
+name: Recuperación de cuentas por consola
+
+on:
+  pull_request:
+    paths: ['scripts/actualizar_cuenta_empresa.py', 'tests/python/test_cuentas_consola.py', 'config/settings/base.py', 'apps/usuarios/models.py', '.github/workflows/tests-cuentas-consola.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/actualizar_cuenta_empresa.py', 'tests/python/test_cuentas_consola.py', 'config/settings/base.py', 'apps/usuarios/models.py', '.github/workflows/tests-cuentas-consola.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cuentas-consola:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13.7'
+      - run: python -m pip install "Django>=5.2,<5.3" "dj-database-url>=2.3,<4" python-decouple==3.8
+      - run: python -m unittest discover -s tests/python -p test_cuentas_consola.py -v
