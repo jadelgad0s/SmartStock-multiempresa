@@ -74,7 +74,7 @@ La entrada central del ensayo continúa por la dirección onrender.com. El comod
 
 La verificación pública del 24 de noviembre de 2026 confirmó los cuatro registros CNAME de la tabla inferior. Las dos empresas responden por HTTPS con un certificado aceptado por el cliente; `/salud/` devuelve HTTP 200 y `{"estado": "ok"}`. Cada pantalla de inicio de sesión y su imagen de marca devuelven HTTP 200 y corresponden a la empresa del host. Un acceso a `/productos/` sin sesión devuelve HTTP 302 hacia el inicio de sesión.
 
-La siguiente etapa es probar la autenticación con las cuentas existentes, la entrega de sesión desde la central, los permisos y las operaciones de inventario de cada empresa antes de cambiar el sitio oficial.
+El usuario confirmó el funcionamiento del acceso de prueba y mostró una sesión de La Fragua abierta desde la central. La [guía de cambio del dominio oficial](cambio-dominio.md) prepara el traslado y la reversión; sus comprobaciones finales incluyen las cuentas, la entrega de sesión, los permisos y las operaciones de inventario de cada empresa.
 
 El plan Free del servidor y el cupo de dominios personalizados son conceptos distintos. Render incluye dos dominios en el workspace Hobby y cobra USD 0,25 mensuales por cada dominio que exceda el cupo. Revisar el uso del workspace y cualquier cargo adicional antes de aprobar el dominio comodín. Referencias: [dominios personalizados](https://render.com/docs/custom-domains), [planes y precios](https://render.com/pricing).
 
