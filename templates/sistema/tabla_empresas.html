@@ -1,21 +1,36 @@
-<div class="card">
-  <div class="table-responsive">
-    <table class="table table-custom mb-0">
-      <thead><tr><th>Empresa</th><th>Estado</th>{% if es_gestor %}<th>Usuarios</th>{% endif %}<th>Acciones</th></tr></thead>
-      <tbody>
+<div class="card ss-sistema-tabla">
+  <div>
+    <table class="table table-custom ss-sistema-tabla-adaptable mb-0" role="table">
+      <caption class="visually-hidden">Empresas registradas y acciones disponibles</caption>
+      <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Empresa</th><th scope="col" role="columnheader">Estado</th>{% if es_gestor %}<th scope="col" role="columnheader">Usuarios</th>{% endif %}<th scope="col" role="columnheader">Acciones</th></tr></thead>
+      <tbody role="rowgroup">
         {% for resumen in resumen_empresas %}
-        <tr>
-          <td><a class="ss-sistema-enlace-empresa" href="{% url 'sistema_ficha_empresa' resumen.empresa.codigo %}">{{ resumen.empresa.nombre }}</a><small class="ss-sistema-secundario">{% if resumen.empresa.rut %}{{ resumen.empresa.rut }}{% else %}{{ resumen.empresa.codigo }}{% endif %}</small>{% if resumen.empresa.datos_pendientes %}<small class="ss-sistema-secundario">Ficha pendiente de completar</small>{% endif %}</td>
-          <td><span class="{% if resumen.empresa.activa %}badge-soft-success{% else %}badge-soft-warning{% endif %}">{% if resumen.empresa.activa %}Activa{% else %}Inactiva{% endif %}</span></td>
-          {% if es_gestor %}{% if resumen.disponible %}<td>{{ resumen.usuarios }}</td>{% else %}<td class="text-danger">Sin conexión con la empresa</td>{% endif %}{% endif %}
-          <td><div class="ss-sistema-acciones">
+        <tr role="row" data-empresa="{{ resumen.empresa.codigo }}">
+          <td class="ss-sistema-celda-principal" role="cell">
+            <a class="ss-sistema-enlace-empresa" href="{% url 'sistema_ficha_empresa' resumen.empresa.codigo %}">{{ resumen.empresa.nombre }}</a>
+            <small class="ss-sistema-secundario">{% if resumen.empresa.rut %}{{ resumen.empresa.rut }}{% else %}{{ resumen.empresa.codigo }}{% endif %}</small>
+            {% if resumen.host_acceso %}
+            <small class="ss-sistema-secundario ss-sistema-acceso-empresa">
+              {% if resumen.empresa.activa %}<a class="ss-sistema-enlace" href="{{ resumen.url_acceso }}" target="_blank" rel="noopener" aria-label="Abrir acceso de {{ resumen.empresa.nombre }} (nueva pestaña)">{{ resumen.host_acceso }}<i class="fa-solid fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i></a>{% else %}{{ resumen.host_acceso }}{% endif %}
+            </small>
+            {% endif %}
+            {% if resumen.empresa.datos_pendientes %}<small class="ss-sistema-secundario">Ficha pendiente de completar</small>{% endif %}
+          </td>
+          <td data-label="Estado" role="cell"><span class="ss-sistema-etiqueta {% if resumen.empresa.activa %}badge-soft-success{% else %}badge-soft-warning{% endif %}">{% if resumen.empresa.activa %}Activa{% else %}Inactiva{% endif %}</span></td>
+          {% if es_gestor %}<td data-label="Usuarios" role="cell">{% if resumen.disponible %}{{ resumen.usuarios }}{% else %}<span class="text-danger">Sin conexión con la empresa</span>{% endif %}</td>{% endif %}
+          <td class="ss-sistema-celda-acciones" data-label="Acciones" role="cell"><div class="ss-sistema-acciones ss-sistema-acciones-empresa">
             <a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_ficha_empresa' resumen.empresa.codigo %}">Ver ficha</a>
-            <a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_nueva_atencion' %}?empresa={{ resumen.empresa.codigo|urlencode }}">Abrir atención</a>
-            {% if es_gestor %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_usuarios' %}?empresa={{ resumen.empresa.codigo|urlencode }}">Usuarios</a>{% endif %}
-            {% if puede_gestionar_empresas %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'sistema_editar_empresa' resumen.empresa.codigo %}">Editar</a>{% endif %}
+            <details class="ss-sistema-menu-acciones">
+              <summary class="btn btn-sm btn-outline-secondary">Más acciones<span class="visually-hidden"> de {{ resumen.empresa.nombre }}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+              <ul class="ss-sistema-lista-acciones">
+                <li><a class="ss-sistema-enlace" href="{% url 'sistema_nueva_atencion' %}?empresa={{ resumen.empresa.codigo|urlencode }}">Abrir atención</a></li>
+                {% if es_gestor %}<li><a class="ss-sistema-enlace" href="{% url 'sistema_usuarios' %}?empresa={{ resumen.empresa.codigo|urlencode }}">Usuarios</a></li>{% endif %}
+                {% if puede_gestionar_empresas %}<li><a class="ss-sistema-enlace" href="{% url 'sistema_editar_empresa' resumen.empresa.codigo %}">Editar</a></li>{% endif %}
+              </ul>
+            </details>
           </div></td>
         </tr>
-        {% empty %}<tr><td colspan="4" class="text-center text-muted py-4">{% if request.GET.search %}No hay empresas que coincidan con la búsqueda.{% elif not es_gestor %}No tienes empresas asignadas a una atención abierta.{% else %}Todavía no hay empresas registradas. Usa Añadir empresa para comenzar.{% endif %}</td></tr>{% endfor %}
+        {% empty %}<tr role="row"><td colspan="{% if es_gestor %}4{% else %}3{% endif %}" class="ss-sistema-celda-vacia text-center text-muted py-4" role="cell">{% if request.GET.search %}No hay empresas que coincidan con la búsqueda.{% elif not es_gestor %}No tienes empresas asignadas a una atención abierta.{% else %}Todavía no hay empresas registradas. Usa Añadir empresa para comenzar.{% endif %}</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

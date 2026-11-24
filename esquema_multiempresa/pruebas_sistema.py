@@ -108,6 +108,56 @@ class PanelSmartStockTests(TestCase):
         self.assertContains(self.cliente.get('/sistema/'), 'href="/sistema/configuracion/"')
         self.assertEqual(self.cliente.get('/sistema/configuracion/').status_code, 200)
 
+    def test_resumen_cuenta_todo_el_soporte_abierto_y_distingue_empresas_inactivas(self):
+        Empresa.objects.filter(pk=self.motor.pk).update(activa=False)
+        for numero in range(9):
+            AtencionSoporte.objects.using('central').create(
+                empresa=self.fragua, asunto=f'Pendiente {numero}', motivo='Solicitud de prueba')
+        AtencionSoporte.objects.using('central').create(
+            empresa=self.fragua, tecnico=self.tecnico, asunto='Asignada', motivo='Solicitud de prueba')
+        AtencionSoporte.objects.using('central').create(
+            empresa=self.motor, asunto='Resuelta', motivo='Solicitud de prueba', estado='cerrada')
+        self.entrar(self.superusuario)
+        panel = self.cliente.get('/sistema/')
+        kpis = {kpi['etiqueta']: kpi for kpi in panel.context['kpis']}
+        self.assertEqual(kpis['Empresas activas']['valor'], 1)
+        self.assertEqual(kpis['Empresas activas']['detalle'], 'Registradas: 2 · Inactivas: 1')
+        self.assertEqual(kpis['Usuarios de empresas']['valor'], 2)
+        self.assertEqual(kpis['Personal activo de SmartStock']['valor'], 3)
+        self.assertEqual(kpis['Atenciones abiertas']['valor'], 10)
+        self.assertEqual(kpis['Atenciones abiertas']['detalle'], 'Sin responsable: 9')
+        self.assertTrue(kpis['Atenciones abiertas']['aviso'])
+        self.assertEqual(len(panel.context['atenciones']), 8)
+        self.assertContains(panel, 'href="/sistema/atenciones/?estado=abierta"')
+        self.assertContains(panel, 'href="http://la-fragua.localhost:8000/" target="_blank" rel="noopener"')
+        self.assertNotContains(panel, 'href="http://punto-motor.localhost:8000/"')
+        self.assertContains(panel, 'punto-motor.localhost:8000')
+        self.assertContains(panel, 'Sin responsable')
+        self.assertContains(panel, 'ss-sistema-estado-cerrado')
+        self.assertContains(panel, '<time datetime=')
+
+    def test_resumen_y_acciones_de_soporte_se_limitan_a_sus_asignaciones(self):
+        caso = AtencionSoporte.objects.using('central').create(
+            empresa=self.fragua, tecnico=self.soporte, asunto='Mi atención', motivo='Solicitud propia')
+        AtencionSoporte.objects.using('central').create(
+            empresa=self.motor, tecnico=self.tecnico, asunto='Atención ajena', motivo='Otra solicitud')
+        AtencionSoporte.objects.using('central').create(
+            empresa=self.motor, asunto='Pendiente ajena', motivo='Otra solicitud')
+        self.entrar(self.soporte)
+        panel = self.cliente.get('/sistema/')
+        kpis = {kpi['etiqueta']: kpi['valor'] for kpi in panel.context['kpis']}
+        self.assertEqual(kpis['Atenciones abiertas'], 1)
+        self.assertEqual(kpis['Empresas asignadas'], 1)
+        self.assertEqual([a.pk for a in panel.context['atenciones']], [caso.pk])
+        self.assertNotContains(panel, 'Atención ajena')
+        self.assertNotContains(panel, 'Pendiente ajena')
+        empresas = self.cliente.get('/sistema/empresas/')
+        self.assertContains(empresas, 'Más acciones')
+        self.assertContains(empresas, 'href="/sistema/atenciones/nueva/?empresa=la-fragua"')
+        self.assertNotContains(empresas, 'href="/sistema/usuarios/?empresa=la-fragua"')
+        self.assertNotContains(empresas, 'href="/sistema/empresas/la-fragua/editar/"')
+        self.assertNotContains(empresas, 'punto-motor.localhost:8000')
+
     def test_anonimo_y_usuario_de_empresa_no_acceden_al_panel_central(self):
         self.assertEqual(self.cliente.get('/sistema/usuarios/').status_code, 302)
         ajeno = APIClient(HTTP_HOST='la-fragua.localhost:8000')

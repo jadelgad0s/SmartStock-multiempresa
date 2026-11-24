@@ -2,7 +2,14 @@
 {% block acciones %}{% if puede_gestionar_empresas %}<a class="btn btn-primary" href="{% url 'sistema_nueva_empresa' %}"><i class="fa-solid fa-plus me-2" aria-hidden="true"></i>Añadir empresa</a>{% endif %}{% endblock %}
 {% block panel_content %}
 <section class="ss-dash-kpis" aria-label="Resumen del sistema">
-  {% for etiqueta, valor in kpis %}<div class="card ss-dash-kpi"><span class="kpi-title">{{ etiqueta }}</span><strong class="kpi-value">{{ valor|default_if_none:'—' }}</strong></div>{% endfor %}
+  {% for kpi in kpis %}
+  <div class="card ss-dash-kpi{% if kpi.aviso %} ss-sistema-kpi-aviso{% endif %}">
+    <span class="kpi-title">{{ kpi.etiqueta }}</span>
+    <strong class="kpi-value">{{ kpi.valor|default_if_none:'—' }}</strong>
+    {% if kpi.detalle %}<span class="ss-dash-kpi-note{% if kpi.aviso %} ss-sistema-pendiente{% endif %}">{{ kpi.detalle }}</span>{% endif %}
+    {% if kpi.url %}<a class="ss-sistema-enlace ss-sistema-kpi-enlace" href="{{ kpi.url }}">{{ kpi.enlace }}<i class="fa-solid fa-arrow-right ms-2" aria-hidden="true"></i></a>{% endif %}
+  </div>
+  {% endfor %}
 </section>
 {% if es_gestor %}<div class="ss-sistema-titulo-tabla"><h2>Empresas registradas</h2><a href="{% url 'sistema_empresas' %}">Ver todas</a></div>
 {% include 'sistema/tabla_empresas.html' %}{% endif %}

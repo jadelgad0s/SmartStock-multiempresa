@@ -54,3 +54,11 @@ jobs:
           path: /tmp/ss-catalogo-empresa-*.png
           if-no-files-found: ignore
           retention-days: 3
+      - name: Guardar capturas del panel central con datos de prueba
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-sistema-capturas
+          path: /tmp/ss-panel-sistema-*.png
+          if-no-files-found: ignore
+          retention-days: 3

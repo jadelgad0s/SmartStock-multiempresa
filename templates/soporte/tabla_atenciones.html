@@ -1,4 +1,21 @@
-<div class="card table-responsive"><table class="table table-custom mb-0"><thead><tr><th>Atención</th><th>Empresa</th><th>Responsable</th><th>Estado</th></tr></thead><tbody>
-{% for atencion in atenciones %}<tr><td><a href="{% url 'sistema_atencion' atencion.pk %}" data-ss-loading="Abriendo atención…">{{ atencion.asunto }}</a></td><td>{{ atencion.empresa.nombre }}</td><td>{{ atencion.tecnico.nombre_completo|default:'Pendiente de asignar' }}</td><td>{{ atencion.get_estado_display }}</td></tr>
-{% empty %}<tr><td colspan="4" class="text-muted text-center py-4">No hay atenciones en esta vista.</td></tr>{% endfor %}
-</tbody></table></div>
+<div class="card ss-sistema-tabla">
+  <table class="table table-custom ss-sistema-tabla-adaptable mb-0" role="table">
+    <caption class="visually-hidden">Atenciones de soporte y responsables</caption>
+    <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Atención</th><th scope="col" role="columnheader">Empresa</th><th scope="col" role="columnheader">Responsable</th><th scope="col" role="columnheader">Estado</th></tr></thead>
+    <tbody role="rowgroup">
+      {% for atencion in atenciones %}
+      <tr role="row">
+        <td class="ss-sistema-celda-principal" role="cell">
+          <a class="ss-sistema-enlace" href="{% url 'sistema_atencion' atencion.pk %}" data-ss-loading="Abriendo atención…">{{ atencion.asunto }}</a>
+          <small class="ss-sistema-secundario">Creada el <time datetime="{{ atencion.creada_en|date:'c' }}">{{ atencion.creada_en|date:'d/m/Y H:i' }}</time></small>
+        </td>
+        <td data-label="Empresa" role="cell">{{ atencion.empresa.nombre }}</td>
+        <td data-label="Responsable" role="cell">
+          {% if atencion.tecnico %}{{ atencion.tecnico.nombre_completo }}{% elif atencion.estado == 'abierta' %}<span class="ss-sistema-etiqueta badge-soft-warning"><i class="fa-solid fa-user-clock" aria-hidden="true"></i>Sin responsable</span>{% else %}<span class="text-muted">Sin responsable</span>{% endif %}
+        </td>
+        <td data-label="Estado" role="cell"><span class="ss-sistema-etiqueta {% if atencion.estado == 'abierta' %}ss-sistema-estado-abierto{% else %}ss-sistema-estado-cerrado{% endif %}">{{ atencion.get_estado_display }}</span></td>
+      </tr>
+      {% empty %}<tr role="row"><td colspan="4" class="ss-sistema-celda-vacia text-muted text-center py-4" role="cell">No hay atenciones en esta vista.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

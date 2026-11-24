@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.test import override_settings
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support.ui import Select
@@ -126,6 +127,12 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
             email='tecnico@example.invalid', password='Tecnico-clave-de-fixture',
             nombres='Equipo', apellidos='SmartStock',
         )
+        AtencionSoporte.objects.using('central').create(
+            empresa=Empresa.objects.get(codigo='la-fragua'), asunto='Revisión de acceso',
+            motivo='Solicitud de prueba para comprobar la atención pendiente')
+        AtencionSoporte.objects.using('central').create(
+            empresa=Empresa.objects.get(codigo='punto-motor'), asunto='Consulta resuelta',
+            motivo='Solicitud de prueba finalizada', estado='cerrada')
         navegador.switch_to.new_window('tab')
         navegador.get(self.live_server_url)
         navegador.find_element(By.ID, 'email').send_keys('tecnico@example.invalid')
@@ -135,6 +142,7 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertIn('Administración de SmartStock', navegador.find_element(By.TAG_NAME, 'body').text)
         self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, 'a[href="/sistema/configuracion/"]'))
         self.comprobar_menu(navegador)
+        self.comprobar_resumen_central(navegador, espera)
         navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').click()
         espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/mi-cuenta/')
         self.assertEqual(navegador.find_element(By.CSS_SELECTOR, 'a.ss-sistema-perfil').get_attribute('aria-current'), 'page')
@@ -332,6 +340,69 @@ class DosEmpresasEnChromeTests(StaticLiveServerTestCase):
         self.assertTrue(Auditoria.objects.using('central').filter(usuario=soporte, accion='CONSULTA',
                                                                objeto_id=str(Empresa.objects.get(codigo='la-fragua').pk)).exists())
         self.assertEqual(StockBodega.objects.using('repuestos').get(producto__sku='QA-001').cantidad_total, 4)
+
+    def comprobar_resumen_central(self, navegador, espera):
+        self.assertEqual(len(navegador.find_elements(By.CSS_SELECTOR, '.ss-dash-kpi')), 4)
+        self.assertIn('Sin responsable: 1', navegador.find_element(By.CSS_SELECTOR, '.ss-sistema-kpi-aviso').text)
+        self.assertTrue(navegador.find_elements(By.CSS_SELECTOR, '.ss-sistema-tabla time[datetime]'))
+        fila = navegador.find_element(By.CSS_SELECTOR, '[data-empresa="la-fragua"]')
+        acceso = fila.find_element(By.CSS_SELECTOR, '.ss-sistema-acceso-empresa a')
+        self.assertEqual(urlsplit(acceso.get_attribute('href')).hostname, 'la-fragua.localhost')
+        self.assertEqual(acceso.get_attribute('target'), '_blank')
+        self.assertFalse(fila.find_element(By.CSS_SELECTOR, 'a[href^="/sistema/atenciones/nueva/"]').is_displayed())
+        self.assertTrue(navegador.execute_script('''
+            return [...document.querySelectorAll('.ss-sistema-tabla-adaptable')].every(
+                tabla => tabla.getBoundingClientRect().width <= tabla.closest('.card').clientWidth + 1);
+        '''))
+        navegador.save_screenshot('/tmp/ss-panel-sistema-escritorio.png')
+        fila.find_element(By.TAG_NAME, 'summary').send_keys(Keys.ENTER)
+        espera.until(lambda d: d.find_element(By.CSS_SELECTOR, '[data-empresa="la-fragua"] details').get_attribute('open') is not None)
+        navegador.save_screenshot('/tmp/ss-panel-sistema-acciones.png')
+        fila.find_element(By.LINK_TEXT, 'Abrir atención').click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/atenciones/nueva/')
+        self.assertIn('empresa=la-fragua', navegador.current_url)
+        navegador.get(self.live_server_url + '/sistema/')
+        navegador.find_element(By.LINK_TEXT, 'Ver abiertas').click()
+        espera.until(lambda d: urlsplit(d.current_url).path == '/sistema/atenciones/')
+        self.assertIn('Revisión de acceso', navegador.find_element(By.TAG_NAME, 'body').text)
+        self.assertNotIn('Consulta resuelta', navegador.find_element(By.TAG_NAME, 'body').text)
+        navegador.get(self.live_server_url + '/sistema/')
+        navegador.find_element(By.CSS_SELECTOR, '.ss-theme-toggle').click()
+        espera.until(lambda d: d.find_element(By.TAG_NAME, 'html').get_attribute('data-bs-theme') == 'dark')
+        espera.until(lambda d: d.execute_script(
+            'return getComputedStyle(document.querySelector("summary")).color === "rgb(203, 213, 225)"'))
+        navegador.save_screenshot('/tmp/ss-panel-sistema-oscuro.png')
+        navegador.find_element(By.CSS_SELECTOR, '.ss-theme-toggle').click()
+        for ancho in (390, 320):
+            navegador.set_window_size(ancho, 844)
+            navegador.get(self.live_server_url + '/sistema/')
+            self.assertTrue(navegador.execute_script('return document.documentElement.scrollWidth <= innerWidth'))
+            self.assertTrue(navegador.execute_script('''
+                return [...document.querySelectorAll('.ss-sistema-tabla-adaptable')].every(
+                    tabla => tabla.getBoundingClientRect().width <= innerWidth);
+            '''))
+            if ancho == 390:
+                navegador.save_screenshot('/tmp/ss-panel-sistema-movil.png')
+            fila = navegador.find_element(By.CSS_SELECTOR, '[data-empresa="la-fragua"]')
+            ContactoEnChromeTests.pulsar(self, navegador, By.CSS_SELECTOR, '[data-empresa="la-fragua"] summary')
+            enlace = fila.find_element(By.LINK_TEXT, 'Usuarios')
+            self.assertTrue(enlace.is_displayed())
+            self.assertTrue(navegador.execute_script('''
+                const menu = arguments[0].getBoundingClientRect();
+                return menu.left >= 0 && menu.right <= innerWidth
+                    && document.documentElement.scrollWidth <= innerWidth;
+            ''', enlace))
+            if ancho == 390:
+                navegador.save_screenshot('/tmp/ss-panel-sistema-acciones-movil.png')
+                responsable = navegador.find_element(By.CSS_SELECTOR, '.ss-sistema-tabla .badge-soft-warning')
+                navegador.execute_script('arguments[0].scrollIntoView({block:"center",behavior:"instant"})', responsable)
+                espera.until(lambda d: d.execute_script('''
+                    const r=arguments[0].getBoundingClientRect();
+                    return r.top>=0 && r.bottom<=innerHeight;
+                ''', responsable))
+                navegador.save_screenshot('/tmp/ss-panel-sistema-soporte-movil.png')
+        navegador.set_window_size(1440, 1000)
+        navegador.get(self.live_server_url + '/sistema/')
 
 
 class SoporteEnChromeTests(StaticLiveServerTestCase):
