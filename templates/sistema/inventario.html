@@ -19,14 +19,14 @@
   <i class="fa-solid fa-warehouse" aria-hidden="true"></i>
   <h2>Sin bodegas activas</h2>
   <p>Esta empresa todavía no tiene bodegas activas configuradas. Revisa sus bodegas para continuar con la preparación del inventario.</p>
-  <a class="btn btn-outline-secondary" href="{% url 'sistema_bodegas' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver bodegas de la empresa</a>
+  {% if 'bodegas' in alcances_soporte %}<a class="btn btn-outline-secondary" href="{% url 'sistema_bodegas' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}{% if acceso_soporte %}&amp;atencion={{ acceso_soporte.atencion_id }}{% endif %}">Ver bodegas de la empresa</a>{% endif %}
 </section>
 {% elif not dashboard.estado_inventario.total %}
 <section class="card ss-sistema-vacio" role="status">
   <i class="fa-solid fa-box" aria-hidden="true"></i>
   <h2>Sin productos activos</h2>
   <p>El catálogo de esta empresa todavía no tiene productos activos. Revisa los productos registrados y coordina su carga o reactivación con el administrador de la empresa.</p>
-  <a class="btn btn-outline-secondary" href="{% url 'sistema_catalogo' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}">Ver catálogo de la empresa</a>
+  {% if 'catalogo' in alcances_soporte %}<a class="btn btn-outline-secondary" href="{% url 'sistema_catalogo' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}{% if acceso_soporte %}&amp;atencion={{ acceso_soporte.atencion_id }}{% endif %}">Ver catálogo de la empresa</a>{% endif %}
 </section>
 {% else %}
 <section class="ss-dash-kpis" aria-label="Inventario de la empresa">
@@ -36,7 +36,7 @@
   <div class="card ss-dash-kpi{% if dashboard.kpi_alertas %} ss-dash-kpi-danger{% endif %}"><span class="kpi-title">Productos agotados</span><strong class="kpi-value">{{ dashboard.kpi_alertas }}</strong><span class="ss-dash-kpi-note">{% if dashboard.kpi_alertas %}Requieren reposición{% else %}Sin productos agotados{% endif %}</span></div>
 </section>
 <div class="ss-sistema-graficos">
-  <section class="card"><h2 class="card-header">Unidades de entrada y salida</h2><div class="card-body"><p class="text-muted small">{{ dashboard.desde }} al {{ dashboard.hasta }} · Unidades por día</p>{% if hay_movimientos_periodo %}<div class="ss-sistema-grafico"><canvas id="sistema-grafico-movimientos" aria-label="Entradas y salidas del período" role="img"></canvas></div>{% else %}<div class="ss-sistema-vacio ss-sistema-vacio-grafico" role="status"><i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i><h2>Sin movimientos en el período</h2><p>No se registraron entradas ni salidas en esta bodega durante las fechas seleccionadas. Puedes consultar otro período.</p><a href="{% url 'sistema_movimientos' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}&amp;bodega={{ dashboard.bodega.id }}&amp;desde={{ dashboard.desde }}&amp;hasta={{ dashboard.hasta }}">Consultar movimientos</a></div>{% endif %}</div></section>
+  <section class="card"><h2 class="card-header">Unidades de entrada y salida</h2><div class="card-body"><p class="text-muted small">{{ dashboard.desde }} al {{ dashboard.hasta }} · Unidades por día</p>{% if hay_movimientos_periodo %}<div class="ss-sistema-grafico"><canvas id="sistema-grafico-movimientos" aria-label="Entradas y salidas del período" role="img"></canvas></div>{% else %}<div class="ss-sistema-vacio ss-sistema-vacio-grafico" role="status"><i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i><h2>Sin movimientos en el período</h2><p>No se registraron entradas ni salidas en esta bodega durante las fechas seleccionadas. Puedes consultar otro período.</p>{% if 'movimientos' in alcances_soporte %}<a href="{% url 'sistema_movimientos' %}?empresa={{ empresa_seleccionada.codigo|urlencode }}&amp;bodega={{ dashboard.bodega.id }}&amp;desde={{ dashboard.desde }}&amp;hasta={{ dashboard.hasta }}{% if acceso_soporte %}&amp;atencion={{ acceso_soporte.atencion_id }}{% endif %}">Consultar movimientos</a>{% endif %}</div>{% endif %}</div></section>
   <section class="card"><h2 class="card-header">Estado del inventario</h2><div class="card-body"><div class="ss-sistema-grafico ss-sistema-grafico-estado"><canvas id="sistema-grafico-estado" aria-label="Estado de productos en la bodega" role="img"></canvas></div><ul class="ss-sistema-leyenda"><li>Stock suficiente <strong>{{ dashboard.estado_inventario.suficiente }}</strong></li><li>Stock bajo <strong>{{ dashboard.estado_inventario.bajo }}</strong></li><li>Agotados <strong>{{ dashboard.estado_inventario.agotado }}</strong></li></ul></div></section>
 </div>
 <section class="card mt-4"><h2 class="card-header">Movimientos recientes</h2><div class="table-responsive"><table class="table table-custom mb-0"><thead><tr><th>Fecha / hora</th><th>Producto</th><th>Tipo</th><th>Unidades</th><th>Responsable</th></tr></thead><tbody>

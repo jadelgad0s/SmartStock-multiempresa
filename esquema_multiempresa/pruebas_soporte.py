@@ -402,6 +402,84 @@ class PermisosSoporteTests(TestCase):
         self.assertIsNone(creada.tecnico_id)
         self.assertEqual(creada.empresa_id, self.fragua.pk)
 
+    def test_ficha_guia_la_solicitud_aprobacion_y_cierre_con_historial_legible(self):
+        caso = self.caso()
+        ruta = f'/sistema/atenciones/{caso.pk}/'
+        inicial = self.central.get(ruta)
+        self.assertEqual(inicial.context['situacion']['codigo'], 'sin_solicitud')
+        self.assertTrue(inicial.context['abrir_formulario_acceso'])
+        self.assertNotContains(inicial, 'value="gestionar_usuarios"')
+        self.assertNotContains(inicial, 'value="exportar"')
+        acceso = self.solicitar(caso, alcances=['catalogo', 'bodegas'])
+        pendiente = self.central.get(ruta)
+        self.assertEqual(pendiente.context['situacion']['codigo'], 'pendiente')
+        self.assertFalse(pendiente.context['mostrar_formulario_acceso'])
+        self.aprobar(acceso)
+        autorizada = self.central.get(ruta)
+        self.assertEqual(autorizada.context['situacion']['codigo'], 'autorizado')
+        self.assertFalse(autorizada.context['abrir_formulario_acceso'])
+        self.assertTrue(autorizada.context['enlaces_autorizados'])
+        self.assertContains(autorizada, 'Solicitar otros permisos')
+        self.assertNotContains(autorizada, 'Una atención abierta no concede acceso')
+        aprobacion = next(r for r in autorizada.context['historial'] if r['titulo'] == 'Autorización aprobada')
+        self.assertEqual(aprobacion['persona'], self.fragua.nombre)
+        self.assertIn(str(acceso.pk), aprobacion['evento'].descripcion)
+        self.assertContains(autorizada, 'Ver detalles')
+        self.assertEqual(self.post(self.central, ruta, {'accion': 'cerrar',
+            'resolucion': 'Se revisaron las existencias solicitadas por el cliente.'}).status_code, 302)
+        finalizada = self.central.get(ruta)
+        self.assertEqual(finalizada.context['situacion']['codigo'], 'finalizada')
+        self.assertFalse(finalizada.context['enlaces_autorizados'])
+        self.assertFalse(finalizada.context['mostrar_formulario_acceso'])
+
+    def test_ficha_distingue_rechazo_y_vencimiento_de_la_atencion_abierta(self):
+        caso = self.caso()
+        acceso = self.solicitar(caso)
+        self.assertEqual(self.post(self.cliente_fragua, '/soporte/', {'accion': 'rechazar', 'acceso': str(acceso.pk)}).status_code, 302)
+        pagina = self.central.get(f'/sistema/atenciones/{caso.pk}/')
+        self.assertEqual(pagina.context['situacion']['codigo'], 'rechazado')
+        acceso = self.solicitar(caso)
+        self.aprobar(acceso)
+        ahora = timezone.now()
+        AccesoSoporte.objects.using('central').filter(pk=acceso.pk).update(
+            decidido_en=ahora - timedelta(minutes=31), expira_en=ahora - timedelta(minutes=1))
+        pagina = self.central.get(f'/sistema/atenciones/{caso.pk}/')
+        self.assertEqual(pagina.context['situacion']['codigo'], 'vencido')
+        self.assertEqual(pagina.context['atencion'].estado, 'abierta')
+        self.assertFalse(pagina.context['enlaces_autorizados'])
+        self.assertTrue(pagina.context['abrir_formulario_acceso'])
+
+    def test_empresa_prioriza_pendientes_antiguas_y_no_mezcla_otra_empresa(self):
+        antigua = self.caso()
+        antigua.creada_en = timezone.now() - timedelta(days=90)
+        antigua.save(using='central')
+        self.solicitar(antigua)
+        AtencionSoporte.objects.using('central').bulk_create([
+            AtencionSoporte(empresa=self.fragua, asunto=f'Consulta terminada {i}', motivo='Solicitud de prueba', estado='cerrada')
+            for i in range(55)])
+        ajena = self.caso(self.plataforma, self.motor)
+        pagina = self.cliente_fragua.get('/soporte/')
+        self.assertEqual(pagina.context['atenciones'][0].pk, antigua.pk)
+        self.assertEqual(pagina.context['resumen_soporte'], {'pendientes': 1, 'abiertas': 1, 'cerradas': 55})
+        self.assertEqual(len(pagina.context['atenciones']), 50)
+        self.assertTrue(all(a.empresa_id == self.fragua.pk for a in pagina.context['atenciones']))
+        self.assertNotIn(ajena.pk, [a.pk for a in pagina.context['atenciones']])
+
+    def test_consultas_distinguen_inventario_vacio_y_filtros_sin_coincidencias(self):
+        acceso = self.conceder(alcances=['catalogo', 'bodegas', 'inventario'])
+        parametros = {'empresa': 'la-fragua', 'atencion': str(acceso.atencion_id), 'search': 'Sin coincidencias'}
+        for modulo, titulo in (('catalogo', 'Sin productos que coincidan'), ('bodegas', 'Sin bodegas que coincidan')):
+            pagina = self.central.get(f'/sistema/{modulo}/', parametros)
+            self.assertEqual(pagina.context['estado_vacio']['titulo'], titulo)
+            self.assertIn('atencion=' + str(acceso.atencion_id), pagina.context['url_limpiar_consulta'])
+            self.assertIn('empresa=la-fragua', pagina.context['url_limpiar_consulta'])
+        StockBodega.objects.using('ferreteria').all().delete()
+        Producto.objects.using('ferreteria').all().delete()
+        Bodega.objects.using('ferreteria').all().delete()
+        for modulo, titulo in (('catalogo', 'Sin productos registrados'), ('bodegas', 'Sin bodegas registradas')):
+            pagina = self.central.get(f'/sistema/{modulo}/', {'empresa': 'la-fragua', 'atencion': str(acceso.atencion_id)})
+            self.assertEqual(pagina.context['estado_vacio']['titulo'], titulo)
+
     def test_cliente_crea_consulta_sin_elegir_otra_empresa_ni_un_tecnico(self):
         respuesta = self.post(self.cliente_fragua, '/soporte/', {'accion': 'nueva', 'asunto': 'Ayuda de mi empresa',
             'motivo': 'Necesito revisar las existencias', 'empresa': self.motor.pk, 'tecnico': self.raiz.pk})

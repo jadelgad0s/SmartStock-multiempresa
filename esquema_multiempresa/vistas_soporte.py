@@ -20,6 +20,7 @@ from .notificaciones import confirmar_guardado
 from .permisos import es_administrador_plataforma, registrar_empresa_consultada, requiere_administrador_plataforma, requiere_personal
 from .sistema import contexto_sistema, empresa_del_panel, paginar
 from .soporte_operaciones import avisar_tecnico, revocar_accesos, solicitar_acceso
+from .presentacion_soporte import presentar_evento_soporte, situacion_atencion
 
 
 @requiere_personal
@@ -140,11 +141,19 @@ def detalle_atencion(request, atencion_id):
             ruta = 'sistema_' + ('sms' if alcance == 'sms' else alcance)
             enlaces.append((nombre, reverse(ruta) + f'?empresa={atencion.empresa.codigo}&atencion={atencion.pk}'))
     contexto = contexto_sistema(request, 'atenciones', 'Atención de soporte', atencion.empresa)
-    contexto.update(atencion=atencion, solicitudes=list(atencion.accesos.select_related('tecnico').all()),
+    solicitudes = list(atencion.accesos.select_related('tecnico').all())
+    situacion = situacion_atencion(atencion, solicitudes)
+    puede_solicitar = atencion.tecnico_id == request.user.pk and atencion.estado == 'abierta' and atencion.empresa.activa
+    eventos = list(Auditoria.objects.using('central').filter(modelo='AtencionSoporte', objeto_id=str(atencion.pk))
+                   .select_related('usuario').order_by('-fecha_creacion', '-id')[:20])
+    contexto.update(atencion=atencion, solicitudes=solicitudes, situacion=situacion,
+        ocultar_aviso_acceso=True,
         formulario_acceso=acceso_form, formulario_cierre=cierre, formulario_asignacion=asignar,
-        puede_solicitar=atencion.tecnico_id == request.user.pk and atencion.estado == 'abierta' and atencion.empresa.activa,
+        puede_solicitar=puede_solicitar,
+        mostrar_formulario_acceso=puede_solicitar and not situacion['pendiente'],
+        abrir_formulario_acceso=not situacion['vigente'] or bool(acceso_form.errors),
         enlaces_autorizados=enlaces, error_consulta=error,
-        eventos=list(Auditoria.objects.using('central').filter(modelo='AtencionSoporte', objeto_id=str(atencion.pk)).order_by('-fecha_creacion')[:20]))
+        eventos=eventos, historial=[presentar_evento_soporte(evento) for evento in eventos])
     registrar_empresa_consultada(request, atencion.empresa, 'fallida' if error else 'completada')
     return render(request, 'soporte/atencion.html', contexto)
 
