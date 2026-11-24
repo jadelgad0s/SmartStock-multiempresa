@@ -1,0 +1,20 @@
+{% extends 'sistema/base.html' %}
+{% block panel_content %}
+<p class="ss-soporte-introduccion">Selecciona la empresa y describe el problema para iniciar su seguimiento.</p>
+<form method="post" class="card ss-sistema-formulario ss-soporte-nueva" data-ss-loading="Creando atención…">
+  {% csrf_token %}
+  {% include 'soporte/campo_contexto.html' %}
+  <p class="ss-soporte-nota">Los campos con <span class="text-danger">*</span> son obligatorios.</p>
+  {% if formulario.non_field_errors %}<div class="alert alert-danger" role="alert">{{ formulario.non_field_errors }}</div>{% endif %}
+  <div class="ss-sistema-campos">
+    {% for campo in formulario %}
+    <div{% if campo.name == 'asunto' or campo.name == 'motivo' %} class="ss-soporte-campo-ancho"{% endif %}>
+      <label for="{{ campo.id_for_label }}">{{ campo.label }}{% if campo.field.required %}<span class="text-danger" aria-hidden="true"> *</span>{% elif not campo.field.disabled %} <span class="text-muted">(opcional)</span>{% endif %}</label>{{ campo }}
+      {% if campo.help_text %}<div class="form-text" id="{{ campo.id_for_label }}_helptext">{{ campo.help_text }}</div>{% endif %}
+      {% if campo.errors %}<div class="text-danger small" role="alert">{{ campo.errors }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="ss-sistema-acciones"><button id="crear-atencion" type="submit" class="btn btn-primary">Crear atención</button><a class="btn btn-outline-secondary" href="{{ volver }}">Cancelar</a></div>
+</form>
+{% endblock %}

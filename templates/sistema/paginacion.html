@@ -1,9 +1,11 @@
 {% if pagina %}
 <div class="ss-sistema-paginacion">
-  <p class="text-muted small mb-0" role="status">{{ pagina.start_index }}–{{ pagina.end_index }} de {{ pagina.paginator.count }} registros · Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</p>
+  <p class="text-muted small mb-0" role="status">{{ pagina.start_index }}–{{ pagina.end_index }} de {{ pagina.paginator.count }} registro{{ pagina.paginator.count|pluralize }}{% if pagina.has_other_pages or not ocultar_navegacion_unica %} · Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}{% endif %}</p>
+  {% if pagina.has_other_pages or not ocultar_navegacion_unica %}
   <nav class="d-flex gap-2" aria-label="Páginas del listado">
     {% if pagina.has_previous %}<a class="btn btn-outline-secondary" href="?{{ filtros_pagina }}&amp;page={{ pagina.previous_page_number }}">Anterior</a>{% else %}<button class="btn btn-outline-secondary" disabled>Anterior</button>{% endif %}
     {% if pagina.has_next %}<a class="btn btn-outline-secondary" href="?{{ filtros_pagina }}&amp;page={{ pagina.next_page_number }}">Siguiente</a>{% else %}<button class="btn btn-outline-secondary" disabled>Siguiente</button>{% endif %}
   </nav>
+  {% endif %}
 </div>
 {% endif %}

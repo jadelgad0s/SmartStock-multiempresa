@@ -50,8 +50,8 @@ def empresas_del_menu(request):
     return request._empresas_menu
 
 
-def contexto_sistema(request, modulo, titulo, empresa=None):
-    if empresa is None and request.GET.get('empresa'):
+def contexto_sistema(request, modulo, titulo, empresa=None, *, resolver_empresa=True):
+    if resolver_empresa and empresa is None and request.GET.get('empresa'):
         empresa = empresa_del_panel(request.GET['empresa'], request)
     gestor = es_administrador_plataforma(request.user)
     alcances = alcances_actuales(request)

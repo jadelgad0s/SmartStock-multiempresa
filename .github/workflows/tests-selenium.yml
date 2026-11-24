@@ -62,3 +62,11 @@ jobs:
           path: /tmp/ss-panel-sistema-*.png
           if-no-files-found: ignore
           retention-days: 3
+      - name: Guardar capturas de atenciones de soporte con datos de prueba
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: atenciones-soporte-capturas
+          path: /tmp/ss-atenciones-*.png
+          if-no-files-found: ignore
+          retention-days: 3

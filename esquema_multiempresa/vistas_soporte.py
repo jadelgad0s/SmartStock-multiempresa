@@ -2,6 +2,7 @@ from smtplib import SMTPException
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -13,7 +14,7 @@ from apps.usuarios.models import Rol, Usuario
 from .autorizacion_soporte import (LECTURAS, acceso_para, atenciones_visibles, alcances_actuales,
     auditar_soporte, empresas_visibles, parametros_atencion)
 from .cuentas_empresa import enviar_enlace, puede_invitar_inicial
-from .forms_soporte import AtencionForm, InvitacionEmpresaForm, ResolucionForm, SolicitudAccesoForm
+from .forms_soporte import AtencionForm, FiltroAtencionesForm, InvitacionEmpresaForm, ResolucionForm, SolicitudAccesoForm
 from .models import AccesoSoporte, AtencionSoporte
 from .notificaciones import confirmar_guardado
 from .permisos import es_administrador_plataforma, registrar_empresa_consultada, requiere_administrador_plataforma, requiere_personal
@@ -24,12 +25,27 @@ from .soporte_operaciones import avisar_tecnico, revocar_accesos, solicitar_acce
 @requiere_personal
 @require_GET
 def atenciones_sistema(request):
-    contexto = contexto_sistema(request, 'atenciones', 'Atenciones de soporte')
+    contexto = contexto_sistema(request, 'atenciones', 'Atenciones de soporte', resolver_empresa=False)
     consulta = atenciones_visibles(request.user)
-    if request.GET.get('estado') in ('abierta', 'cerrada'):
-        consulta = consulta.filter(estado=request.GET['estado'])
-    if request.GET.get('empresa'):
-        consulta = consulta.filter(empresa__codigo=request.GET['empresa'])
+    formulario = FiltroAtencionesForm(request.GET, actor=request.user)
+    if formulario.is_valid():
+        filtros = formulario.cleaned_data
+        if filtros['search']:
+            consulta = consulta.filter(asunto__icontains=filtros['search'])
+        if filtros['empresa']:
+            consulta = consulta.filter(empresa=filtros['empresa'])
+        if filtros['estado']:
+            consulta = consulta.filter(estado=filtros['estado'])
+    else:
+        consulta = consulta.none()
+    contexto.update(
+        formulario_filtros=formulario,
+        filtros_atenciones_activos=any(request.GET.get(campo) for campo in formulario.fields),
+        resumen_atenciones=consulta.aggregate(
+            abiertas=Count('pk', filter=Q(estado='abierta')),
+            cerradas=Count('pk', filter=Q(estado='cerrada')),
+            sin_responsable=Count('pk', filter=Q(estado='abierta', tecnico__isnull=True))),
+    )
     contexto['atenciones'] = list(paginar(request, contexto, consulta))
     return render(request, 'soporte/atenciones.html', contexto)
 
@@ -50,7 +66,7 @@ def nueva_atencion(request):
         return redirect('sistema_atencion', atencion_id=atencion.pk)
     contexto = contexto_sistema(request, 'atenciones', 'Nueva atención de soporte')
     contexto.update(formulario=formulario, volver=reverse('sistema_atenciones'))
-    return render(request, 'sistema/formulario.html', contexto)
+    return render(request, 'soporte/nueva_atencion.html', contexto)
 
 
 @requiere_personal
