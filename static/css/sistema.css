@@ -84,6 +84,37 @@
 .ss-sistema-vacio h2 { font-size: 1.05rem; }
 .ss-sistema-vacio p { max-width: 620px; margin: 0; color: var(--slate-600); font-size: .9rem; }
 .ss-sistema-vacio-grafico { min-height: 280px; padding: 1.5rem .5rem; }
+/* Resumen central y tablas compartidas de empresas y soporte. */
+.ss-sistema-kpi-aviso { border-top: 3px solid #d97706; }
+.ss-sistema-pendiente { color: #92400e; font-weight: 600; }
+.ss-sistema-kpi-enlace { margin-top: auto; padding-top: .25rem; font-size: .8rem; width: fit-content; }
+.ss-sistema .ss-sistema-enlace { color: var(--teal-600); text-underline-offset: .18em; }
+.ss-sistema .ss-sistema-enlace:hover { color: var(--teal-700); }
+.ss-sistema .ss-sistema-enlace-empresa { color: var(--dash-ink); }
+.ss-sistema-acceso-empresa { max-width: 28rem; font-size: .75rem; }
+.ss-sistema-tabla { overflow: hidden; }
+.ss-sistema-tabla tbody tr:last-child td { border-bottom: 0; }
+.ss-sistema-etiqueta { display: inline-flex; align-items: center; gap: .4rem; border-radius: 1rem; padding: .35em .7em; font-size: .75rem; font-weight: 600; line-height: 1.4; }
+.ss-sistema-estado-abierto { color: #115e59; background: #ccfbf1; }
+.ss-sistema-estado-cerrado { color: #475569; background: #f1f5f9; }
+.ss-sistema-acciones-empresa { align-items: start; }
+.ss-sistema-menu-acciones { width: 10rem; max-width: 100%; }
+.ss-sistema-menu-acciones > summary { display: inline-flex; align-items: center; justify-content: center; gap: .6rem; width: 100%; list-style: none; cursor: pointer; }
+.ss-sistema-menu-acciones > summary::-webkit-details-marker { display: none; }
+.ss-sistema-menu-acciones[open] > summary > i { transform: rotate(180deg); }
+.ss-sistema-menu-acciones > summary:focus-visible, .ss-sistema .ss-sistema-enlace:focus-visible { outline: 2px solid var(--teal-600); outline-offset: 3px; }
+/* El menú ocupa su espacio en la fila para que la tabla nunca lo recorte. */
+.ss-sistema-lista-acciones { list-style: none; padding: .25rem; margin: .5rem 0 0; border: 1px solid var(--dash-line); border-radius: .5rem; background: var(--dash-panel); }
+.ss-sistema-lista-acciones a { display: flex; align-items: center; min-height: 44px; padding: .5rem .7rem; border-radius: .3rem; text-decoration: none; }
+.ss-sistema-lista-acciones a:hover { background: var(--teal-50); }
+:root[data-bs-theme='dark'] .ss-sistema .ss-sistema-enlace { color: #8cf5e6; }
+:root[data-bs-theme='dark'] .ss-sistema .ss-sistema-enlace:hover { color: #ccfbf1; }
+:root[data-bs-theme='dark'] .ss-sistema-pendiente { color: #fcd34d; }
+:root[data-bs-theme='dark'] .ss-sistema-lista-acciones a:hover { background: #194743; }
+:root[data-bs-theme='dark'] .ss-sistema-etiqueta.badge-soft-success { background: #163e31; color: #a7f3d0; }
+:root[data-bs-theme='dark'] .ss-sistema-etiqueta.badge-soft-warning { background: #493519; color: #fde68a; }
+:root[data-bs-theme='dark'] .ss-sistema-estado-abierto { background: #194743; color: #8cf5e6; }
+:root[data-bs-theme='dark'] .ss-sistema-estado-cerrado { background: #263447; color: #cbd5e1; }
 @media (max-width: 991.98px) {
   .ss-sistema > .ss-sidebar { width: min(290px, 85vw); }
   .ss-sistema .nav-link.sidebar-item { min-height: 44px; }
@@ -103,4 +134,15 @@
   .ss-sistema-formulario { padding: 1rem; }
   .ss-sistema-check { padding-top: 0; }
   .ss-sistema-periodo { margin-left: 0; }
+}
+@media (max-width: 767.98px) {
+  .ss-sistema-tabla-adaptable, .ss-sistema-tabla-adaptable tbody { display: block; width: 100%; }
+  .ss-sistema-tabla-adaptable thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .ss-sistema-tabla-adaptable tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--dash-line); }
+  .ss-sistema-tabla-adaptable tbody tr:last-child { border-bottom: 0; }
+  .ss-sistema .ss-sistema-tabla-adaptable td { display: block; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
+  .ss-sistema-tabla-adaptable td[data-label]::before { content: attr(data-label); display: block; margin-bottom: .35rem; color: var(--dash-muted); font-size: .72rem; font-weight: 600; }
+  .ss-sistema-celda-principal, .ss-sistema-celda-acciones, .ss-sistema-celda-vacia { grid-column: 1 / -1; }
+  .ss-sistema-acciones-empresa { gap: .5rem; }
+  .ss-sistema-acciones-empresa .btn { min-height: 44px; }
 }

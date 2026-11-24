@@ -1,5 +1,5 @@
 """Panel web del equipo de SmartStock y gestión de las cuentas de cada empresa."""
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from smtplib import SMTPException
 
 from django.conf import settings
@@ -20,6 +20,7 @@ from rest_framework.exceptions import ValidationError
 from .forms import CuentaTecnicaForm, EmpresaPanelForm, UsuarioEmpresaForm
 from .models import Empresa
 from .models import AtencionSoporte, AccesoSoporte, BuzonContacto
+from .acceso import direccion_empresa
 from .autorizacion_soporte import (acceso_para, accesos_vigentes, alcances_actuales, atenciones_visibles,
     auditar_soporte, empresas_visibles, empresa_para_consulta, parametros_atencion)
 from .cuentas_empresa import enviar_enlace, puede_invitar_inicial
@@ -137,6 +138,9 @@ def resumen_empresa(empresa, request=None):
     if request is not None:
         registrar_empresa_consultada(request, empresa)
     datos = {'empresa': empresa, 'disponible': True}
+    if request is not None:
+        url_acceso = direccion_empresa(request, empresa) + '/'
+        datos.update(url_acceso=url_acceso, host_acceso=urlsplit(url_acceso).netloc)
     if request is not None and not es_administrador_plataforma(request.user):
         # La ficha asignada procede del directorio central; consultar las
         # cuentas del cliente requiere su autorización específica.
@@ -171,20 +175,32 @@ def inicio_sistema(request):
     gestor = es_administrador_plataforma(request.user)
     resumenes = [resumen_empresa(empresa, request) for empresa in empresas] if gestor else []
     disponibles = all(fila['disponible'] for fila in resumenes)
+    atenciones = atenciones_visibles(request.user)
+    abiertas = atenciones.filter(estado='abierta').aggregate(
+        total=Count('pk'), sin_responsable=Count('pk', filter=Q(tecnico__isnull=True)))
+    activas = sum(empresa.activa for empresa in empresas)
     contexto.update(
         resumen_empresas=resumenes,
-        atenciones=list(atenciones_visibles(request.user)[:8]),
+        atenciones=list(atenciones[:8]),
         kpis=[
-            ('Empresas registradas', len(empresas)),
-            ('Empresas activas', sum(empresa.activa for empresa in empresas)),
-            ('Usuarios de empresas', sum(fila.get('usuarios', 0) for fila in resumenes) if disponibles else None),
-            ('Personal activo de SmartStock', sum(es_cuenta_interna(cuenta) for cuenta in
-                Usuario.objects.using('central').filter(is_staff=True, activo=True).select_related('rol'))),
+            {'etiqueta': 'Empresas activas', 'valor': activas,
+             'detalle': f'Registradas: {len(empresas)} · Inactivas: {len(empresas) - activas}'},
+            {'etiqueta': 'Usuarios de empresas',
+             'valor': sum(fila.get('usuarios', 0) for fila in resumenes) if disponibles else None,
+             'detalle': 'Cuentas de las empresas registradas' if disponibles else 'Consulta temporalmente no disponible'},
+            {'etiqueta': 'Atenciones abiertas', 'valor': abiertas['total'],
+             'detalle': f'Sin responsable: {abiertas["sin_responsable"]}',
+             'aviso': bool(abiertas['sin_responsable']),
+             'url': reverse('sistema_atenciones') + '?estado=abierta', 'enlace': 'Ver abiertas'},
+            {'etiqueta': 'Personal activo de SmartStock',
+             'valor': sum(es_cuenta_interna(cuenta) for cuenta in
+                Usuario.objects.using('central').filter(is_staff=True, activo=True).select_related('rol')),
+             'detalle': 'Equipo de la plataforma'},
         ] if gestor else [
-            ('Atenciones abiertas', atenciones_visibles(request.user).filter(estado='abierta').count()),
-            ('Empresas asignadas', len(empresas)),
-            ('Solicitudes pendientes', AccesoSoporte.objects.using('central').filter(tecnico=request.user, estado='pendiente').count()),
-            ('Accesos vigentes', accesos_vigentes(request.user).count()),
+            {'etiqueta': 'Atenciones abiertas', 'valor': abiertas['total']},
+            {'etiqueta': 'Empresas asignadas', 'valor': len(empresas)},
+            {'etiqueta': 'Solicitudes pendientes', 'valor': AccesoSoporte.objects.using('central').filter(tecnico=request.user, estado='pendiente').count()},
+            {'etiqueta': 'Accesos vigentes', 'valor': accesos_vigentes(request.user).count()},
         ],
     )
     return render(request, 'sistema/inicio.html', contexto)
