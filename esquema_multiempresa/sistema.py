@@ -72,7 +72,7 @@ def contexto_sistema(request, modulo, titulo, empresa=None):
     if empresa is not None and modulo not in ('cuentas', 'mi_cuenta'):
         registrar_empresa_consultada(request, empresa)
     secciones = [
-        ('Visión general', [('inicio', 'Dashboard', 'chart-line', 'sistema_inicio')]),
+        ('Visión general', [('inicio', 'Resumen general', 'chart-line', 'sistema_inicio')]),
         ('Gestión', [('empresas', 'Empresas' if gestor else 'Empresas asignadas', 'building', 'sistema_empresas'),
                      ('usuarios', 'Usuarios de empresas', 'users', 'sistema_usuarios'),
                      ('atenciones', 'Atenciones de soporte', 'headset', 'sistema_atenciones')]),
