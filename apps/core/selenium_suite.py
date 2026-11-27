@@ -196,6 +196,15 @@ class SmartStockSeleniumTests(StaticLiveServerTestCase):
         self.espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '#listaMovimientos button[data-detalle]'))).click()
         self.espera.until(EC.text_to_be_present_in_element((By.ID, 'detalleMovLotes'), 'Recepción antigua'))
         self.assertIn('Recepción nueva', self.navegador.find_element(By.ID, 'detalleMovLotes').text)
+        self.navegador.set_window_size(390, 844)
+        self.navegador.get(self.live_server_url + '/productos/')
+        self.esperar_modulo('/productos/')
+        self.espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-accion="detalle"]'))).click()
+        self.clic('verLotesProducto')
+        self.espera.until(EC.text_to_be_present_in_element((By.ID, 'filasLotesProducto'), 'Recepción antigua'))
+        posicion = self.navegador.execute_script("const r = document.getElementById('verLotesProducto').getBoundingClientRect(); return [r.top, r.bottom, innerHeight];")
+        self.assertGreaterEqual(posicion[0], 0)
+        self.assertLessEqual(posicion[1], posicion[2])
 
     def test_salida_sin_stock_suficiente_no_se_puede_confirmar(self):
         stock = self.preparar_stock()

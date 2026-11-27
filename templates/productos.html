@@ -166,7 +166,6 @@
     <div class="modal-header"><h5 class="modal-title" id="tituloDetalleProducto">Detalle del producto</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
     <div class="modal-body"><p id="estadoDetalleProducto" role="status">Cargando producto...</p><button type="button" id="reintentarDetalleProducto" class="btn btn-outline-secondary mb-3" hidden>Reintentar</button>
         <div id="datosDetalleProducto" hidden><h6 id="detalleProductoNombre" class="fw-bold"></h6><dl class="ss-product-detail"><dt>SKU</dt><dd id="detalleProductoSku"></dd><dt>Estado</dt><dd id="detalleProductoEstado"></dd><dt>Precio de referencia</dt><dd id="detalleProductoPrecio"></dd><dt>Creación</dt><dd id="detalleProductoCreado"></dd><dt>Última modificación</dt><dd id="detalleProductoModificado"></dd></dl><h6>Descripción</h6><p id="detalleProductoDescripcion" class="ss-product-description"></p><p id="detalleProductoFuente" class="small text-muted" hidden></p><h6>Códigos asociados</h6><ul id="detalleProductoCodigos" class="ss-product-codes-detail"></ul><h6>Existencias en bodegas activas</h6><p class="text-muted small">Un producto sin registro de stock en una bodega se muestra con 0 unidades.</p><div class="table-responsive"><table class="table table-sm ss-product-stock-detail"><thead><tr><th>Bodega</th><th>Stock</th><th>Mínimo</th><th>Disponibilidad</th></tr></thead><tbody id="detalleProductoStock"></tbody></table></div></div>
-    </div>
     <section id="panelLotesProducto" class="px-3 pb-3" hidden>
         <h6>Lotes por bodega</h6>
         <p class="small text-muted">FIFO utiliza primero el saldo anterior y después las recepciones más antiguas. Los costos sin registrar se muestran expresamente.</p>
@@ -174,6 +173,7 @@
         <div id="filasLotesProducto" class="table-responsive"></div>
         <div id="paginasLotesProducto" hidden><button id="lotesProductoAnterior" type="button" class="btn btn-sm btn-outline-secondary">Anterior</button><button id="lotesProductoSiguiente" type="button" class="btn btn-sm btn-outline-secondary">Siguiente</button></div>
     </section>
+    </div>
     <div class="modal-footer">
         <button id="verLotesProducto" type="button" class="btn btn-outline-secondary" disabled>Ver lotes FIFO</button>
         <a id="verHistorialProducto" class="btn btn-outline-primary" hidden>Ver historial</a>
