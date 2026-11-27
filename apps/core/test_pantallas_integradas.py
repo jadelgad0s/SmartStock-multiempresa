@@ -38,7 +38,8 @@ class PantallasIntegradasTests(SimpleTestCase):
         self.assertIn('id="movBodega"', html)
         self.assertIn('for="movBodega"', html)
         self.assertIn('id="reintentarStockMovimiento"', html)
-        self.assertIn('js/movimientos.js?v=carga-1', html)
+        self.assertIn('js/movimientos.js?v=fifo-1', html)
+        self.assertIn('id="movCostoUnitario"', html)
 
     def test_logotipo_es_el_mismo_en_modulos(self):
         for ruta in [

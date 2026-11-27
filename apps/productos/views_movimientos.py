@@ -1,5 +1,6 @@
 """Registro de stock e historial paginado del módulo de Movimientos."""
 from django.db.models import Q, Sum
+from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.decorators import api_view, permission_classes
@@ -16,6 +17,7 @@ from .views_notificaciones import notificar_administradores
 from .alertas_sms import evaluar_alerta_sms
 from .bodegas import bodega_consulta, obtener_bodega, stock_para_operar
 from .consulta_codigos import productos_registrados
+from .fifo import ConflictoLotes, datos_asignaciones, descontar_lotes, preparar_lotes, recibir_lote
 
 MAX_CANTIDAD = 2_147_483_647
 
@@ -50,6 +52,14 @@ class CrearMovimientoSerializer(serializers.Serializer):
     tipo_movimiento = serializers.ChoiceField(choices=('ENTRADA', 'SALIDA'))
     cantidad = serializers.IntegerField(min_value=1, max_value=MAX_CANTIDAD)
     observacion = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    referencia_lote = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    costo_unitario = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, required=False, allow_null=True, default=None)
+    solicitud_id = serializers.UUIDField(required=False)
+
+    def validate(self, datos):
+        if datos['tipo_movimiento'] == 'SALIDA' and (datos['referencia_lote'] or datos['costo_unitario'] is not None):
+            raise serializers.ValidationError('La referencia y el costo del lote corresponden a las entradas.')
+        return datos
 
 
 def consulta_movimientos():
@@ -58,7 +68,7 @@ def consulta_movimientos():
     ).order_by('-movimiento__fecha_creacion', '-id')
 
 
-def datos_movimiento(detalle):
+def datos_movimiento(detalle, incluir_lotes=False):
     movimiento = detalle.movimiento
     fecha = timezone.localtime(movimiento.fecha_creacion)
     return {
@@ -76,7 +86,28 @@ def datos_movimiento(detalle):
         'bodega': movimiento.bodega.nombre,
         'bodega_id': movimiento.bodega_id,
         'documento_referencia': movimiento.documento_referencia,
+        'lotes': datos_asignaciones(detalle.lotes.select_related('lote').order_by('id')) if incluir_lotes else [],
     }
+
+
+def firma_movimiento(info):
+    return {**{campo: info.get(campo) for campo in ('producto_id', 'bodega_id', 'tipo_movimiento', 'cantidad', 'observacion', 'referencia_lote')},
+            'costo_unitario': format(info['costo_unitario'], '.2f') if info['costo_unitario'] is not None else None}
+
+
+def respuesta_movimiento_anterior(request, info):
+    if not info.get('solicitud_id'):
+        return None
+    movimiento = Movimiento.objects.filter(solicitud_id=info['solicitud_id']).first()
+    if movimiento is None:
+        return None
+    if movimiento.usuario_id != request.user.pk or movimiento.confirmacion.get('datos') != firma_movimiento(info):
+        return error_response('La solicitud ya fue utilizada con otros datos. Revisa el historial.', status_code=409)
+    detalle = consulta_movimientos().get(movimiento=movimiento)
+    return success_response(data={**datos_movimiento(detalle, incluir_lotes=True),
+                                  'stock_anterior': movimiento.confirmacion['stock_anterior'],
+                                  'stock_restante': movimiento.confirmacion['stock_restante']},
+                            mensaje='El movimiento ya estaba registrado.')
 
 
 def cuenta_inactiva(request):
@@ -120,7 +151,7 @@ def detalle_movimiento(request, pk):
     detalle = consulta_movimientos().filter(pk=pk).first()
     if detalle is None:
         return error_response('El movimiento no existe.', status_code=status.HTTP_404_NOT_FOUND)
-    return success_response(data=datos_movimiento(detalle))
+    return success_response(data=datos_movimiento(detalle, incluir_lotes=True))
 
 
 @api_view(['GET'])
@@ -167,10 +198,27 @@ def registrar_movimiento(request):
     if not request.user.tiene_permiso(permiso):
         return error_response('No tienes permiso para registrar este tipo de movimiento.', status_code=status.HTTP_403_FORBIDDEN)
 
+    anterior = respuesta_movimiento_anterior(request, info)
+    if anterior is not None:
+        return anterior
+    try:
+        return guardar_movimiento(request, info, entrada)
+    except IntegrityError:
+        # La restricción de solicitud_id resuelve también dos confirmaciones simultáneas.
+        anterior = respuesta_movimiento_anterior(request, info)
+        if anterior is not None:
+            return anterior
+        raise
+
+
+def guardar_movimiento(request, info, entrada):
     with transaccion_operativa():
         # Serializar operaciones del mismo producto, incluso si aún no tiene
         # fila de stock. Mermas también bloquea la fila de StockBodega.
         producto = Producto.objects.select_for_update(no_key=True).filter(pk=info['producto_id'], activo=True).first()
+        repetida = respuesta_movimiento_anterior(request, info)
+        if repetida is not None:
+            return repetida
         if producto is None:
             return error_response('El producto no existe o está inactivo.', status_code=status.HTTP_404_NOT_FOUND)
         bodega = obtener_bodega(info.get('bodega_id'), bloquear=True, crear_central=entrada and 'bodega_id' not in info)
@@ -186,6 +234,7 @@ def registrar_movimiento(request):
         nuevo = anterior + cantidad if entrada else anterior - cantidad
         if nuevo > MAX_CANTIDAD or nuevo < 0:
             return error_response('La cantidad supera el límite de stock permitido.')
+        lotes = preparar_lotes(producto, bodega, anterior)
         if stock is None:
             stock = StockBodega.objects.create(producto=producto, bodega=bodega, cantidad_total=0)
         filtro_stock = StockBodega.objects.filter(pk=stock.pk, cantidad_total=stock.cantidad_total)
@@ -194,7 +243,7 @@ def registrar_movimiento(request):
             fecha_modificacion=timezone.now(),
         )
         if actualizados != 1:
-            return error_response('El stock cambió durante el registro. Inténtalo nuevamente.', status_code=status.HTTP_409_CONFLICT)
+            raise ConflictoLotes('El stock cambió durante el registro. Inténtalo nuevamente.')
         if duplicados:
             StockBodega.objects.filter(pk__in=duplicados).delete()
 
@@ -203,8 +252,14 @@ def registrar_movimiento(request):
             tipo = TipoMovimiento.objects.create(nombre=info['tipo_movimiento'], operacion='+' if entrada else '-')
         movimiento = Movimiento.objects.create(
             tipo=tipo, bodega=bodega, usuario=request.user, documento_referencia=info['observacion'],
+            solicitud_id=info.get('solicitud_id'),
+            confirmacion={'datos': firma_movimiento(info), 'stock_anterior': anterior, 'stock_restante': nuevo},
         )
         detalle = DetalleMovimiento.objects.create(movimiento=movimiento, producto=producto, cantidad=cantidad)
+        if entrada:
+            recibir_lote(producto, bodega, detalle, info['referencia_lote'], info['costo_unitario'])
+        else:
+            descontar_lotes(lotes, cantidad, detalle=detalle)
         registrar_auditoria(
             accion='CREATE', modelo='Movimiento', objeto_id=movimiento.pk,
             descripcion=f'{info["tipo_movimiento"]} de {cantidad} unid. SKU: {producto.sku}. Bodega: {bodega.nombre}.',
@@ -216,7 +271,7 @@ def registrar_movimiento(request):
                     f'Stock en {bodega.nombre}: {nuevo} unidades.',
             link='/movimientos/', actor_id=request.user.id,
         )
-        resultado = datos_movimiento(detalle)
+        resultado = datos_movimiento(detalle, incluir_lotes=True)
         resultado.update(stock_anterior=anterior, stock_restante=nuevo)
         evaluar_alerta_sms(producto, bodega)
     return success_response(

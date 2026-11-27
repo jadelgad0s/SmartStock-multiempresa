@@ -288,7 +288,7 @@ class BodegasTests(TestCase):
         self.assertEqual(r.data['data']['stock_anterior'], 12)
         self.assertEqual(StockBodega.objects.filter(bodega=self.otra).count(), 1)
         self.assertEqual(StockBodega.objects.get(bodega=self.otra).cantidad_total, 1)
-        StockBodega.objects.filter(pk=self.stock_otro.pk).update(cantidad_total=3)
+        self.assertEqual(self.mover(tipo_movimiento='ENTRADA', cantidad=2).status_code, 201)
         r = self.merma(cantidad=2)
         self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual(r.data['data']['stock_anterior'], 3)

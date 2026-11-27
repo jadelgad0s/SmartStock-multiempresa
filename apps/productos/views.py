@@ -159,6 +159,11 @@ class ProductoViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), EsAdministrador()]
         return super().get_permissions()
 
+    @action(detail=True, methods=['get'])
+    def lotes(self, request, pk=None):
+        from .views_lotes import consultar_lotes
+        return consultar_lotes(self.get_object().pk, request)
+
     def notificar_cambio(self, producto, titulo, mensaje, bodega_id=None):
         filtros = {'q': producto.sku}
         if bodega_id is not None:

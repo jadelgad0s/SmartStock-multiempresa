@@ -12,7 +12,7 @@ from .views_movimientos import (
     registrar_movimiento, ultimos_movimientos, historial_movimientos,
     detalle_movimiento, resolver_producto_movimiento,
 )
-from .views_mermas import mermas_api, historial_mermas, detalle_merma, productos_merma
+from .views_mermas import mermas_api, historial_mermas, detalle_merma, productos_merma, lotes_merma
 from .views_transferencias import (
     transferencias_api, opciones_transferencias, productos_transferencias,
     resolver_transferencia, detalle_transferencia,
@@ -32,6 +32,7 @@ urlpatterns = [
     path('mermas/', mermas_api, name='mermas-api'),
     path('mermas/historial/', historial_mermas, name='historial-mermas'),
     path('mermas/productos/', productos_merma, name='productos-merma'),
+    path('mermas/lotes/', lotes_merma, name='lotes-merma'),
     path('mermas/<int:pk>/', detalle_merma, name='detalle-merma'),
     path('transferencias/', transferencias_api, name='transferencias-api'),
     path('transferencias/opciones/', opciones_transferencias, name='transferencias-opciones'),

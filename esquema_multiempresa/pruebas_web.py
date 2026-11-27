@@ -253,6 +253,26 @@ class AccesoPorEmpresaTests(TestCase):
                 self.assertEqual(kardex.status_code, 200, kardex.data)
                 self.assertEqual([fila['saldo'] for fila in kardex.data['results']], [12] if salidas else [])
 
+    def test_lotes_fifo_y_confirmacion_repetida_se_aislan_entre_empresas(self):
+        from apps.productos.models import ExistenciaLote, Lote
+        fragua, _ = self.ingresar(self.fragua)
+        motor, _ = self.ingresar(self.motor)
+        clave = str(uuid4())
+        for cliente, empresa, costo, saldo in ((fragua, self.fragua, '10.00', 15), (motor, self.motor, '30.00', 4)):
+            datos = {'producto_id': 10, 'bodega_id': 1, 'tipo_movimiento': 'ENTRADA',
+                     'cantidad': 3, 'costo_unitario': costo, 'solicitud_id': clave}
+            r = cliente.post('/api/v1/productos/registrar-movimiento/', datos, format='json')
+            self.assertEqual(r.status_code, 201, r.data)
+            self.assertEqual(cliente.post('/api/v1/productos/registrar-movimiento/', datos, format='json').status_code, 200)
+            lotes = cliente.get('/api/v1/productos/10/lotes/', {'bodega': 1})
+            self.assertEqual(lotes.status_code, 200, lotes.data)
+            self.assertEqual(lotes.data['count'], 2)
+            self.assertEqual(lotes.data['results'][-1]['costo_unitario'], costo)
+            with usar_empresa(empresa):
+                self.assertEqual(Lote.objects.count(), 2)
+                self.assertEqual(sum(ExistenciaLote.objects.values_list('cantidad', flat=True)), saldo + 3)
+        self.assertNotIn('lotes', connections['central'].introspection.table_names())
+
     def test_traslado_y_detalle_desde_el_kardex_pertenecen_a_la_empresa(self):
         for empresa in (self.fragua, self.motor):
             with usar_empresa(empresa):

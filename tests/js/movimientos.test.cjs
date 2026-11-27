@@ -77,6 +77,39 @@ async function pantalla(t, opcionesIniciales = true) {
     return {w, el, avisos, campo, enviar, responder, requests, debounce, escanear, abrirProducto, modales};
 }
 
+test('la entrada envía lote y costo y conserva la misma solicitud al reintentar', async t => {
+    const c = await pantalla(t);
+    await c.responder(0, datos());
+    await c.abrirProducto();
+    c.campo('movReferenciaLote', 'Recepción A');
+    c.campo('movCostoUnitario', '10.25');
+    c.campo('movCantidad', '4');
+    c.enviar('formRegistrarMovimiento');
+    const primera = c.requests.at(-1);
+    const payload = JSON.parse(primera.options.body);
+    assert.equal(payload.referencia_lote, 'Recepción A');
+    assert.equal(payload.costo_unitario, '10.25');
+    assert.match(payload.solicitud_id, /^[0-9a-f-]{36}$/);
+    primera.reject(new Error('Conexión interrumpida'));
+    await tick();
+    c.enviar('formRegistrarMovimiento');
+    assert.equal(c.requests.at(-1).options.body, primera.options.body);
+});
+
+test('cambiar a salida oculta y excluye los datos de recepción', async t => {
+    const c = await pantalla(t);
+    await c.responder(0, datos());
+    await c.abrirProducto();
+    c.campo('movCostoUnitario', '10');
+    c.campo('movTipo', 'SALIDA', 'change');
+    assert.equal(c.el('movDatosLote').hidden, true);
+    assert.equal(c.el('movAyudaFifo').hidden, false);
+    c.enviar('formRegistrarMovimiento');
+    const payload = JSON.parse(c.requests.at(-1).options.body);
+    assert.equal(payload.costo_unitario, undefined);
+    assert.equal(payload.referencia_lote, undefined);
+});
+
 test('historial paginado conserva búsqueda, tipo y fechas al navegar', async t => {
     const c = await pantalla(t);
     await c.responder(0, datos());

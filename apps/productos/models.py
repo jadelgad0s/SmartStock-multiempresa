@@ -1,9 +1,14 @@
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
+from django.utils import timezone
 import uuid
 from apps.core.models import SoftDeleteModel, TimestampedModel
 
 MAX_CANTIDAD_STOCK = 2_147_483_647
+
+
+def nuevo_codigo_lote():
+    return 'LOT-' + uuid.uuid4().hex[:16].upper()
 
 class Producto(SoftDeleteModel):
     sku = models.CharField(max_length=50, unique=True, validators=[RegexValidator(regex=r'^[A-Z0-9\-_]+$')])
@@ -125,6 +130,8 @@ class Movimiento(TimestampedModel):
     bodega = models.ForeignKey(Bodega, on_delete=models.PROTECT)
     usuario = models.ForeignKey('usuarios.Usuario', on_delete=models.PROTECT)
     documento_referencia = models.CharField(max_length=100, blank=True)
+    solicitud_id = models.UUIDField(null=True, blank=True, unique=True)
+    confirmacion = models.JSONField(default=dict, blank=True)
     class Meta: db_table = 'movimientos'
 
 class DetalleMovimiento(TimestampedModel):
@@ -171,6 +178,53 @@ class HistorialMovimientos(TimestampedModel):
     registro_id = models.IntegerField()
     descripcion = models.TextField()
     class Meta: db_table = 'historial_movimientos'
+
+
+class Lote(TimestampedModel):
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='lotes')
+    codigo = models.CharField(max_length=40, unique=True, default=nuevo_codigo_lote)
+    referencia = models.CharField(max_length=100, blank=True)
+    fecha_recepcion = models.DateTimeField(default=timezone.now)
+    cantidad_inicial = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(MAX_CANTIDAD_STOCK)])
+    costo_unitario = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+                                        validators=[MinValueValidator(0)])
+    es_saldo_inicial = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'lotes'
+        constraints = [
+            models.CheckConstraint(condition=models.Q(cantidad_inicial__gte=1, cantidad_inicial__lte=MAX_CANTIDAD_STOCK), name='lote_cantidad_rango'),
+            models.CheckConstraint(condition=models.Q(costo_unitario__isnull=True) | models.Q(costo_unitario__gte=0), name='lote_costo_no_negativo'),
+        ]
+
+
+class ExistenciaLote(TimestampedModel):
+    lote = models.ForeignKey(Lote, on_delete=models.PROTECT, related_name='existencias')
+    bodega = models.ForeignKey(Bodega, on_delete=models.PROTECT, related_name='existencias_lote')
+    cantidad = models.IntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(MAX_CANTIDAD_STOCK)])
+
+    class Meta:
+        db_table = 'existencias_lote'
+        constraints = [
+            models.UniqueConstraint(fields=['lote', 'bodega'], name='lote_bodega_unico'),
+            models.CheckConstraint(condition=models.Q(cantidad__gte=0, cantidad__lte=MAX_CANTIDAD_STOCK), name='existencia_lote_rango'),
+        ]
+
+
+class DetalleLote(TimestampedModel):
+    lote = models.ForeignKey(Lote, on_delete=models.PROTECT, related_name='detalles')
+    detalle_movimiento = models.ForeignKey(DetalleMovimiento, on_delete=models.PROTECT, null=True, blank=True, related_name='lotes')
+    merma = models.ForeignKey(Merma, on_delete=models.PROTECT, null=True, blank=True, related_name='lotes')
+    cantidad = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(MAX_CANTIDAD_STOCK)])
+
+    class Meta:
+        db_table = 'detalles_lote'
+        constraints = [
+            models.CheckConstraint(condition=models.Q(cantidad__gte=1, cantidad__lte=MAX_CANTIDAD_STOCK), name='detalle_lote_rango'),
+            models.CheckConstraint(condition=(models.Q(detalle_movimiento__isnull=False, merma__isnull=True) | models.Q(detalle_movimiento__isnull=True, merma__isnull=False)), name='detalle_lote_origen_unico'),
+            models.UniqueConstraint(fields=['lote', 'detalle_movimiento'], name='lote_detalle_mov_unico'),
+            models.UniqueConstraint(fields=['lote', 'merma'], name='lote_merma_unico'),
+        ]
 
 # ==========================================
 # ALERTAS Y REPORTES

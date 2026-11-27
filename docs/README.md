@@ -24,6 +24,7 @@ El [recorrido de revisión académica](presentacion.md) relaciona las funciones 
 | --- | --- |
 | [Bodegas](modulos/bodegas.md) | Administración de bodegas y existencias. |
 | [Transferencias](modulos/transferencias.md) | Traslado de productos entre bodegas y consistencia de saldos. |
+| [Lotes y FIFO](modulos/lotes-fifo.md) | Recepciones con costo, consumo por antigüedad, mermas y migración de saldos anteriores. |
 | [Ubicaciones físicas](modulos/ubicaciones-fisicas.md) | Pasillos, estanterías, niveles y ubicaciones. |
 | [Reportes y Kardex](modulos/reportes-inventario.md) | Informes, filtros, exportaciones y conciliación. |
 | [Auditoría del panel central](modulos/auditoria.md) | Filtros, identidad histórica, detalle de cambios y exportaciones autorizadas. |

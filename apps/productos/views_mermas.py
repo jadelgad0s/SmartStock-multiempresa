@@ -14,6 +14,7 @@ from apps.core.utils import registrar_auditoria
 from .models import Merma, MotivoMerma, Producto, StockBodega
 from .alertas_sms import evaluar_alerta_sms
 from .bodegas import bodega_consulta, obtener_bodega, stock_para_operar
+from .fifo import ConflictoLotes, datos_asignaciones, descontar_lotes, preparar_lotes
 
 
 MOTIVOS_MERMA = {
@@ -30,10 +31,26 @@ class CrearMermaSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(min_value=1, max_value=2_147_483_647)
     motivo = serializers.ChoiceField(choices=tuple((codigo, codigo) for codigo in MOTIVOS_MERMA))
     observacion = serializers.CharField(max_length=1000, required=True, allow_blank=False, trim_whitespace=True)
+    lote_id = serializers.IntegerField(min_value=1, required=False)
 
 
-def datos_merma(merma):
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def lotes_merma(request):
+    rechazo = verificar_acceso_mermas(request)
+    if rechazo is not None:
+        return rechazo
+    from .views_lotes import consultar_lotes
+    producto_id = serializers.IntegerField(min_value=1).run_validation(request.query_params.get('producto_id'))
+    bodega_consulta(request.query_params)
+    if not Producto.objects.filter(pk=producto_id, activo=True).exists():
+        return error_response('El producto no existe o está inactivo.', status_code=404)
+    return consultar_lotes(producto_id, request)
+
+
+def datos_merma(merma, incluir_lotes=False):
     return {
+        'lotes': datos_asignaciones(merma.lotes.select_related('lote').order_by('id')) if incluir_lotes else [],
         'id': merma.id,
         'producto_id': merma.producto_id,
         'fecha_iso': timezone.localtime(merma.fecha_creacion).isoformat(),
@@ -115,7 +132,7 @@ def detalle_merma(request, pk):
     merma = consultar_mermas().filter(pk=pk).first()
     if merma is None:
         return error_response('La merma no existe.', status_code=status.HTTP_404_NOT_FOUND)
-    return success_response(data=datos_merma(merma))
+    return success_response(data=datos_merma(merma, incluir_lotes=True))
 
 
 @api_view(['GET'])
@@ -193,14 +210,12 @@ def mermas_api(request):
             )
 
         # Un UPDATE condicionado protege también frente a solicitudes simultáneas.
+        lotes = preparar_lotes(producto, bodega, disponible)
         actualizados = (StockBodega.objects
                        .filter(pk=stock.pk, cantidad_total=stock.cantidad_total)
                        .update(cantidad_total=disponible - info['cantidad'], fecha_modificacion=timezone.now()))
         if actualizados != 1:
-            return error_response(
-                'El stock cambió durante el registro. Inténtalo nuevamente.',
-                status_code=status.HTTP_409_CONFLICT,
-            )
+            raise ConflictoLotes('El stock cambió durante el registro. Inténtalo nuevamente.')
         if duplicados:
             StockBodega.objects.filter(pk__in=duplicados).delete()
 
@@ -217,6 +232,7 @@ def mermas_api(request):
             cantidad=info['cantidad'],
             observacion=info['observacion'],
         )
+        descontar_lotes(lotes, info['cantidad'], merma=merma, lote_id=info.get('lote_id'))
         registrar_auditoria(
             accion='CREATE',
             modelo='Merma',
@@ -233,7 +249,7 @@ def mermas_api(request):
             link='/mermas/',
             actor_id=request.user.id,
         )
-        resultado = datos_merma(merma)
+        resultado = datos_merma(merma, incluir_lotes=True)
         resultado['stock_anterior'] = disponible
         resultado['stock_restante'] = disponible - info['cantidad']
         evaluar_alerta_sms(producto, bodega)

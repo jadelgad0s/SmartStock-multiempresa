@@ -39,6 +39,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     let cargandoProductos = false;
     let productos = new Map();
     let producto = null;
+    let versionLotes = 0, paginaLotes = 1;
+    const lotesMerma = new Map();
+    function reiniciarLotes() {
+        ++versionLotes;
+        paginaLotes = 1;
+        lotesMerma.clear();
+        el('mermaLote').replaceChildren(new Option('Automático por FIFO', ''));
+        el('estadoLotesMerma').textContent = '';
+        el('masLotesMerma').hidden = true;
+        el('cargarLotesMerma').disabled = false;
+    }
+    async function cargarLotes(anexar = false) {
+        if (!producto || esperando) return;
+        if (!anexar) reiniciarLotes();
+        const version = ++versionLotes;
+        const parametros = new URLSearchParams({producto_id: producto.id, bodega: el('mermaBodega').value, page: paginaLotes});
+        el('cargarLotesMerma').disabled = true;
+        el('masLotesMerma').disabled = true;
+        el('estadoLotesMerma').textContent = 'Cargando lotes…';
+        try {
+            const datos = await consultar('/api/v1/productos/mermas/lotes/?' + parametros);
+            if (version !== versionLotes) return;
+            for (const lote of datos.results) {
+                lotesMerma.set(String(lote.lote_id), lote);
+                el('mermaLote').append(new Option(lote.codigo + (lote.referencia ? ' · ' + lote.referencia : '') + ' · ' + lote.cantidad + ' unid.', String(lote.lote_id)));
+            }
+            el('estadoLotesMerma').textContent = datos.count + ' lotes con unidades disponibles.';
+            el('masLotesMerma').hidden = paginaLotes * 25 >= datos.count;
+            paginaLotes += 1;
+        } catch (error) {
+            if (version === versionLotes) el('estadoLotesMerma').textContent = error.message;
+        } finally {
+            if (version === versionLotes) {
+                el('cargarLotesMerma').disabled = false;
+                el('masLotesMerma').disabled = false;
+            }
+        }
+    }
+    el('cargarLotesMerma').addEventListener('click', () => cargarLotes());
+    el('masLotesMerma').addEventListener('click', () => cargarLotes(true));
+    el('mermaLote').addEventListener('change', actualizarResumen);
     let esperando = false;
     let registrado = false;
     let origenDetalle = null;
@@ -234,6 +275,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 Motivo: m.motivo, Observacion: m.observacion || 'Sin observación.', Fecha: m.fecha,
                 Responsable: m.responsable, Bodega: m.bodega, Estado: m.estado};
             Object.entries(datos).forEach(([id, texto]) => { el('detalleMerma' + id).textContent = texto; });
+            window.SmartStockLotes?.mostrar(el('detalleMermaLotes'), json.data.lotes);
             el('datosDetalleMerma').classList.remove('d-none');
             el('estadoDetalleMerma').textContent = '';
         } catch (error) {
@@ -249,12 +291,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cantidad = Number(el('mermaCantidad').value);
         const valida = Number.isInteger(cantidad) && cantidad > 0 && cantidad <= 2147483647;
         const disponible = producto ? Number(producto.stock_disponible) : 0;
-        const suficiente = producto && valida && cantidad <= disponible;
+        const loteElegido = lotesMerma.get(el('mermaLote').value);
+        const suficiente = producto && valida && cantidad <= disponible && (!el('mermaLote').value || loteElegido && cantidad <= loteElegido.cantidad);
         el('mermaStockDisponible').textContent = producto ?
             'Disponible en ' + producto.bodega + ': ' + disponible + ' unidades.' :
             'Selecciona un producto para consultar el stock de la bodega elegida.';
         const texto = !producto ? 'Selecciona un producto e indica la cantidad a descontar.' :
             !valida ? 'Ingresa una cantidad entera mayor que cero.' :
+            loteElegido && cantidad > loteElegido.cantidad ? 'El lote seleccionado solo tiene ' + loteElegido.cantidad + ' unidades disponibles.' :
             !suficiente ? 'Stock insuficiente: solicitas ' + cantidad + ' y hay ' + disponible + ' unidades disponibles.' :
             'Se descontarán ' + cantidad + ' unidades de ' + producto.nombre + '. Stock disponible en ' + producto.bodega +
                 ': ' + disponible + '. Stock restante estimado: ' + (disponible - cantidad) + ' unidades.';
@@ -267,6 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return Boolean(completa);
     }
     function prepararProductos() {
+        reiniciarLotes();
         cargandoProductos = true;
         producto = null;
         productos.clear();
@@ -329,6 +374,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         temporizadorProductos = setTimeout(() => cargarProductos(), 300);
     });
     select.addEventListener('change', () => {
+        reiniciarLotes();
         producto = productos.get(select.value) || null;
         aviso('errorNuevaMerma', '');
         actualizarResumen();
@@ -360,6 +406,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     modalEl.addEventListener('hide.bs.modal', evento => { if (esperando) evento.preventDefault(); });
     modalEl.addEventListener('hidden.bs.modal', () => {
+        reiniciarLotes();
         ++versionProductos;
         clearTimeout(temporizadorProductos);
     });
@@ -377,6 +424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (esperando || registrado || cargandoProductos || !modalEl.classList.contains('show') || !actualizarResumen() || !formulario.reportValidity()) return;
         const payload = {producto_id: Number(select.value), bodega_id: producto.bodega_id, cantidad: Number(el('mermaCantidad').value),
             motivo: el('mermaMotivo').value, observacion: el('mermaObservacion').value.trim()};
+        if (el('mermaLote').value) payload.lote_id = Number(el('mermaLote').value);
         esperando = true;
         bloquearFormulario(true);
         aviso('errorNuevaMerma', '');

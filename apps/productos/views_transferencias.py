@@ -19,11 +19,12 @@ from .alertas_sms import evaluar_alerta_sms
 from .bodegas import opciones_bodegas, stock_para_operar
 from .consulta_codigos import productos_registrados
 from .models import (
-    Bodega, DetalleMovimiento, DetalleTransferencia, HistorialMovimientos,
+    Bodega, DetalleLote, DetalleMovimiento, DetalleTransferencia, HistorialMovimientos,
     Movimiento, Producto, StockBodega, TipoMovimiento, Transferencia,
 )
 from .views_bodegas import permisos_bodegas
 from .views_notificaciones import notificar_administradores
+from .fifo import datos_asignaciones, descontar_lotes, preparar_lotes, recibir_transferencia
 
 MAX_CANTIDAD = 2_147_483_647
 TIPO_HISTORIAL = 'TRANSFERENCIA'
@@ -105,7 +106,11 @@ def datos_transferencia(transferencia, historial=None):
     detalles = [{'id': d.pk, 'producto_id': d.producto_id, 'producto': d.producto.nombre,
                  'sku': d.producto.sku, 'cantidad': d.cantidad} for d in transferencia.detalles.all()]
     registro = historial or {}
+    movimiento_salida = registro.get('movimientos', {}).get('salida')
+    asignaciones = datos_asignaciones(DetalleLote.objects.filter(
+        detalle_movimiento__movimiento_id=movimiento_salida).select_related('lote').order_by('id')) if movimiento_salida else []
     return {
+        'lotes': asignaciones,
         'id': transferencia.pk, 'fecha': fecha.strftime('%d/%m/%Y %H:%M'), 'fecha_iso': fecha.isoformat(),
         'estado': transferencia.estado, 'usuario': transferencia.usuario.nombre_completo,
         'usuario_id': transferencia.usuario_id,
@@ -237,8 +242,7 @@ def registrar_asiento(transferencia, producto, bodega, cantidad, entrada, contra
         tipo = TipoMovimiento.objects.create(nombre=nombre, operacion=operacion)
     referencia = f'Transferencia #{transferencia.pk}: {"desde" if entrada else "hacia"} {contraparte.nombre}'
     mov = Movimiento.objects.create(tipo=tipo, bodega=bodega, usuario=transferencia.usuario, documento_referencia=referencia[:100])
-    DetalleMovimiento.objects.create(movimiento=mov, producto=producto, cantidad=cantidad)
-    return mov.pk
+    return DetalleMovimiento.objects.create(movimiento=mov, producto=producto, cantidad=cantidad)
 
 
 def guardar_transferencia(request, info):
@@ -270,6 +274,8 @@ def guardar_transferencia(request, info):
         nuevos = {origen.pk: disponible - info['cantidad'], destino.pk: recibido + info['cantidad']}
         if any(n < 0 or n > MAX_CANTIDAD for n in nuevos.values()):
             raise ConflictoTransferencia('La cantidad supera el límite de stock permitido.', cantidades)
+        lotes_origen = preparar_lotes(producto, origen, disponible)
+        preparar_lotes(producto, destino, recibido)
         for id_bodega in sorted(ids):
             stock, _, duplicados = filas[id_bodega]
             if stock is None:
@@ -283,10 +289,13 @@ def guardar_transferencia(request, info):
                     StockBodega.objects.filter(pk__in=duplicados).delete()
         transferencia = Transferencia.objects.create(bodega_origen=origen, bodega_destino=destino, usuario=usuario, estado='COMPLETADA')
         DetalleTransferencia.objects.create(transferencia=transferencia, producto=producto, cantidad=info['cantidad'])
-        movimientos = {
+        asientos = {
             'salida': registrar_asiento(transferencia, producto, origen, info['cantidad'], False, destino),
             'entrada': registrar_asiento(transferencia, producto, destino, info['cantidad'], True, origen),
         }
+        asignaciones = descontar_lotes(lotes_origen, info['cantidad'], detalle=asientos['salida'])
+        recibir_transferencia(asignaciones, destino, asientos['entrada'])
+        movimientos = {nombre: asiento.movimiento_id for nombre, asiento in asientos.items()}
         historial = {'solicitud_id': str(info['solicitud_id']), 'version': 1,
                      'stock': {'origen_anterior': disponible, 'origen_posterior': nuevos[origen.pk],
                                'destino_anterior': recibido, 'destino_posterior': nuevos[destino.pk]},
