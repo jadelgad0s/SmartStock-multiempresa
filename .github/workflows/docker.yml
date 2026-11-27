@@ -1,0 +1,43 @@
+name: Docker multiempresa
+
+on:
+  pull_request:
+    paths: ['Dockerfile', 'docker-compose.yml', '.dockerignore', '.env.docker.example', '.gitattributes', 'infra/docker/**', 'esquema_multiempresa/docker.py', 'esquema_multiempresa/management/commands/preparar_docker.py', 'tests/docker/**', 'requirements-web.txt', '.github/workflows/docker.yml']
+  push:
+    branches: [main]
+    paths: ['Dockerfile', 'docker-compose.yml', '.dockerignore', '.env.docker.example', '.gitattributes', 'infra/docker/**', 'esquema_multiempresa/docker.py', 'esquema_multiempresa/management/commands/preparar_docker.py', 'tests/docker/**', 'requirements-web.txt', '.github/workflows/docker.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar configuración de demostración
+        run: cp .env.docker.example .env.docker.local
+      - name: Validar Compose
+        run: docker compose --env-file .env.docker.local config --quiet
+      - name: Construir e iniciar los contenedores
+        run: docker compose --env-file .env.docker.local up --build --detach --wait --wait-timeout 180
+      - name: Comprobar accesos, empresas, imágenes y aislamiento
+        run: python tests/docker/smoke.py crear
+      - name: Comprobar la preparación repetible con bases desechables
+        run: docker compose --env-file .env.docker.local exec -T web python manage.py test esquema_multiempresa.pruebas_docker --settings=esquema_multiempresa.testing --noinput
+      - name: Recrear los contenedores conservando los volúmenes
+        run: |
+          docker compose --env-file .env.docker.local down
+          docker compose --env-file .env.docker.local up --detach --wait --wait-timeout 180
+      - name: Comprobar la persistencia y las cuentas después del reinicio
+        run: python tests/docker/smoke.py comprobar
+      - name: Verificar usuario de ejecución
+        run: docker compose --env-file .env.docker.local exec -T web python -c "import os; assert os.getuid() == 10001"
+      - name: Mostrar registros si una comprobación falla
+        if: failure()
+        run: docker compose --env-file .env.docker.local logs --no-color --tail 160
+      - name: Limpiar las bases de esta prueba
+        if: always()
+        run: docker compose --env-file .env.docker.local down --volumes --remove-orphans
