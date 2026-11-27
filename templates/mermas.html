@@ -148,6 +148,15 @@
                         </div>
                         <p class="small text-muted mt-2 mb-0" id="mermaStockDisponible" role="status">Selecciona un producto para consultar el stock de la bodega elegida.</p>
                     </div>
+                    <details class="mb-3" id="opcionesLoteMerma">
+                        <summary>Elegir un lote para esta merma</summary>
+                        <p class="form-text">Puedes identificar el lote dañado. La opción automática descuenta los lotes más antiguos mediante FIFO.</p>
+                        <button id="cargarLotesMerma" type="button" class="btn btn-sm btn-outline-secondary mb-2">Consultar lotes del producto</button>
+                        <label for="mermaLote" class="form-label">Lote a descontar</label>
+                        <select id="mermaLote" class="form-select"><option value="">Automático por FIFO</option></select>
+                        <p id="estadoLotesMerma" class="small text-muted" role="status"></p>
+                        <button id="masLotesMerma" type="button" class="btn btn-sm btn-outline-secondary" hidden>Cargar más lotes</button>
+                    </details>
                     <div class="row mb-3">
                         <div class="col-12 col-sm-6">
                             <label class="form-label fw-medium small text-muted" for="mermaCantidad">Cantidad a dar de baja</label>
@@ -200,6 +209,7 @@
                     <dt>Responsable</dt><dd id="detalleMermaResponsable"></dd>
                     <dt>Bodega</dt><dd id="detalleMermaBodega"></dd>
                     <dt>Estado</dt><dd id="detalleMermaEstado"></dd>
+                    <dt>Lotes descontados</dt><dd id="detalleMermaLotes" class="table-responsive"></dd>
                 </dl>
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button></div>
@@ -209,6 +219,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/mermas.js' %}?v=carga-1" defer></script>
+<script src="{% static 'js/mermas.js' %}?v=fifo-1" defer></script>
 {% endblock %}
 

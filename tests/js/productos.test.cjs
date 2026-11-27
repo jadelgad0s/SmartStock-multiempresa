@@ -67,6 +67,7 @@ async function catalogo(t, query = '', config = {}) {
     });
     };
     const avisos = []; w.addEventListener('smartstock:notifications-changed', () => avisos.push(true));
+    w.eval(readFileSync(path.join(root, 'static/js/lotes.js'), 'utf8'));
     w.eval(codigo);
     if (config.scanner) w.eval(readFileSync(path.join(root, 'static/js/escaneo_camara.js'), 'utf8'));
     await tick();
@@ -558,6 +559,23 @@ test('sin permiso configurar mínimo conserva los valores como texto de lectura'
     assert.equal(c.el('listaProductos').querySelectorAll('[data-accion="minimo"]').length, 0); assert.match(c.el('listaProductos').textContent, /Mínimo: 2/);
     c.el('listaProductos').querySelector('[data-accion="detalle"]').click(); await c.responder(1, detalleProducto());
     assert.equal(c.el('detalleProductoStock').querySelectorAll('button').length, 0);
+});
+
+test('detalle consulta lotes paginados y muestra costos desconocidos y referencias como texto', async t => {
+    const c = await catalogo(t);
+    await c.responder(0);
+    c.el('listaProductos').querySelector('[data-accion="detalle"]').click();
+    await c.responder(1, detalleProducto());
+    c.el('verLotesProducto').click();
+    assert.equal(c.requests[2].url.pathname, '/api/v1/productos/1/lotes/');
+    await c.responder(2, {count: 26, results: [{lote_id: 1, codigo: 'INI-1', referencia: '<img onerror="alert(1)">', cantidad: 5, es_saldo_inicial: true, costo_unitario: null, bodega: 'Central'}]});
+    assert.match(c.el('filasLotesProducto').textContent, /Saldo anterior/);
+    assert.match(c.el('filasLotesProducto').textContent, /Sin registrar/);
+    assert.equal(c.el('filasLotesProducto').querySelector('img'), null);
+    c.el('lotesProductoSiguiente').click();
+    assert.equal(c.requests[3].url.searchParams.get('page'), '2');
+    await c.responder(3, {count: 26, results: []});
+    assert.equal(c.el('lotesProductoSiguiente').disabled, true);
 });
 
 test('configurar desde detalle abre la bodega indicada y vuelve a cargar el detalle al cancelar', async t => {

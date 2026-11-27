@@ -207,7 +207,7 @@
 
 <!-- MODAL ACCIÓN DE MOVIMIENTO (Se abre al pistolear) -->
 <div class="modal fade" id="modalAccionMovimiento" tabindex="-1" aria-labelledby="tituloAccionMovimiento" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-white border-bottom">
                 <h5 class="modal-title h6 fw-bold text-primary" id="tituloAccionMovimiento">
@@ -250,6 +250,15 @@
                         <p id="movAyudaBodega" class="form-text mb-0">Las unidades ingresarán a esta bodega.</p>
                         <button id="reintentarStockMovimiento" class="btn btn-sm btn-outline-secondary mt-2" type="button" hidden>Reintentar consulta de stock</button>
                     </div>
+                    <fieldset id="movDatosLote" class="mb-3">
+                        <legend class="fs-6">Lote de recepción</legend>
+                        <p class="form-text mt-0">Se generará un lote con la fecha y hora de esta entrada.</p>
+                        <label for="movReferenciaLote" class="form-label">Referencia de lote (opcional)</label>
+                        <input id="movReferenciaLote" class="form-control mb-2" maxlength="100" placeholder="Código del proveedor o referencia interna">
+                        <label for="movCostoUnitario" class="form-label">Costo unitario en CLP (opcional)</label>
+                        <input id="movCostoUnitario" type="number" class="form-control" min="0" max="9999999999.99" step="0.01" inputmode="decimal" placeholder="Sin registrar">
+                    </fieldset>
+                    <p id="movAyudaFifo" class="small text-muted" hidden>Se descontarán primero las unidades de los lotes más antiguos disponibles en esta bodega.</p>
                     <div class="mb-2">
                         <label for="movObservacion" class="form-label fw-bold text-muted small text-uppercase">Referencia / observación (opcional)</label>
                         <input type="text" id="movObservacion" class="form-control border-secondary" maxlength="100" placeholder="Ej: Factura #1234 o guía de despacho">
@@ -266,7 +275,7 @@
     </div>
 </div>
 <div class="modal fade" id="modalDetalleMovimiento" tabindex="-1" aria-labelledby="tituloDetalleMovimiento" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title h6 fw-bold" id="tituloDetalleMovimiento">Detalle del movimiento</h5>
@@ -284,6 +293,7 @@
                     <dt>Operador</dt><dd id="detalleMovUsuario"></dd>
                     <dt>Bodega</dt><dd id="detalleMovBodega"></dd>
                     <dt>Referencia / observación</dt><dd id="detalleMovReferencia"></dd>
+                    <dt>Lotes</dt><dd class="table-responsive" id="detalleMovLotes"></dd>
                 </dl>
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button></div>
@@ -311,7 +321,7 @@
 
 {% block extra_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
-<script src="{% static 'js/movimientos.js' %}?v=carga-1" defer></script>
+<script src="{% static 'js/movimientos.js' %}?v=fifo-1" defer></script>
 <script src="{% static 'js/escaneo_camara.js' %}?v=camara-5" defer></script>
 <script>
     document.addEventListener('DOMContentLoaded', async () => {

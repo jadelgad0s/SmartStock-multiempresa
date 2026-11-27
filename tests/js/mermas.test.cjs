@@ -78,6 +78,26 @@ async function pantalla(t, opcionesIniciales = true) {
     return {w, el, avisos, requests, modelos, campo, responder, debounce, abrir, enviar, completar};
 }
 
+test('elegir un lote limita su cantidad y el cambio de producto limpia esa selección', async t => {
+    const c = await pantalla(t);
+    await c.responder(0, paginaDatos(merma));
+    await c.completar();
+    c.el('cargarLotesMerma').click();
+    const indice = c.requests.length - 1;
+    assert.equal(c.requests[indice].url.pathname, '/api/v1/productos/mermas/lotes/');
+    await c.responder(indice, {count: 1, results: [{lote_id: 3, codigo: 'L-3', referencia: 'Proveedor', cantidad: 2}]});
+    c.campo('mermaLote', '3', 'change');
+    assert.equal(c.el('btnGuardarMerma').disabled, true);
+    c.campo('mermaCantidad', '2');
+    assert.equal(c.el('btnGuardarMerma').disabled, false);
+    c.enviar();
+    assert.equal(JSON.parse(c.requests.at(-1).options.body).lote_id, 3);
+    await c.responder(c.requests.length - 1, {success: false, mensaje: 'Revisar'}, 400);
+    c.campo('mermaProducto', '2', 'change');
+    assert.equal(c.el('mermaLote').value, '');
+    assert.equal(c.el('mermaLote').options.length, 1);
+});
+
 test('mermas usa historial completo y conserva búsqueda, motivo y fechas entre páginas', async t => {
     const c = await pantalla(t);
     assert.equal(c.requests[0].url.pathname, '/api/v1/productos/mermas/historial/');

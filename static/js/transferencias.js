@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const s = d.stock;
             el('detalleTransferenciaStock').textContent = s ? 'Stock al realizar el traslado. Origen: ' + numero(s.origen_anterior) + ' → ' + numero(s.origen_posterior) + '. Destino: ' + numero(s.destino_anterior) + ' → ' + numero(s.destino_posterior) + ' unidades.' : 'Este registro no tiene una instantánea de stock anterior y posterior.';
             el('detalleTransferenciaMovimientos').textContent = d.movimientos ? 'Movimientos asociados: salida #' + d.movimientos.salida + ' y entrada #' + d.movimientos.entrada + '.' : '';
+            window.SmartStockLotes?.mostrar(el('detalleTransferenciaLotes'), d.lotes);
             el('estadoDetalleTransferencia').textContent = ''; el('datosDetalleTransferencia').hidden = false;
         } catch (error) { if (version === versionDetalle) el('estadoDetalleTransferencia').textContent = error.message; }
     }

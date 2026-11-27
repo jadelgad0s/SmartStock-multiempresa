@@ -492,7 +492,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     el('reintentarDetalleEdicion').addEventListener('click', () => cargarEdicion(estadosForm[1], el('editProductoId').value));
     function abrirEdicion(id, origen) { const s = estadosForm[1]; if (!permisos.editar || estadosForm.some(s => s.pendiente)) return; iniciarFormulario(s, origen); el('editProductoId').value = id; bootstrap.Modal.getOrCreateInstance(s.modal).show(); cargarEdicion(s, id); }
     let versionDetalle = 0, idDetalle = null, origenDetalle, minimoDesdeDetalle = null;
+    let paginaLotes = 1;
+    async function cargarLotesProducto(pagina = 1) {
+        if (!idDetalle) return;
+        const version = versionDetalle, id = idDetalle;
+        el('panelLotesProducto').hidden = false;
+        el('verLotesProducto').disabled = true;
+        el('paginasLotesProducto').hidden = true;
+        el('filasLotesProducto').replaceChildren();
+        el('estadoLotesProducto').textContent = 'Cargando lotes…';
+        const parametros = new URLSearchParams({page: pagina, incluir_agotados: 'true'});
+        if (el('bodegaProductos').value) parametros.set('bodega', el('bodegaProductos').value);
+        try {
+            const datos = await api('/api/v1/productos/' + id + '/lotes/?' + parametros);
+            if (version !== versionDetalle || id !== idDetalle) return;
+            window.SmartStockLotes?.mostrar(el('filasLotesProducto'), datos.results, true);
+            paginaLotes = pagina;
+            el('estadoLotesProducto').textContent = datos.count + ' registros de existencias por lote · Página ' + pagina;
+            el('paginasLotesProducto').hidden = datos.count <= 25;
+            el('lotesProductoAnterior').disabled = pagina <= 1;
+            el('lotesProductoSiguiente').disabled = pagina * 25 >= datos.count;
+        } catch (error) {
+            if (version === versionDetalle && id === idDetalle) el('estadoLotesProducto').textContent = error.message;
+        } finally {
+            if (version === versionDetalle && id === idDetalle) el('verLotesProducto').disabled = false;
+        }
+    }
+    el('verLotesProducto').addEventListener('click', () => cargarLotesProducto());
+    el('lotesProductoAnterior').addEventListener('click', () => cargarLotesProducto(paginaLotes - 1));
+    el('lotesProductoSiguiente').addEventListener('click', () => cargarLotesProducto(paginaLotes + 1));
     function abrirDetalle(id, origen = null) {
+        el('panelLotesProducto').hidden = true;
+        el('verLotesProducto').disabled = true;
         idDetalle = id;
         origenDetalle = origen;
         bootstrap.Modal.getOrCreateInstance(el('modalDetalleProducto')).show();
@@ -522,6 +553,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             if (!filas.length) { const tr = nodo('tr'), td = nodo('td', 'text-muted', 'Sin bodegas activas.'); td.colSpan = 4; tr.append(td); filas.push(tr); }
             el('detalleProductoStock').replaceChildren(...filas); el('datosDetalleProducto').hidden = false; aviso('estadoDetalleProducto', '');
+            el('verLotesProducto').disabled = false;
             const bodega = bodegas.find(b => String(b.id) === el('bodegaProductos').value);
             if (permisos.ver_reportes === true && bodega) {
                 const filtros = new URLSearchParams({informe: 'kardex', producto: d.id, bodega: bodega.id});

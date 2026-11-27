@@ -23,6 +23,7 @@ La versión multiempresa separa el directorio y las cuentas de SmartStock de los
 - Catálogo de productos con SKU, códigos de barras y QR.
 - Existencias, mínimos y disponibilidad por bodega.
 - Entradas y salidas de mercadería.
+- [Lotes y FIFO](docs/modulos/lotes-fifo.md), con costos por recepción y conservación de lotes en transferencias.
 - Transferencias entre bodegas y registro de mermas y bajas.
 - Ubicaciones físicas: pasillos, estanterías y niveles.
 - Reportes de existencias, stock crítico, movimientos, mermas y Kardex.

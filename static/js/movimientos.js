@@ -243,6 +243,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 detalleMovReferencia: mov.documento_referencia || 'Sin referencia u observación.',
             };
             Object.entries(campos).forEach(([id, texto]) => { el(id).textContent = texto; });
+            window.SmartStockLotes?.mostrar(el('detalleMovLotes'), mov.lotes);
             el('estadoDetalleMovimiento').textContent = '';
             el('datosDetalleMovimiento').classList.remove('d-none');
         } catch (error) {
@@ -273,6 +274,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     function actualizarConfirmacion() {
         const salida = el('movTipo').value === 'SALIDA';
+        el('movDatosLote').hidden = salida;
+        el('movDatosLote').disabled = salida || guardando || registroConfirmado;
+        el('movAyudaFifo').hidden = !salida;
         el('movEtiquetaBodega').textContent = salida ? 'Bodega de salida' : 'Bodega de recepción';
         el('movAyudaBodega').textContent = salida ? 'Las unidades se descontarán de esta bodega.' : 'Las unidades ingresarán a esta bodega.';
         el('movBodega').disabled = guardando || registroConfirmado || !bodegasListas;
@@ -334,6 +338,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (solicitud === solicitudStock) { consultandoStock = false; actualizarConfirmacion(); }
         }
     }
+    let solicitudMovimiento;
     function mostrarProducto(producto) {
         ++solicitudStock;
         productoActual = producto;
@@ -347,6 +352,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         el('movCantidad').value = '1';
         el('movTipo').value = 'ENTRADA';
         el('movObservacion').value = '';
+        el('movReferenciaLote').value = '';
+        el('movCostoUnitario').value = '';
+        solicitudMovimiento = crypto.randomUUID();
         mostrarMensaje('movErrorRegistro', '');
         actualizarConfirmacion();
         modalAccion.show();
@@ -430,12 +438,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         evento.preventDefault();
         if (guardando || registroConfirmado || !el('modalAccionMovimiento').classList.contains('show') || !actualizarConfirmacion() || !el('formRegistrarMovimiento').reportValidity()) return;
         const payload = {
+            solicitud_id: solicitudMovimiento,
             producto_id: productoActual.id,
             bodega_id: Number(el('movBodega').value),
             tipo_movimiento: el('movTipo').value,
             cantidad: Number(el('movCantidad').value),
             observacion: el('movObservacion').value.trim(),
         };
+        if (payload.tipo_movimiento === 'ENTRADA') {
+            payload.referencia_lote = el('movReferenciaLote').value.trim();
+            if (el('movCostoUnitario').value !== '') payload.costo_unitario = el('movCostoUnitario').value;
+        }
         guardando = true;
         bloquearFormulario(true);
         mostrarMensaje('movErrorRegistro', '');
