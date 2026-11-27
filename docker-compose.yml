@@ -1,0 +1,51 @@
+name: smartstock-local
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: smartstock
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configura POSTGRES_PASSWORD en .env.docker.local}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/01-databases.sh:/docker-entrypoint-initdb.d/01-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DJANGO_SETTINGS_MODULE: esquema_multiempresa.docker
+      SECRET_KEY: ${SECRET_KEY:?Configura SECRET_KEY en .env.docker.local}
+      SS_DOCKER_DB_HOST: db
+      SS_DOCKER_DB_PORT: "5432"
+      SS_DOCKER_DB_USER: smartstock
+      SS_DOCKER_DB_PASSWORD: ${POSTGRES_PASSWORD:?Configura POSTGRES_PASSWORD en .env.docker.local}
+      SS_DOCKER_DEMO_PASSWORD: ${SS_DOCKER_DEMO_PASSWORD:?Configura SS_DOCKER_DEMO_PASSWORD en .env.docker.local}
+    ports:
+      - "127.0.0.1:${SMARTSTOCK_PORT:-8000}:8000"
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/salud/', timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  media_data:

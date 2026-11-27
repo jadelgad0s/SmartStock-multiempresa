@@ -16,6 +16,7 @@ El [recorrido de revisión académica](presentacion.md) relaciona las funciones 
 | [Integridad del stock](desarrollo/integridad-stock.md) | Restricciones, diagnóstico y comprobaciones de concurrencia. |
 | [Rendimiento en Neon](desarrollo/rendimiento-neon.md) | Reutilización de conexiones, consultas y carga del contenido de correos. |
 | [Aplicación de escritorio](desarrollo/escritorio.md) | Ejecución local y compilación de SmartStock.exe para Windows. |
+| [Docker multiempresa](desarrollo/docker.md) | Instalación local reproducible con tres bases PostgreSQL y cuentas de demostración. |
 | [Estado de las versiones](desarrollo/estado-versiones.md) | Mejoras reunidas en main y preparación del cambio del sitio publicado. |
 
 ## Módulos y operaciones

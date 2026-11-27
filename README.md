@@ -15,6 +15,7 @@ La versión multiempresa separa el directorio y las cuentas de SmartStock de los
 | Entender un módulo o sus permisos | [Índice de documentación](docs/README.md) |
 | Ejecutar las pruebas sin credenciales de Neon | [Guía de pruebas](docs/desarrollo/pruebas.md) |
 | Compilar la aplicación de escritorio | [Aplicación para Windows](docs/desarrollo/escritorio.md) |
+| Ejecutar una demostración local con Docker | [Dockerfile, Compose y accesos de ejemplo](docs/desarrollo/docker.md) |
 | Distinguir la versión de GitHub del sitio publicado | [Estado de las versiones](docs/desarrollo/estado-versiones.md) |
 
 ## Funcionalidades
